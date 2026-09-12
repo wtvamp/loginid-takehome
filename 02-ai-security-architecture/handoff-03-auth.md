@@ -7,6 +7,7 @@ Status: **v1**. Receiver: Renata Cole, `../03-engineering-delivery/`. Written to
 - **Grant type:** OAuth2 client-credentials. Machine-to-machine only; no end-user login flow for question 2's API.
 - **Token format:** JWT, signed, asymmetric (RS256 or ES256 — pick one and use it consistently; RS256 is the safer default if your Go JWT library's ES256 support is less mature).
 - **Claim set (minimum):** `sub` (calling client identity), `scope` (space-delimited, values below), `exp`, `iat`, `aud` (this API, specifically — reject tokens minted for another audience).
+- **Literal values, filling the "pending 02's final scheme" placeholder in your Service boundaries config surface:** `AUTH_JWT_ISSUER = "https://auth.loginid-takehome.internal"`, `AUTH_JWT_AUDIENCE = "loginid-api-service"`. Both are configuration, not secrets — safe in a `ConfigMap` or committed default, per `handoff-04-secrets.md` row #3. If `cmd/idp-connector` ever needs its own audience value (it doesn't consume this token scheme today — see "Where it's validated" below), that would be a second, distinct `aud`, not a shared one; not needed for this submission.
 - **TTL:** 5–15 minutes. No refresh tokens — the client re-authenticates with its own client secret on expiry.
 - **No denylist.** Revocation is handled by TTL shortness, not a stateful lookup. Don't build one; it's not missing, it's a deliberate trade-off already reasoned through in `api-auth-design.md`.
 

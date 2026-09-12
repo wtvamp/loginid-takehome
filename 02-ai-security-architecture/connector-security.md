@@ -45,6 +45,20 @@ This extends the third-party-token row in `threat-model.md`; this document is th
 - **Retry/backoff on vendor calls** should be rate-limited on our side independent of the vendor's own limits, so a compromised or careless caller can't use our connector to hammer the vendor (which is both an availability risk to us and a way to get our connector's vendor credentials rate-limited or banned).
 - **Circuit-breaking**: if the vendor is failing or behaving anomalously (e.g., returning tokens for identities that don't match the request), fail closed — do not fall back to a cached or stale identity result silently, since that risks serving stale PII as if freshly verified.
 
+### 5. Authentication and authorization of calls *into* this connector
+
+Found by Ingrid Solano's S8 independent review — §1–§4 above are entirely about protecting the *vendor* token and the *vendor* call; none of them state who is allowed to call *our* `/auth` and `/identity` in the first place. Fixed here rather than left as a silent assumption:
+
+- **Callers of `cmd/idp-connector`'s own `/auth` and `/identity` must be authenticated**, using the same OAuth2 client-credentials → JWT bearer mechanism as `api-auth-design.md`, but with a **distinct audience** (`aud: idp-connector-service`, separate from `loginid-api-service`) and its own scope (`connector:identity-lookup`) — this is a different threat model and a different, smaller caller set (internal services, not question 2's broader API clientele), so it gets its own audience rather than reusing the search API's. Only a service that legitimately mediates an end-user or business flow needing vendor identity data (in this project's shape, `cmd/api-service` acting on a caller's behalf) should hold this credential — it is not exposed to arbitrary external callers.
+- **Why this matters concretely:** without it, an unauthenticated caller could hit our `/auth` passthrough with arbitrary vendor credentials all day and use this connector as exactly the credential-testing oracle §4's rate-limit control is meant to prevent — but "rate-limited per calling-API-client" has nothing to bind "per calling-API-client" to if no caller identity is required to reach the endpoint at all.
+- **Audit logging** for calls into this connector follows the same discipline as §3's table: caller `sub`, scope, timestamp, outcome — never the vendor credentials or PII in the request/response bodies.
+
+### 6. What a vendor token authorizes at `/identity` — an assumption, stated explicitly
+
+Also found by S8 review. This design's token-handling discipline (§1) is entirely about *custody* of the vendor token — encryption, memory scope, never-log. It says nothing about what the token is allowed to *do*: specifically, whether a vendor `access_token` obtained from one person's `/auth` call authorizes an `/identity` query for a *different* person's `name`/`phone`, or only for the token-holder's own identity.
+
+This connector cannot enforce that boundary itself — the assignment's generic `/identity` contract (`{"phone": "...", "name": "..."}`, no scoping field) puts that decision entirely on the vendor's own API. **Stated assumption, not a resolved control:** this design assumes a real ABC/XYZ-shaped vendor binds `/identity` queries to the authenticated principal at the vendor side (i.e., the vendor's own API rejects a query for an identity other than the token-holder's). If that assumption doesn't hold for a given real vendor, this connector becomes a lookup oracle for anyone who can obtain one valid vendor token, and no control in §1–§5 touches that risk, because none of them govern token *authority* rather than token *custody*. This is the same class of question as the search API's object-level authorization (`api-auth-design.md`, S4) and belongs on `../01-product-industry-research-design/CLAUDE.md`'s list when evaluating which real vendor ABC/XYZ represents — this track cannot resolve it without knowing a concrete vendor's actual token semantics.
+
 ## What this design does not resolve
 
 - Data retention duration for cached `/identity` results — `../05-data-ops/CLAUDE.md`.
