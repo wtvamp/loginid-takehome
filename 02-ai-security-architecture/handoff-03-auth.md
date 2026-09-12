@@ -20,6 +20,10 @@ Status: **v3** — updated after the cross-track consistency pass (`../decisions
 - **Key retrieval:** middleware verifies with the **public** key only (JWKS or a fetched public key — see `handoff-04-secrets.md` row #3). The private signing key never touches the verifying `api-service` Deployment; it lives with the token-issuing function, which is a mode of the same `api-service` image but runs as its **own Deployment** (`APP_MODE=issuer`, its own ServiceAccount), not the same Deployment doing both (corrected in `handoff-04-secrets.md` Assumption 2 and row #2, F13 — RBAC on a Secret's `get` verb doesn't stop a volume already mounted into a shared Deployment's containers, so the separation has to be a second Deployment, not RBAC alone). This is a second `APP_MODE` value for you to wire alongside your existing config surface.
 - **Key rotation:** expect a `kid` claim; publish old and new public keys together during rotation overlap. Token TTL (5–15 min) bounds how long that overlap needs to last.
 
+## Health endpoints (ruling, not open for re-litigation)
+
+**`/healthz`/`/readyz` (or equivalent liveness/readiness probes) are unauthenticated on both binaries** — normal practice, no token check, no scope. Response body may carry an up/down boolean (optionally per-dependency, e.g. `"db": "ok"`) **plus one opaque build identifier (commit SHA / build id) for LT-34's deploy-freshness check** — nothing else version-shaped (no semver, no library version list, which maps to a public CVE lookup the way an opaque SHA doesn't), no connection details, no stack traces, no config values, nothing on `handoff-04-secrets.md`'s never-log list. Full reasoning: `api-auth-design.md`.
+
 ## Scope vocabulary (final, from S4 — `decisions/search-authz-scoping.md`)
 
 | Scope | Authorizes | Does not authorize | Object-level check |
