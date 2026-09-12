@@ -29,6 +29,8 @@ Extend `multi-db-strategy.md` in place — it stays the single source of truth, 
 
 Consumes: S2 (query shape), S3 (nullability review), and the S4 ruling. Produces the 05→03 hand-off. Story closes when S6's cold read comes back clean.
 
+> *Annotation, 2026-09-12 — the plan text above is left exactly as approved.* "the S4 ruling" is an error: S4 is the migration approach, which this contract never consumed; it should read "the S3 ruling". The stale reference propagated into `./backlog.md` and then into Jira as LT-19 blocking LT-16, and was caught by the scribe transcribing it literally. Corrected in `./backlog.md` Story 3 and in Jira (LT-16 depends on LT-14 and LT-15; the real link runs LT-16 → LT-19). Recorded in `../LOG.md` as a finding about the method rather than a typo: reviewers read documents, and nobody was scoped to read the dependency graph.
+
 ### S2 — `Search()` query shape decision
 
 The one genuinely open design question in the contract, and the one with the most ways to be quietly wrong. Decides: the `ProfileQuery` field set and which fields are optional; match semantics per field (name partial/fuzzy, phone exact-or-prefix on the E.164-normalized value, region/country exact); how empty and multiple filters combine (AND, and whether a wholly empty query is a legal "list everything" or an error); pagination as limit/offset versus a keyset cursor, with a maximum page size; sort order and whether it is stable enough for offset pagination to be meaningful at all; and what `total` means — total matching rows, or rows on this page. Also settles how the documented SQLite parity gap surfaces to a caller: identical results with worse performance, or ranked-vs-unranked differences a caller could observe.

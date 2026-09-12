@@ -29,11 +29,33 @@ Own the data model and the multi-database strategy that question 1 requires, plu
 
 ## AI tooling note
 
-Record which AI tool/workflow was used to produce this track's schema and strategy design and how.
+Built with **Claude Code**. The track lead (this persona) ran as its own top-level session on **Claude Opus 5** — chosen deliberately, not by default: this track's planning is low-volume but carries asymmetric risk, since a wrong nullability or a wrong interface signature propagates into tracks 03 and 04 and is expensive to reverse. Four **Claude Sonnet 5** hires sat in named debate seats (`../CASTING.md` §8). One Sonnet subagent ran the lead-authorized research pass; per `../CASTING.md` §3, deep research is authorized and run only by leads, and hires request it rather than performing it.
+
+Four orchestration patterns from `../CASTING.md` §5 produced this track's decisions, each ending in a durable artifact under `decisions/` rather than in chat:
+
+| Pattern | Decision | Artifact |
+|---|---|---|
+| Three hats | the multi-DB abstraction | `decisions/multi-db-abstraction.md` |
+| Adversarial pair | the `Search()` query shape | `decisions/search-query-shape.md` |
+| Newcomer's question | legibility of the 05→03 hand-off | `decisions/handoff-legibility-05-03.md` |
+| Rotating devil's advocate | the migration approach | `decisions/migration-approach-objections.md` |
+
+**What the multi-agent structure actually bought, stated plainly because it is the part worth grading.** On three separate occasions a hire left the lead's *conclusion* standing and destroyed the *argument* underneath it: the per-driver ruling (rejected on a "scattering" of dialect branches that a count showed to be two conditionals — so the real basis is reviewability, not cost), the error-translation rule (self-contradicting, and unimplementable on SQLite, which has no SQLSTATE at all), and R2 of the migration approach (a premise corrected in research while the conclusion was left resting on the superseded version). The conclusions were mostly right; the stated reasons were mostly the first plausible one to hand. A single-agent version of this track would have produced the same answers with unfalsifiable reasoning behind them.
+
+One methodological choice worth recording: the cold-read seat was kept **deliberately unfamiliar** — that hire was instructed not to read this track's reasoning documents and sat out two debates to stay a usable instrument. She returned 14 blocking items against a contract three other reviewers had already passed. She could not say afterwards which of the 14 she would still have found had she read the debates first, and that uncertainty is the argument for paying the cost again.
 
 ## Status
 
-No data-ops work has started. This is the track the engineering DAO code most directly depends on — its schema and interface contract should land early.
+**Complete — all six stories closed; `../PLANNING.md` row reads "plan approved".** Nothing downstream is blocked on this track.
+
+- **The Go-shaped contract** is in `multi-db-strategy.md` and has been accepted by 03 after their own independent review. It carries interface signatures, a per-method summary table, field-level schema with nullability, error semantics and the sentinel set, and a twelve-item "out of scope for 03" list in which **every item names its enforcement site** — a DDL constraint, an index, a normalization step, or a conformance test. Two items name DAO-layer validation as their site and are flagged as the contract's weakest links, because the discipline is worthless if it only records the cases where a clean site existed.
+- **`migration-approach.md`** is final and delivered to 04.
+- **`pii-governance.md`** carries proposed retention windows and the deletion mechanism, with every basis cell either an engineering rationale or the honest word *unknown* — storage limitation is a principle demanding a justified window, not a number anyone can look up, and a citation implying otherwise would be a false statement in a client-facing document.
+- Three claims in this track's earlier prose were found to be **wrong and are corrected in place with the correction visible**, rather than silently edited.
+
+Two things are deliberately left open rather than resolved: whether goose's default version table carries a unique `version_id` (unverified; the recommendation does not depend on it), and whether subject-deletion should reach derived data such as logs and connector traces (unmodelled, no clock and no key — recorded so its absence is not mistaken for a ruling, with the upstream control named: if PII never enters a log, there is nothing to delete from it).
+
+No implementation code exists in this track and none should until Warren's explicit go-ahead.
 
 <!-- profile-gen:start slug=priya-nandakumar -->
 @profiles/priya-nandakumar/priya-nandakumar.md

@@ -142,9 +142,16 @@ Run once, as a fresh Fable session with a clean context (not the PM's accumulate
 11. **Root files** — root `CLAUDE.md` Status, `PLANNING.md` rows, `CASTING.md` registry (18 rows, portraits `done`), `PLAN.md` phases vs. reality; `grep -c profile-gen:start` totals 6; no code artifacts anywhere.
 12. **Cross-cutting — enforcement sites** (principle from 05's S2, `05/decisions/search-query-shape.md`): for every caller-visible guarantee stated in any hand-off (`02/handoff-03-auth.md`, `02/handoff-04-secrets.md`, `05/multi-db-strategy.md` S1, `PLANNING.md` Service boundaries), name the enforcement site — DDL constraint, index, normalization step, conformance test, middleware check, CI job. A guarantee with no named site is listed as a *gap*, owned by the hand-off's author.
 
-### Phase 4 — Jira (after Warren says planning is done)
+### Phase 4 — Jira (Warren's go: 2026-09-12, "start building out the backlog")
 
-Team-lead creates one Epic per track in `LT` (cloudId `db488eae-d6cb-4100-92a9-e7a4519fc176`) via the Atlassian MCP tools; each lead creates its Stories under its Epic from its approved plan (one story per deliverable/task, acceptance criteria = the hand-off standard), and links cross-track dependencies with issue links. Implementation still waits for Warren's explicit go-ahead.
+Team-lead is the single Jira writer (one authenticated session, one audit trail); leads author. Each lead writes `<track-dir>/backlog.md` — the in-repo, versioned backlog, which is itself a submission artifact — and team-lead transcribes it into project `LT` (cloudId `db488eae-d6cb-4100-92a9-e7a4519fc176`) and writes the issue keys back into the file.
+
+`backlog.md` format, identical for every track:
+- Header: track, lead, Epic title (team-lead creates one Epic per track; the key is written back here).
+- One section per Story, in dependency order: **Title** (imperative, ≤ 80 chars); **Description** (what and why, 3–8 sentences, citing the deliverable and decision files by relative path); **Acceptance criteria** as a checklist — the first criterion is always the hand-off standard ("the receiving track can act on this without re-deriving the reasoning"), and every caller-visible guarantee names its enforcement site; **Depends on** (other tracks' story titles, which become Jira "blocks/is blocked by" links); **Model/effort** recommended for implementation (from `planning-approach.md`); **Type** Story or Task; **Labels** (`track-0N`, plus `security-graded` where 02's second-review rule applies, `no-code-yet` until Warren's code go).
+- Stories arising from the consistency pass are added under whichever track owns the fix, with a `from-consistency-pass` label; a jointly owned story (e.g., the derived-data deletion gap across 02/04/05) is created once under the track that owns the enforcement site, with the other two linked as dependencies.
+
+Order: 01 authors and is transcribed immediately (closed first, least touched by the pass); 05 has stories ready and follows; 02/03/04 author now and are transcribed the moment the consistency pass reports, so pass-driven revisions land once. Implementation still waits for Warren's explicit code go-ahead; "backlog strong enough to start implementation" is team-lead's call to Warren, defined as: every track's stories transcribed, every cross-track dependency linked, every pass finding either resolved or carried as a story, and 03's implementation stories each pointing at a stable contract.
 
 ## Verification
 

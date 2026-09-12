@@ -66,7 +66,7 @@ Rules that hold across every track:
 
 ## Status
 
-Design phase complete for all five tracks (see each track's `CLAUDE.md` Status). All implementation code deliberately wiped 2026-09-12; the project is in the **planning phase** described in `PLAN.md`: Phase 0 scaffolding done, Phase 1 (leads plan in plan mode and propose hires) next, then hiring, in-team debates, a cross-track consistency pass, and Jira stories in project `LT`. No code until Warren's explicit go-ahead.
+Planning Phases 0–3 are complete (2026-09-12): five track plans approved, 18 hires live in five lead sessions, every track's Phase 3 debates and hand-offs delivered, and the cross-track consistency pass reported (`decisions/cross-track-consistency.md`: 52 findings, six bounded fixes required before planning is declared done — in progress, owned per finding). Phase 4 is under way: Jira Epics `LT-1`…`LT-5` exist, tracks 01 and 05 are transcribed, 02/03/04 follow the pass fixes. All implementation code was deliberately wiped earlier in the day and none has been written since; **no code until Warren's explicit go-ahead**, which he gives after the PM reports the backlog implementation-ready.
 
 <!-- profile-gen:start slug=dana-whitfield -->
 @profiles/dana-whitfield/dana-whitfield.md

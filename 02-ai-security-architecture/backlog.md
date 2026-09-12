@@ -1,0 +1,254 @@
+# Backlog — Track 02: AI Architecture & Security Architecture
+
+Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira key: _pending team-lead transcription_). Format per `../PLAN.md` Phase 4. All eleven stories from `PLAN.md` are listed in dependency order; ten are done (marked below) and shown as-run, not rewritten as if planned in hindsight — an honest backlog shows the work. S11 is the one open story, gated on Warren's implementation go-ahead.
+
+---
+
+## S1 — Ratify the orchestration-pattern catalog and add the attack-tree template
+
+**Status: done.**
+
+**Description:** Reviewed `../CASTING.md` §5's six orchestration patterns against this track's own planning reasoning and ratified them with four amendments (red/blue ranking discipline, adversarial-pair "what would change my mind" lines, structured-debate synthesis discipline, universal model/turn-count footers), then authored the attack-tree table template as Appendix A of `planning-approach.md`. Every later pattern run in this track (S3, S4, S5, S8) executed under this ratified catalog. See `PLAN.md` §0 for the full reasoning.
+
+**Acceptance criteria:**
+- [x] `../CASTING.md` §5 carries the four ⟨02⟩ amendments, changes scoped only between the `## 5.` and `## 6.` headings.
+- [x] `planning-approach.md` Appendix A exists with the table shape used by every later red/blue run.
+- [x] Every decision artifact produced after this story carries a model/turn-count footer (verified in `decisions/*.md`).
+
+**Depends on:** —
+
+**Model/effort:** sonnet, high (lead-authored, no hire turns).
+
+**Type:** Story
+
+**Labels:** `track-02`
+
+---
+
+## S2 — Harness-constraints addendum to `planning-approach.md`
+
+**Status: done.**
+
+**Description:** Checked `PLAN.md`'s "Verified mechanics" claims about model/effort tiers against `research-claude-architecture-best-practices.md` and recorded the harness facts that modify the org's model/effort plan (no per-agent effort key; hires don't spawn subagents; a hire's agent-definition file is part of its prompt-cache prefix). Written as Appendix B of `planning-approach.md` so every lead building a research fan-out or a hire roster works from the same corrected assumptions.
+
+**Acceptance criteria:**
+- [x] `planning-approach.md` Appendix B exists and states the three harness facts and their consequence for §1's tiers.
+- [x] No contradiction found against the research doc (stated explicitly, not silently assumed).
+
+**Depends on:** —
+
+**Model/effort:** sonnet, high (lead-authored).
+
+**Type:** Story
+
+**Labels:** `track-02`
+
+---
+
+## S3 — Red/blue: connector token lifecycle
+
+**Status: done.**
+
+**Description:** Ran the ratified red/blue pattern (S1) against the IDP connector's vendor-token handling in `connector-security.md` §1: Tomasz Wrede's ranked top-five attack leaves, Felix Adebayo's alternatives turn (deleting two leaves by design change — no-cache-by-default rather than an encrypted, TTL-bound cache), Helena Marsh's blue response, Tomasz's rebuttal turn (closing a connection-reuse variant and tightening the accepted-replay-risk boundary). Full record: `decisions/connector-token-lifecycle-redblue.md`; attack-tree table appended to `connector-security.md`. This is the requirement set 03's connector implementation builds against directly.
+
+**Acceptance criteria:**
+- [x] The receiving track (03) can implement the connector's token handling without re-deriving this run's reasoning — confirmed by Renata Cole directly.
+- [x] "No persistent token cache by default" — enforcement site: the connector's HTTP client construction, one fetch-per-`/identity`-call code path, no cache read/write call in the default path.
+- [x] "Fresh, isolated `Authorization` header per outbound request" — enforcement site: the outbound HTTP client factory used for vendor calls, explicitly not sharing a request-context object across calls.
+- [x] "Fetch → use → zeroize, retries re-fetch" — enforcement site: the token variable's scope inside the single vendor-call function; a retry path that calls `/auth` again rather than reusing a held token.
+- [x] Residual risk (bearer-token replay, accepted) is named in the artifact, not left implicit.
+
+**Depends on:** S1
+
+**Model/effort:** opus, high for the connector's token-lifecycle implementation specifically (per `planning-approach.md` §1 — the one implementation surface warranting opus); sonnet, high for this track's design/debate turns.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`
+
+---
+
+## S4 — Adversarial pair: search-API authorization scoping
+
+**Status: done.**
+
+**Description:** Ran the adversarial pair pattern against `api-auth-design.md`'s scope sketch: Helena Marsh (Proposer) drafted the final scope vocabulary, `profile:search` provisioning bar, object-level policy hook, and pagination/rate-limit/lifecycle rules; Ingrid Solano (Skeptic) raised five numbered objections, each with a "what would change my mind" line; Helena revised all five. Full record: `decisions/search-authz-scoping.md`; finalized design folded into `api-auth-design.md`. This is the scope model 03's middleware and object-level policy checks implement directly.
+
+**Acceptance criteria:**
+- [x] `profile:read:own` referral constraint — enforcement site: `authorize(sub, scope, target)` checking the `caller_referral` mapping, called in-handler before the DAO call (per Renata's confirmed placement).
+- [x] `profile:read:any` requires a `reason_code` from a closed enum on every call — enforcement site: request validation inside the same `authorize()` call, rejecting a missing or out-of-enum value.
+- [x] `profile:search` result-cap rejection (not truncation) — enforcement site: query-construction code in the search handler, checked before the DB call executes.
+- [x] Cursor-based pagination, page ceiling 50 — enforcement site: pagination-parameter validation in the handler layer.
+- [x] Per-client rate limits (60/10 req/min) and the cumulative distinct-record-touch counter, applying to `read:any` regardless of `reason_code` presence — enforcement site: rate-limiting middleware plus a counting store keyed per client credential, incremented per distinct record id returned.
+- [x] Scope-grant lifecycle (90-day backstop, immediate revocation on offboarding/idle/function-change) — enforcement site: whatever identity-lifecycle signal 03/04 wire the grant-issuing component to consume.
+
+**Depends on:** S1
+
+**Model/effort:** sonnet, high (middleware and policy-check implementation); sonnet, high for this track's debate turns.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`
+
+---
+
+## S5 — Structured written debate: `ai-workflow-narrative.md`'s core claim
+
+**Status: done.**
+
+**Description:** Debated whether this project's multi-agent, persona-driven workflow produces better design than a single strong session, or is cost without evidence. Felix Adebayo (Position A) argued from two concrete instances (S3's design-deleting alternatives turn, 04's Newcomer cold-read catches); Ingrid Solano (Position B) rebutted that n=2 from roles built to find exactly this isn't evidence of a general law, and that null results (a clean concession in S3) must be counted alongside hits. Ruled per point in `decisions/ai-workflow-claim-debate.md`: against a general empirical claim, for a narrower mechanism-level one. Result folded into `ai-workflow-narrative.md` (S9).
+
+**Acceptance criteria:**
+- [x] Both positions preserved in the record, not just the winning one.
+- [x] The ruling states which position won on which point and why (per the `CASTING.md` §5 ⟨02⟩ amendment this story itself ratified in S1).
+- [x] The narrative (S9) states the mechanism-level claim, not the broader statistical one Position B defeated.
+
+**Depends on:** —
+
+**Model/effort:** sonnet, high.
+
+**Type:** Story
+
+**Labels:** `track-02`
+
+---
+
+## S6 — Hand-off 02→03: auth scheme, validation point, authorization requirements
+
+**Status: done** (`handoff-03-auth.md`, v2 after S8 revisions).
+
+**Description:** Synthesized S4's ruling and the token-shape decisions in `api-auth-design.md` into a receiver-shaped hand-off Renata Cole can build against without re-deriving this track's reasoning: token scheme, where it's validated, the final scope vocabulary and object-level policy hook, pagination/rate-limit numbers, the audit-log field list, and an explicit "not yours to decide" list. Revised to v2 after S8's independent review surfaced two implementation-relevant fixes (the decomposition counter's scope-coverage gap; the connector's own inbound-auth requirement). Accepted by 03 with a confirmed `authorize()` placement (in-handler, not middleware) and `DB_DSN_FILE` folded into the config surface.
+
+**Acceptance criteria:**
+- [x] Receiving track (03) can act on this without re-deriving the reasoning in `api-auth-design.md`/`connector-security.md` — confirmed by Renata directly, cold read "clean."
+- [x] Token TTL (5–15 min), no refresh, no denylist — enforcement site: `exp` claim check in the verification middleware; absence of a refresh-grant or denylist-lookup code path.
+- [x] Verifier pins expected algorithm, rejects `alg: none`/downgrade — enforcement site: explicit algorithm allow-list parameter on the JWT verification call.
+- [x] Public-key-only verification in `api-service`; private key isolated to the issuing code path — enforcement site: Kubernetes RBAC Role (per `handoff-04-secrets.md` row #2) plus code-level separation between issuing and verifying functions.
+- [x] `idp-connector`'s own `/auth`/`/identity` require authentication with a distinct audience/scope — enforcement site: the same JWT middleware pattern applied to `idp-connector`'s router, configured with `aud: idp-connector-service`.
+- [x] Token-endpoint brute-force protection — enforcement site: rate limiter on the token-issuing endpoint, keyed by `client_id` + source IP.
+- [x] Audit-log field list (`sub`, scope, record id, `reason_code`, policy decision, timestamp, outcome) and nothing beyond it — enforcement site: a single structured-logging call at the end of each search/retrieve handler, not scattered `log.Printf` calls a reviewer has to hunt for.
+
+**Depends on:** S4
+
+**Model/effort:** sonnet, high (lead synthesis, no new hire turns); sonnet, high for 03's implementation against it.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`
+
+---
+
+## S7 — Hand-off 02→04: secrets inventory and never-log list
+
+**Status: done** (`handoff-04-secrets.md`, v1).
+
+**Description:** Authored the secrets inventory and never-log list Theo Bergman's track needs to design secrets delivery against, then ran Ingrid Solano's single objection turn (S7's assigned pattern — one turn, not a full debate) and folded in all four accepted objections: the authorization-server's ownership was mis-scoped by omission, a KMS-access credential row was missing, the `DB_DSN` env-var exception was too weak, and audit-log read access needed its own RBAC line distinct from Secret access. Cold-read by 04's Newcomer (Wesley Okonkwo) caught two further gating gaps (TOTP/token-cache feature-status ambiguity; a non-self-contained trust-boundary reference), both fixed.
+
+**Acceptance criteria:**
+- [x] Receiving track (04) can act on this without re-deriving the reasoning in `threat-model.md`/`api-auth-design.md`/`connector-security.md` — confirmed by 04's Newcomer cold read, two gating items fixed before acceptance.
+- [x] `DB_DSN_FILE` required as the primary delivery mechanism, `DB_DSN` a transitional fallback — enforcement site: the config-loading code in `internal/config`, preferring the file path when both are set (confirmed folded into 03's Service boundaries).
+- [x] JWT signing private key file-mount only, RBAC-restricted to the issuing code path's service account — enforcement site: the Kubernetes Role scoping `get`/`list` on that Secret.
+- [x] Client secrets stored hashed (Argon2id), never plaintext at rest — enforcement site: the provisioning code path that writes the hash, per `threat-model.md` Asset 1.
+- [x] One `Secret` per vendor registration (ABC/XYZ never share a Secret) — enforcement site: the Kubernetes manifest's per-vendor Secret object.
+- [x] Never-log list (vendor password, vendor token, PII values, raw vendor error bodies, signing key, JWTs, client secrets, `DB_DSN`, full `/auth`/`/identity` bodies, PII-bearing query params) — enforcement site: a log-formatting/redaction layer that structurally cannot emit these fields, not a code-review convention alone.
+- [x] Audit-log read access is a distinct, narrower grant than Secret-read access — enforcement site: log-pipeline RBAC or a separate log-sink access control, 04's mechanism.
+
+**Depends on:** one Skeptic objection turn (no debate pattern)
+
+**Model/effort:** sonnet, high (lead synthesis + one hire turn).
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`
+
+---
+
+## S8 — Independent second review of the security-graded documents
+
+**Status: done.**
+
+**Description:** Ran an independent second-review pass on `threat-model.md`, `api-auth-design.md`, and `connector-security.md`, each reviewed by a hire who neither authored nor blue-teamed it. Required a mid-run reassignment: the original static roster assigned Helena Marsh to review two documents she'd since authored content in (S4's Proposer role, S3's blue seat) — caught and corrected before running, not after. Result: Helena reviewed `threat-model.md` (4 citation/precision fixes, 1 completeness note), Tomasz Wrede reviewed `api-auth-design.md` (4 findings, including a decomposition-counter gap that made a rate limit a silent no-op for `profile:read:any`), Ingrid Solano reviewed `connector-security.md` (2 findings — no auth requirement on inbound calls to the connector; no stated assumption about what a vendor token authorizes). All ten findings accepted, zero declined. Full record: `decisions/second-review-security-docs.md`.
+
+**Acceptance criteria:**
+- [x] Every reviewer is verified independent (did not author or blue-team the document) at the moment the review runs, not just at planning time.
+- [x] Every accepted finding is fixed in the source document, not just recorded in the decision file.
+- [x] The two findings affecting 03's implementation (decomposition-counter scope, connector inbound-auth requirement) are propagated into `handoff-03-auth.md` v2 and relayed directly to 03.
+- [x] Null results (documents/findings that didn't surface anything) are counted in the tally alongside hits, not silently omitted.
+
+**Depends on:** S3, S4
+
+**Model/effort:** sonnet, high.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`
+
+---
+
+## S9 — Revise `ai-workflow-narrative.md` for the org layer
+
+**Status: done.**
+
+**Description:** Rewrote the AI-tooling narrative to cover what actually ran once hiring began: the persona/pattern-catalog layer this project built on top of Anthropic's documented orchestrator-worker pattern, honestly measured evidence from S3/S8 (including null results, not just hits), S5's ruling stated plainly with the losing position preserved, the S8 independence-reassignment lesson generalized ("independence is checked at review time, not assigned once"), and the real external operator agent named as deliberately out of scope and never contacted.
+
+**Acceptance criteria:**
+- [x] Distinguishes what's Anthropic-documented from what this project composed on its own (unchanged discipline from the original draft).
+- [x] States the S5 ruling including the position that lost, not just the one that won.
+- [x] Leads with the single most concrete example (Tomasz's `profile:read:any` decomposition-counter finding) rather than an abstract summary.
+- [x] Names the external operator agent and states plainly it was never contacted.
+
+**Depends on:** S3, S4, S5, S8
+
+**Model/effort:** sonnet, high.
+
+**Type:** Story
+
+**Labels:** `track-02`
+
+---
+
+## S10 — `threat-model.md` maintenance
+
+**Status: done — verified already satisfied, no edit required.**
+
+**Description:** Two required checks from the original plan: (a) repoint the stale reference to a wiped `.sql` file at the prose schema in `../05-data-ops/multi-db-strategy.md`; (b) add a trust-boundary line naming the external deployment operator as a privileged actor. Both were already present in `threat-model.md` from earlier work (verified by `grep` for any remaining `.sql` reference, and by re-reading Assumption 6) — recorded here rather than silently skipped, since an honest backlog notes verification, not just edits.
+
+**Acceptance criteria:**
+- [x] No reference to a wiped `.sql` file remains anywhere in `threat-model.md` (verified by grep).
+- [x] The operator trust boundary is named explicitly in Assumption 6, with the consequence for `handoff-04-secrets.md` stated.
+
+**Depends on:** —
+
+**Model/effort:** sonnet, high (verification only, no hire turns).
+
+**Type:** Task
+
+**Labels:** `track-02`
+
+---
+
+## S11 — Post-implementation independent review of 03's auth middleware and connector token code
+
+**Status: open — gated on Warren's implementation go-ahead.**
+
+**Description:** Once 03 implements the auth middleware (S6) and the connector's token-lifecycle code (S3), this track runs an independent code-level review of the security-graded surfaces only: token validation, the `authorize()` object-level policy hook, rate-limiting/decomposition-counter enforcement, and the connector's fetch-use-zeroize discipline. Reviewer assignment will be checked for independence at run time per the S8 lesson (whoever reviews must not have authored the code or the design doc it implements) rather than assumed from the current roster, since roles may have accumulated further authorship by then.
+
+**Acceptance criteria:**
+- [ ] Reviewer independence verified at run time, not assumed from this backlog's authorship snapshot.
+- [ ] Every enforcement site named in S3/S4/S6/S7's acceptance criteria above is checked against the actual implementation, not just the design doc.
+- [ ] Findings recorded in `decisions/second-review-implementation.md`, following the same accept/decline-with-reason discipline as S8.
+- [ ] Any Residual **H** finding (per the S1 attack-tree convention) produces a follow-up story or a stated accepted risk, not a silent gap.
+
+**Depends on:** Warren's code go-ahead; 03's implemented auth middleware and connector token-lifecycle stories.
+
+**Model/effort:** sonnet, high.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`, `no-code-yet`
+
+---
+
+## Room for pass-driven stories
+
+Any story arising from the cross-track consistency pass that touches this track's surfaces (auth scheme, secrets inventory, connector security, threat model) will be added below this line with the `from-consistency-pass` label, in the same format as above, once the pass reports.
