@@ -111,6 +111,33 @@ type Repository interface {
 
 `"postgres"` and `"cockroachdb"` both select the `postgres` package. They are distinct driver strings rather than one because the retry seam in §4 needs to know which engine it is talking to.
 
+## 1a. Package placement and how to read these signatures
+
+**Added at implementation go, pre-emptively — the acceptance criterion for LT-35 is that signatures match §3 byte-for-byte, and taken literally that criterion cannot be met.** 03's published layout puts the domain structs in `internal/model` and the interfaces in `internal/dao` (`../PLANNING.md` service boundaries). Inside `internal/dao`, a bare `*UserProfile` does not compile; it is `*model.UserProfile`. So the signatures below and the package layout are both right and cannot both be transcribed literally.
+
+**Resolution — the signatures in §2–§3 are written unqualified for readability, and the qualified form is the authoritative one:**
+
+| Type | Package | Written below as | Authoritative form inside `internal/dao` |
+|---|---|---|---|
+| `UserProfile`, `UserCredential`, `AuthMethod` | `internal/model` | `*UserProfile` | `*model.UserProfile` |
+| `ProfileQuery`, `SweepResult`, `RetentionClass` | `internal/dao` | `ProfileQuery` | `ProfileQuery` — unchanged |
+| `Repository`, the three repository interfaces | `internal/dao` | as written | unchanged |
+| Error sentinels (§4) | `internal/dao` | `ErrNotFound` | unchanged |
+
+**The placement criterion — dependency direction, not usage.** My first draft justified this by observing that `internal/api` and `internal/connector` both handle the domain structs without touching the DAO. Review replaced that: it is an observation about today's callers, not a criterion, and it would not tell you where to put the next type. It also loses to a competing test — `UserProfile`'s invariants (E.164 phone, upper-case alpha-2 country) are enforced in DDL and on the DAO write path, so an ownership-of-invariants criterion would put `UserProfile` in `dao`, the opposite answer. Two criteria disagreeing is exactly when the stated one has to be the right one.
+
+The criterion that holds: **`internal/model` is the leaf — it imports nothing else in `internal/`. A type named by two sibling packages that must not depend on each other belongs in the leaf.** `api` and `connector` both name `UserProfile`; neither may import the other, and neither should have to go through `dao` to say the word. Same conclusion as the usage argument, but checkable, and it decides the next case without a debate.
+
+**`ProfileQuery` stays in `dao`, and this is now settled rather than left open.** I had flagged it to 03 as theirs to overrule, on the worry that `api` importing `dao` to construct a query is an interface whose callers must know its implementation package. Review closed it: that objection is about callers knowing `postgres` or `sqlite`, not about knowing `dao`. `api` already imports `dao` to name `dao.Repository` and to compare `dao.ErrNotFound`, so no new dependency edge is created and moving the type would remove nothing. The leaf test agrees — `ProfileQuery` is named across one existing edge and has no meaning without the method that consumes it, so putting it in the leaf would make a package that depends on nothing carry a type defined entirely by something above it. `SweepResult` and `RetentionClass` follow the same reasoning.
+
+**New types default to `internal/dao`** unless the leaf test above places them in `model`. The table is a closed list over an open set, which is a drift path in itself — this default closes it, so a type added next month has an answer without reopening this section.
+
+**So "matches §3 byte-for-byte" means: same method names, same parameter order, same types modulo the `model.` qualifier in the table above, same return shapes, same error semantics.** A reviewer should read the criterion that way. **Seam 13 against §3 must run with the substitution applied.** §3 is now a deliberately non-literal rendering of the real signatures, so a raw grep-diff would report every domain type as a mismatch — and a mechanical check that reports false positives on its first run gets marked noisy and stops being run, which costs more than never having added it. Applying the table above makes the check exact, and in that form I would take it as LT-35's acceptance gate in preference to a human comparison.
+
+This is the first contract ambiguity surfaced by implementation; per the standing rule it is answered by amending this document rather than letting the code decide.
+
+*Amended by Priya Nandakumar (05 Data Ops lead); reviewed by Anders Vogel (Systems Cartographer — boundary placement). The ruling was confirmed and two of its three stated reasons were replaced: the usage-based placement argument gave way to the leaf/dependency-direction test, and `ProfileQuery`'s placement was closed with a reason instead of being left to 03 as an overrule. Both drift paths in this section — the non-literal §3 rendering and the closed type table — were found in that review, not by the author.*
+
 ## 2. Domain types
 
 ```go
@@ -475,6 +502,15 @@ Numbered so there is no ambiguity. Each names **the enforcement site that makes 
 
 ## 7. The conformance suite — a requirement, not a suggestion
 
+**Two different checks are easy to conflate here, and §7 previously named only one of them while implying both.** The distinction came from 03 during implementation and is adopted:
+
+| | What it checks | How | Owner |
+|---|---|---|---|
+| **Signature conformance** | The Go declarations match §2–§3 | Mechanical diff against §3 **with §1a's `model.` substitution applied** — seam 13, not a review | 03's QA, at LT-35 |
+| **Behavioural conformance** (this section) | The backends *behave* alike | One suite of assertions, written once, executed against every backend | 03, at the DAO-behaviour story |
+
+**Signature conformance cannot substitute for behavioural conformance, and passing the first says nothing about the second.** Two implementations can match the same declarations perfectly and return different rows for the same call — which is precisely what would have happened here, three separate times, had design not caught it. Ticking §7 by running a signature diff would leave the per-driver ruling resting on nothing.
+
 **One suite, written once against the interface, executed against every backend implementation.** Not per-package unit tests: the same assertions, run twice, so a behavioural difference fails a test rather than reaching a user.
 
 This is the condition the whole per-driver ruling rests on (`decisions/multi-db-abstraction.md`). Two implementations behind one interface guarantee both *compile*; nothing guarantees they *behave* alike, and the failure mode produces no error — just different results. Every defect this phase found (the `LIKE` case divergence, the collation ordering divergence, `Country` normalization) is invisible when either implementation is read in isolation, because each is correct on its own terms.
@@ -492,3 +528,16 @@ Mechanism is 03's. The requirement is 05's, and at minimum the suite asserts: id
 ---
 
 *AI tooling note: this contract was produced by Claude Opus 5 (05 track-lead session) synthesizing two orchestrated debates run with four Claude Sonnet 5 hires — a three-hats run on the abstraction and an adversarial pair on the query shape, artifacts under `decisions/` — plus one lead-authorized Sonnet research pass (`research-cockroachdb-postgres-semantics.md`) and a direct two-party agreement with the 03 track lead on the factory shape. Six of the eleven substantive changes in it came from hires contradicting the lead's draft, which is what the seats were bought for.*
+
+---
+
+## Amendments during implementation
+
+Every change to this contract after 03 accepted it is logged here with who did the work, per the org attribution rule. The contract is authoritative and the code follows it — an ambiguity found in implementation is answered by amending this document, never by letting the code decide silently. Each entry names the amendment, why it was needed, and the personas who authored, reviewed and objected.
+
+| # | Date | Section | Change | Why | Work-By |
+|---|---|---|---|---|---|
+| A2 | 2026-09-12 | §7 | Split "conformance" into signature conformance (mechanical, LT-35) and behavioural conformance (the cross-backend suite) | 03 flagged during implementation that the two were being conflated — LT-35's test is signature/type conformance, a different thing from the cross-backend behavioural suite. §7 named only the second while its title implied both, so a signature diff could have been used to tick a requirement it does not satisfy. That would have left the per-driver ruling in `decisions/multi-db-abstraction.md` resting on nothing | Authored: **Priya Nandakumar**. Originated by: **Renata Cole** (03 lead) — the distinction is hers; I only wrote it into the contract. Implementation-side propagation to QA: Renata → Oren Castellan |
+| A1 | 2026-09-12 | §1a (new) | Package placement, the leaf criterion, and how to read the signatures | LT-35's "byte-for-byte" acceptance criterion is unmeetable as literally stated: 03's layout puts domain structs in `internal/model`, so `*UserProfile` does not compile inside `internal/dao`. Flagged pre-emptively before implementation rather than at review | Authored: **Priya Nandakumar**. Reviewed: **Anders Vogel** — confirmed the ruling, replaced the usage-based placement reason with the leaf/dependency-direction test, closed `ProfileQuery` rather than deferring it, and found both drift paths. No separate objection seat; the review carried the objections |
+
+**Standing rule for anything landing in git or Jira from this track:** commits are made from a worktree (never a checkout in the shared tree), authored as `Priya Nandakumar (05 Data Ops lead, Claude Opus 5)`, and carry `Story:` and `Work-By:` trailers naming every persona who contributed to that change — author, reviewers, and objection seats alike, not only whoever typed it.
