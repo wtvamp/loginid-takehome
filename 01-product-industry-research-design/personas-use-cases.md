@@ -18,7 +18,7 @@ Prepared for the `01-product-industry-research-design` track. See `../CLAUDE.md`
 
 **Who:** a customer-support agent or fraud/ops analyst who needs to look up a user profile by partial information — a phone number a customer just read aloud, a name with uncertain spelling, an account ID from a ticket — to resolve a support case or investigate a flagged transaction. Not a developer; a consumer of a UI/API surface someone else built on top of this service.
 
-**Why they need "search," specifically, not just "retrieve":** retrieval-by-ID is the easy 80%; a support workflow rarely starts with a clean ID. It starts with whatever the customer said on the phone. That's why Q2 says "search **and** retrieve" — the API needs a query surface (name, phone, partial match) in addition to an exact-key lookup, and that query surface is exactly the thing that needs the tightest authz scoping, because "search by phone number" over a PII store is also the exact capability a bad actor wants.
+**Why they need "search," specifically, not just "retrieve":** retrieval-by-ID is the low-friction case; a support workflow rarely starts with a clean ID. It starts with whatever the customer said on the phone. That's why Q2 says "search **and** retrieve" — the API needs a query surface (name, phone, partial match) in addition to an exact-key lookup, and that query surface is exactly the thing that needs the tightest authz scoping, because "search by phone number" over a PII store is also the exact capability a bad actor wants.
 
 **What this means for Q2's design:** the API's authentication isn't just "is this caller allowed to hit the service" — it's "what can this caller search for and see," because a support analyst's legitimate access pattern (look up one ticket's customer) looks identical, mechanically, to a scraping attack (enumerate the user table) unless the API is designed to distinguish them by identity, scope, and rate — the mechanics of which belong to `../02-ai-security-architecture/CLAUDE.md`, but the *reason* the distinction matters is this persona: a real support tool has real, narrow, audited search needs, not "return everything."
 
@@ -28,9 +28,30 @@ Prepared for the `01-product-industry-research-design` track. See `../CLAUDE.md`
 
 **Who:** a product owner building a signup/onboarding flow for a service that wants to pre-fill a new user's name, phone, and address rather than making them type it — because the user already has an account with a partner identity provider (the generic "ABC"/"XYZ" in the assignment), and re-typing the same PII into every new service is friction the industry has been trying to design away since long before OAuth existed (see `research-oauth-history.md` for that lineage).
 
-**Why a service pulls PII from a third party rather than owning it:** two converging reasons, both real. First, **reduced liability and reduced collection surface** — a service that never independently collects and stores a user's address avoids being a second copy of that PII to secure and eventually breach; it becomes a consumer of an assertion instead of a second source of truth (this is the same reasoning behind "federated identity" broadly — don't collect what you can verify from someone who already has it). Second, **conversion/UX** — fewer form fields at signup measurably reduces drop-off, which is why "sign in with X" patterns dominate consumer onboarding.
+**Why a service pulls PII from a third party rather than owning it:** two converging reasons, both real. First, **reduced liability and reduced collection surface** — a service that never independently collects and stores a user's address avoids being a second copy of that PII to secure and eventually breach; it becomes a consumer of an assertion instead of a second source of truth (this is the same reasoning behind "federated identity" broadly — don't collect what you can verify from someone who already has it). Second, **conversion/UX** — fewer form fields at signup is widely believed to reduce drop-off, which is consistent with why "sign in with X" patterns are common in consumer onboarding.
 
 **What this means for Q3's design:** the `/auth` → `/identity` two-step (get a token, then use the token to fetch PII) is the connector pattern doing exactly what it should — a **short-lived, scoped credential** stands in for the user's actual third-party password, so the calling service never sees or stores that password, only a token it can use for the narrow purpose of one identity lookup. The design rationale for treating `ABC`/`XYZ` as pluggable providers behind a common connector interface (rather than two bespoke integrations) is in `api-connector-design-rationale.md` — but the product reason it must be pluggable is this persona: onboarding flows routinely need to support more than one partner IDP, and adding "sign in with a third provider" should be an integration, not a redesign.
+
+## Search authorization — product requirements
+
+Product-level input to `../02-ai-security-architecture/CLAUDE.md`'s authz scoping decision on `profile:search` vs. `profile:read:own` — requirements only; no scope names, token formats, or policy mechanics, which are 02's to design.
+
+**Persona 2 legitimately needs:**
+
+- Search on `name` and `phone`, with partial-match support — a support analyst rarely has a clean, exact value for either.
+- Masked/partial PII by default on every search result, with full-field detail requiring a distinct, more tightly scoped call.
+- A deliberate "expand" action to see full PII on a specific result, with its own audit-log entry distinct from the search's own entry (search happened; then, separately, this specific record's full PII was viewed).
+- Pagination on search results, independent of the masking/expand distinction.
+- Every search call attributable to a specific caller identity — never an anonymous or shared-credential search path.
+- Search and expand each carry an independent, time-bounded volume limit per caller identity, distinct from and in addition to per-call audit attribution — the product requirement is that no single caller identity can reconstruct a large slice of the PII store through many small, individually-compliant calls. (Attribution answers "who did this, after the fact"; volume limiting is the separate, live control that prevents the "after the fact" answer from being the only thing standing between this API and a slow bulk export. Mechanism and numbers are 02's.)
+- A search response's visibility is not solely query-specificity-dependent: a query specific enough to match at most one record does not automatically earn additional unmasked fields — expand remains the only path to unmasked PII, regardless of how narrow the query was.
+
+**Persona 2 must not be able to do:**
+
+- Bulk export of search results — no "download all," no unbounded result size, no format designed for offline reuse of a result set.
+- Search with no query constraint (a call that would return "everyone") — the API should require at least one real search field, not accept an empty or wildcard query.
+- See full, unmasked PII from the search response itself — expand is always a separate, auditable action, never a response-shape option toggled for convenience.
+- Search or expand without generating an audit-log entry — there is no "quiet" path through this API for a PII lookup.
 
 ## Cross-cutting observation
 

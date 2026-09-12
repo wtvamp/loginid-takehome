@@ -19,7 +19,7 @@ This document covers three surfaces in the order the assignment presents them: t
 **Endpoint shape, from the personas in `personas-use-cases.md`:**
 
 - `GET /profiles/{id}` — exact retrieval by primary key. Serves any caller who already has the ID (the common, low-risk case).
-- `GET /profiles?name=&phone=&...` (or `POST /profiles/search` if the query needs to carry more structure than fits cleanly in query params, e.g. partial-match flags) — the search surface Persona 2 (support/ops analyst) actually uses day to day. This is the endpoint that needs the most deliberate authz design, because "search by phone" is simultaneously the legitimate support workflow and the shape of a scraping attack.
+- `POST /profiles/search` — the search surface Persona 2 (support/ops analyst — the internal user who looks up a customer record by name or phone during a support ticket; see `personas-use-cases.md`) actually uses day to day. **Resolved as `POST`, not `GET` with query params**, for two product-level reasons, not just implementation convenience: (1) the search body needs to carry partial-match flags and an explicit `expand` toggle — a boolean field in the request body, see the Contract Summary below for its exact shape — alongside the query fields, which is awkward to express and easy to get wrong as bare query params; (2) `GET` query strings land in access logs and browser history by default, and a phone number or partial name is PII — `POST` keeps the query payload out of the URL and lines up with where this document already requires every search call to be an audit-log event. This is the endpoint that needs the most deliberate authz design, because "search by phone" is simultaneously the legitimate support workflow and the shape of a scraping attack.
 
 **Why search and retrieve are named as separate concerns in the assignment, and should stay separate in the API design:** retrieval-by-ID is nearly risk-free — if a caller has a valid ID, they likely already have a legitimate reason to look at that record. Search is different: it's a fuzzy-match query over a PII store, which means the API surface itself is the control point. Design implications this document asserts (mechanics belong to `../02-ai-security-architecture/CLAUDE.md`):
 
@@ -33,12 +33,12 @@ This document covers three surfaces in the order the assignment presents them: t
 
 The assignment specifies exact contracts for both endpoints (see root `CLAUDE.md` — `/auth` takes `{"username", "password"}` and returns an `access_token`; `/identity` takes `{"phone", "name"}` and returns PII including a structured address). The design rationale here is about *why* that shape makes sense and *how to build the connector so it isn't hostage to any one provider's quirks* — not about re-specifying the contract, which is already fixed.
 
-**Why the two-call shape (`/auth` then `/identity`) is the right pattern, per Persona 3:** it's a minimal, legacy-style token-exchange flow — trade a long-lived credential (username/password) for a short-lived, purpose-scoped token, then use that token for the actual data pull. This is structurally the same shape as OAuth2's resource-owner-password-credentials grant (the *deliberately old-fashioned* member of the OAuth2 grant family, notably the one most identity providers now discourage in favor of authorization-code or client-credentials flows — see `research-oauth-history.md` for the OAuth lineage this pattern sits in). Recognizing that lineage matters for the write-up: this connector contract is not a novel design, it's a well-understood, slightly dated pattern, being asked for deliberately (see `industry-framing.md` §2 for why "deliberately dated" is the right read, not an oversight).
+**Why the two-call shape (`/auth` then `/identity`) is the right pattern, per Persona 3** (the onboarding flow that pre-fills a new user's profile from a third-party IDP at signup; see `personas-use-cases.md`)**:** it's a minimal, legacy-style token-exchange flow — trade a long-lived credential (username/password) for a short-lived, purpose-scoped token, then use that token for the actual data pull. This is structurally the same shape as OAuth2's **resource-owner-password-credentials (ROPC) grant** — one of several standard ways an OAuth2 client obtains a token, this one taking a raw username/password directly instead of redirecting the user to log in elsewhere — and it is the specific grant type RFC 9700 now states MUST NOT be used, in favor of authorization-code or client-credentials flows (see `research-oauth-history.md` for the OAuth lineage this pattern sits in). Recognizing that lineage matters for the write-up: this connector contract is not a novel design, it's a well-understood, industry-standard-but-dated pattern (see `industry-framing.md` §2, revised after the S2 debate on `PLAN.md` — see `decisions/password-baseline-debate.md` — this is named as the conventional baseline, not as a claim about the assignment author's intent).
 
 **Why the connector must be built provider-agnostic (ABC/XYZ as instances of one interface, not two bespoke integrations):** the assignment names the providers generically on purpose — this is a request to design *a connector interface*, with ABC and XYZ as its first two implementations, not to hardcode either one. Concretely, that means:
 
 - A common internal interface — something like `Authenticate(username, password) → token` and `FetchIdentity(token, phone, name) → PII` — that both ABC and XYZ adapters satisfy, so adding a third provider is "write an adapter," not "touch the calling code."
-- Each provider adapter owns its own quirks (token expiry format, field-name differences, rate limits, error codes) behind that common interface — the calling code (the onboarding flow from Persona 3) never branches on which provider it's talking to.
+- Each provider adapter owns its own quirks (token expiry format, field-name differences, rate limits, error codes) behind that common interface — the calling code (the onboarding flow from Persona 3, above) never branches on which provider it's talking to.
 - The interface's shape should anticipate that a future provider might not be username/password-based at all — an OAuth2/OIDC provider would satisfy `Authenticate` differently (redirect-based auth-code exchange instead of a direct password POST) but still ultimately produce a token this connector can use the same way for `FetchIdentity`. This is the connector-side equivalent of `user_credential.method`'s extensibility from §1 — flagged here, not built here, per `industry-framing.md`'s point about not burying the actual assignment under speculative scope.
 
 **Field-mapping note (product-level, not implementation):** the assignment's `/identity` response splits address into `street_address`, `locality`, `region`, `postal_code`, `country` — this is recognizably the OpenID Connect `address` claim shape (a widely-used standard structure for exactly this purpose), which is a useful fact for the write-up: it signals the assignment's own contract is already leaning on real industry convention rather than an arbitrary shape, which is worth naming explicitly as evidence of "this connector is meant to look like a real federated-identity integration," reinforcing the design choices above.
@@ -46,3 +46,37 @@ The assignment specifies exact contracts for both endpoints (see root `CLAUDE.md
 ## Summary for the engineering track
 
 Three seams to build with deliberately, per this document: `user_credential.method` as a real discriminator (not a fixed enum), a search API designed around masked-by-default results + rate limiting + audit logging (not just an authenticated GET), and a provider-agnostic connector interface with ABC/XYZ as its first two adapters (not two copy-pasted integrations). Each seam is where this "before" baseline visibly points toward the "after" — passkeys, scoped search, and modern federated-identity providers — without this submission having to build any of the "after" itself.
+
+## Contract summary for 03
+
+This section is the single-page version 03 should build against without re-reading the rest of this document. Where this section and the prose above conflict, this section is current.
+
+**Entities (Q1)** — exact assignment field names:
+
+- `user_profile`: `name`, `address`, `phone` (plus a primary key and the FK target for `user_credential`).
+- `user_credential`: `username`, `method`, `password` (plus a primary key and a FK to `user_profile`).
+- Relationship: **one `user_profile` to many `user_credential`** — do not model as 1:1. `method` is a real discriminator column (string/enum-with-room, not a fixed two-value enum) that determines which other columns on a `user_credential` row are meaningful; only the `"password"` method needs a password hash today. How that's physically modeled (nullable columns vs. method-specific side tables) is 03's and `../05-data-ops/CLAUDE.md`'s call, not fixed here.
+
+**REST API (Q2):**
+
+- `GET /profiles/{id}` — exact retrieval.
+- `POST /profiles/search` — search, **not** `GET` with query params (rationale above). Request body shape: a top-level `expand: bool` field, sitting alongside the query fields (`name`, `phone`, partial-match flags), e.g. `{"name": "...", "phone": "...", "expand": false}` — not nested under a sub-object. Default (`expand` absent or `false`) returns masked/partial PII; `expand: true` requests full-field detail and, per the authz mechanism in `../02-ai-security-architecture/CLAUDE.md`, should require a more tightly-scoped credential than the base search call.
+- Default response for search is masked/partial PII; `expand: true` is required for full-field detail and should be more tightly scoped than the base search call (same field, same meaning, as above).
+- Search is rate-limited and paginated, independently of retrieval-by-ID.
+- Every search call must be attributable and audit-logged (caller identity, query, timestamp) — the API shape must not make call attribution an afterthought (e.g., no anonymous/stateless-only search path).
+- Authn/authz mechanism (API key vs. OAuth2 client-credentials vs. mTLS, token formats, scopes) is fully specified in `../02-ai-security-architecture/CLAUDE.md` — 03 implements against that document's design, not against an invention of its own.
+
+**Connector interface (Q3):**
+
+- Endpoints, methods, and JSON bodies for `/auth` and `/identity` are fixed by the assignment (see root `CLAUDE.md`) — 03 does not re-specify them.
+- Build one provider-agnostic interface — `Authenticate(username, password) → token`, `FetchIdentity(token, phone, name) → PII` — with ABC and XYZ as its first two adapters. The calling code (onboarding flow) never branches on provider identity.
+- `/identity` PII response fields (`name`, `phone`, `street_address`, `locality`, `region`, `postal_code`, `country`) match the assignment exactly; the address sub-shape matches the OIDC Core `address` claim (`research-oidc-address-claim.md`) — reuse those member names verbatim in Go structs, do not rename them.
+- Leave the interface's `Authenticate` signature able to accommodate a future non-password-based provider (e.g., OAuth2/OIDC redirect flow) without redesigning `FetchIdentity` — flagged as a design constraint on the interface shape, not something to build now.
+
+**Out of scope for 03 — do not re-derive, read the owning track instead:**
+
+- The authn/authz *mechanism* for the search/retrieve API — `../02-ai-security-architecture/CLAUDE.md`.
+- How `user_credential.method`'s discriminator is physically modeled (columns vs. side tables) and all schema/migration decisions — `../05-data-ops/CLAUDE.md`.
+- The `/auth` and `/identity` field names and JSON shapes — fixed by the assignment text itself, not a design decision any track owns.
+- Whether the framing narrative calls the password baseline "deliberate" — it does not, per the S2 structured written debate recorded in `decisions/password-baseline-debate.md` ("S2" = the second story in `PLAN.md`'s task list, not a spec term); 03 need not engage with that question at all, it only affects prose in this track's docs.
+

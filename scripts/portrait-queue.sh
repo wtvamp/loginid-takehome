@@ -61,10 +61,13 @@ import sys
 path, slug, status = sys.argv[1:4]
 out = []
 for line in open(path, encoding="utf-8"):
+    # cells[0] is the empty lead-in before the first pipe; Portrait is the 11th column -> cells[11];
+    # cells[12] is the empty trailer after the closing pipe (must stay empty).
     cells = line.rstrip("\n").split("|")
-    if len(cells) >= 13 and cells[1].strip() == slug:
-        cells[12] = f" {status} "
-        line = "|".join(cells) + "\n"
+    if len(cells) >= 13 and cells[1].strip().strip("`") == slug:
+        cells[11] = f" {status} "
+        cells[12] = ""
+        line = "|".join(cells[:13]) + "\n"
     out.append(line)
 open(path, "w", encoding="utf-8").write("".join(out))
 PY
