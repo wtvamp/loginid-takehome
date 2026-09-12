@@ -44,7 +44,7 @@ Directories are numbered for reading order in the final submission, not for sequ
 - Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
 - Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
 - Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
-- Do not write implementation code until Warren gives an explicit, project-wide go-ahead. Design docs, schemas described in prose, plans, and decision records are fine; `.go`, `.sql`, `go.mod`, Dockerfiles, and CI config are not.
+- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `<track>/refinement/<LT-key>.md`. Work happens on a `feature/<LT-key>` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
 
 ## Org, hiring, and orchestration
 

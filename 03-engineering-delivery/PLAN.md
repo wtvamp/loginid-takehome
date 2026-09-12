@@ -130,6 +130,10 @@ connector's own audience/client-credential variables (consistency-pass F15). Con
   signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
   and handler-package internals — those can still shift as 05's and 02's hand-offs land.
 
+## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+
+**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+
 ## Verification
 
 - `PLAN.md` for this track matches this file verbatim once copied.
