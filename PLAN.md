@@ -1,0 +1,146 @@
+# Plan: Org-wide planning phase for the LoginID take-home ("hire" the sub-teams, plan every track, then Jira)
+
+## Context
+
+The LoginID take-home is being run as a demonstration of AI-architecture capability: a root PM agent (Dana Whitfield / team-lead) plus five persistent track leads (Naomi Voss 01, Marcus Ilori 02, Renata Cole 03, Theo Bergman 04, Priya Nandakumar 05), each with a profile-gen persona, each working from its own track directory. All five tracks have finished their first-wave design docs; all code has been deliberately wiped; the project is paused in a design/planning phase. Marcus has delivered the team's agreed Claude-architecture approach in `02-ai-security-architecture/planning-approach.md` (model/effort per role, orchestrator-worker with bounded two-party exceptions, the "receiver can act without re-deriving" hand-off standard, dependency order 01/02/05 → 03 → 04, and a thin root `PLANNING.md` board).
+
+Warren now wants the formal planning phase run across the whole org, with three additions to Marcus's approach:
+
+1. Every track lead must "hire" (create) a sub-team of agents and state each hire's function. Hires must vary in **personality and archetype**, not just viewpoint — variance across the org, not just within a team (a serious principles-based architect paired with a silly innovative one, etc.).
+2. **Every** agent created must run profile-gen so it has a personality, professional history, and technical background. Profile pictures are optional and may be produced by background jobs.
+3. The orchestration patterns must make heavy use of those personas to drive debate and diversity of thought.
+
+Leads may spawn their sub-teams into new tmux panes. Everyone goes into plan mode and plans first; Jira stories in project `LT` (uplifttech.atlassian.net, cloudId `db488eae-d6cb-4100-92a9-e7a4519fc176`, issue types Epic/Story/Task/Bug/Subtask) come **after** planning. No implementation code until Warren gives a separate go-ahead.
+
+Everything in `/Users/warrenthompson/Source/LoginID` is part of the submission, so the org scaffolding (casting registry, personas, agent definitions) must read as intentional, presentable AI-architecture work — not scratch.
+
+## Inputs this plan builds on (already decided — do not re-litigate)
+
+- `02-ai-security-architecture/planning-approach.md` — models/effort by role (orchestrator fable/high; leads sonnet, medium for 01/04, high for 02/03, **opus/high for 05 planning**; research subagents haiku or sonnet/low; implementation sonnet/medium-high, opus/high only for the connector token lifecycle; review = author self-review first, independent second pass on security-graded surfaces only; fable for a single final cross-track consistency pass), coordination rules, hand-off standard, dependency order, and the thin `PLANNING.md` board shape.
+- Root `CLAUDE.md` — track ownership table and the "cross-reference, don't restate" rule.
+- profile-gen mechanics verified in this session (see "Hire creation mechanics" below).
+
+## Verified mechanics that shape the design
+
+profile-gen (`~/.claude/skills/profile-gen` → symlink to `~/Source/ProfileGenSkill`):
+- `--output file --assets tracked --root <track-dir>` writes `<track-dir>/profiles/<slug>/<slug>.md` with **no** CLAUDE.md line; unlimited personas per directory (`scripts/profilegen/storage.py:98-110`, `write_profile.py:121-142`).
+- `show_profile.py --autostart-only` displays **every** persona that has a `profile-gen:start` marker in the root `CLAUDE.md`, in file order (`show_profile.py:219-224`). Therefore hires must **never** be added as CLAUDE.md markers — only the five leads and Dana keep markers. Hires are displayed on demand with `show_profile.py --profile <path> --root <track-dir>`.
+- Schema has no history/backstory field (`assets/profile.schema.json`, `additionalProperties: false`); `personality` is unlimited free prose, so history + technical background live there.
+- `write_profile.py` only checks the `image` **key** exists, never the file (`write_profile.py:63,90-92`) → personas can be created **text-first** with a pre-declared image path, and the PNG generated later into that path by a background queue. Display degrades gracefully to name-only until the file exists.
+- `generate_image.py --workflow <any path> --seed N` — the existing validated workflow `profiles/dana-whitfield/comfyui-workflow.json` is reusable for every portrait; it is never mutated.
+- Global `SessionStart` hook (`~/.claude/settings.json`) runs `show_profile.py --root "${CLAUDE_PROJECT_DIR:-$PWD}" --autostart-only` before a subagent's first turn, so every new pane shows Dana until the agent runs `show_profile.py --profile <own>`; every spawn prompt must include that command after its `cd`.
+
+Harness (confirmed against the Claude Code docs — sub-agents.md, agent-teams.md, settings-reference.md, hooks.md):
+- Agent definitions `.claude/agents/<slug>.md` support frontmatter `name`, `description`, `model` (`sonnet|opus|haiku|fable|inherit`), `tools`/`disallowedTools`, `permissionMode`, `skills`, `memory`, `maxTurns`, and a `hooks` block scoped to that agent's lifetime. **No effort key exists**, and teammates inherit the lead's effort level (Warren's `high`). The only per-model lever is `modelSettings.<model>.effortLevel` in `.claude/settings.json`. Consequence: Marcus's effort tiers are implemented as *inherit high for sonnet/opus/fable* plus `haiku → low` for throwaway research fan-out; the sonnet-medium vs sonnet-high distinction collapses to high (small cost, errs upward on the tracks that matter). Model per hire is still pinned in its definition.
+- The per-agent `hooks` block is the permanent fix for the "every pane shows Dana" problem — with one correction found during Phase 0: agent frontmatter supports only `PreToolUse`, `PostToolUse`, and `Stop` (no `SessionStart`), and `$CLAUDE_PROJECT_DIR` is not available in subagent hooks. So each hire's definition carries a `PreToolUse` hook with `matcher: ".*"` and `once: true` that runs `show_profile.py --clear` then `show_profile.py --profile <own persona> --root <track-dir>` (absolute paths) on the hire's first tool call, then removes itself. The spawn prompt keeps the same command as a fallback.
+- Nested spawning works but is capped at 3 levels by default (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`). Hierarchy therefore stays **team-lead → lead → hire**; hires do not spawn subagents — any research fan-out is done by the lead. The harness opens a tmux pane per spawned agent.
+- Teammate plan mode **auto-approves**: a teammate's `ExitPlanMode` is approved in the lead's session without review (agent-teams.md). So plan mode is used for what it is good at — forcing a written plan before any edits — and the real gate is manual: the lead copies its approved plan into `<track-dir>/PLAN.md`, messages team-lead, and does **not** hire until team-lead replies with an explicit "hiring go" after reviewing the roster against the variance rules.
+
+## Plan
+
+### Phase 0 — Team-lead lays the planning scaffolding (before any lead plans)
+
+All files are prose; none is code. Root-level files are owned by team-lead only.
+
+**0. Make the process itself part of the submission.** Warren wants every step and all progress saved so it can be turned in; today the org plan lives only at `~/.claude/plans/cuddly-nibbling-cherny.md`, outside the repo, and the leads' plan-mode files would land there too. Three fixes, all in-repo:
+   - **`PLAN.md`** (root, new) — this plan, copied verbatim into the repo and kept as the living org plan (updated at phase boundaries, not mid-task). Leads' plans go to `<track-dir>/PLAN.md` (already required in Phase 1). `~/.claude/plans/` is treated as scratch from here on.
+   - **`LOG.md`** (root, new) — a dated, append-only progress journal owned by team-lead: one entry per milestone or decision (what happened, who, which files changed, why), backfilled from this session's history so far — scaffolding of the five tracks, the six research passes and their key findings (incl. the Dick Hardt/aauth.dev correction and LoginID's agentic-commerce repositioning), persona generation, the code wipe and return to planning, Marcus's planning-approach synthesis, and this plan. Leads append one line to their own `PLANNING.md` row instead; cross-track events go in `LOG.md` via team-lead. Each debate run's artifact (Phase 3) is itself part of the record.
+   - **`git init`** at the root with a milestone commit at the end of every phase (Phase 0 scaffolding, each approved plan, each completed hiring wave, each debate artifact set, the consistency pass, Jira export). The commit history is the most credible "how the AI workflow actually ran" artifact the submission can carry; commit messages follow the repo attribution convention (Co-Authored-By Claude Fable 5.1 + session link), which itself documents the AI involvement LoginID asked about. Commits only at milestones, never mid-task, and never `.claude/settings.local.json`, image caches, or secrets. A `.gitignore` covers `.claude/settings.local.json` and `*.lock`.
+
+1. **`PLANNING.md`** (root, new) — exactly the thin board Marcus specified: one row per track — `Track | Lead | Status | Blocking on | Blocked by | Planning notes (relative path) | Hires (count/registered) | Last updated` — plus a **Service boundaries** section that 03 owns and 04 reads (initially "TBD — set by 03 during planning"). One writer per row (the lead); team-lead writes the header and the two Dana rows (orchestrator, cross-track consistency pass). No reasoning in this file — pointers only.
+
+2. **`CASTING.md`** (root, new) — the org-wide casting registry, hiring rules, and orchestration-pattern catalog. Team-lead owns the rules and palette; each lead owns its own registry rows. Sections:
+
+   - *Archetype palette* (13 — enough slack for a no-repeat-within-team rule at ~11 hires):
+
+     | Archetype | Temperament sketch | Blind spot | Pairs well with |
+     |---|---|---|---|
+     | Principled Architect | standards-first, cites RFC section numbers, reasons threat-model-down | over-specifies; mistakes thoroughness for done | security controls, contracts |
+     | Tinkerer (silly & innovative) | playful, analogy-driven, sketches three odd alternatives before defending one | novelty bias; underweights boring proven controls | any decision that needs alternatives |
+     | Designated Skeptic | argues against the room by default, politely | objections without a counter-proposal | authz scoping, abstraction choices |
+     | Consensus Weaver | finds the shared premise, writes the synthesis | papers over real disagreement | decision records, hand-off prose |
+     | Spreadsheet | wants a number or a table; distrusts adjectives | measures only what is measurable | sizing, TTLs, retention windows |
+     | Storyteller | thinks in user journeys and narrative arcs | charming beats correct | product framing, README, use cases |
+     | Veteran | "I watched this fail in prod in 2019" | fights the last war; pattern-matches too fast | token lifecycle, migrations, ops |
+     | Newcomer | bright, asks why, assumes no jargon | doesn't know what's already settled | legibility tests on every hand-off |
+     | Detail Hawk | nullable-vs-required, off-by-one, error semantics | cannot see the forest | schema, DDL, code review |
+     | Systems Cartographer | draws boundaries and flows; sees interactions | abstracts past the concrete | multi-DB abstraction, service topology |
+     | Adversary | thinks like an attacker, enjoys it | sees threats everywhere, no prioritization | connector, search API |
+     | Minimalist | "what if we didn't build this?" | deletes something load-bearing | infra, scope control |
+     | Enthusiast | bold, optimistic, wants the promising thing tried | discounts operational cost | counterweight to deadpan/cautious leads |
+
+   - *Variance rules* (team-lead enforces at the hiring gate, reading all rosters together): (1) no archetype more than **2× org-wide**, never twice within a team; (2) no two leads hire the same archetype for the same function (two "Detail Hawk reviewers" is duplication, not variance); (3) every team includes its lead's **temperament opposite** — Naomi (curious narrative analyst) → Spreadsheet; Marcus (rigorous citer) → Tinkerer; Renata (clarity-over-cleverness shipper) → Enthusiast; Theo (deadpan minimalist) → Enthusiast or Newcomer; Priya (schema-first PII guardian) → Storyteller; (4) org-wide at least **three** hires tagged playful+bold, because zero leads are; (5) each roster spans at least two temperament axes (serious↔playful, cautious↔bold).
+
+   - *Sizing* (Warren's call: the larger org) — 3–4 hires per track, 18 total, **hard cap 18**. With 13 archetypes at ≤2× org-wide there are 26 slots, so the cap fits without repeats inside any team. Suggested cast, leads may adjust within the rules: 01 (3) → Storyteller, Spreadsheet (opposite), Designated Skeptic; 02 (4) → Adversary, Principled Architect, Tinkerer (opposite), Designated Skeptic; 03 (4) → Detail Hawk (code reviewer), Veteran, Enthusiast (opposite), Systems Cartographer (Go layout / service topology); 04 (3) → Newcomer, Enthusiast (opposite), Minimalist (scope guard); 05 (4) → Systems Cartographer (multi-DB abstraction), Storyteller (opposite), Detail Hawk (DDL nullability — a different function from 03's, so allowed), Spreadsheet (retention windows). Archetypes used twice must have different functions. Leads may still wear a "hat" themselves in three-hats runs rather than hiring for it.
+
+   - *Persona-writing standard* — 90–150 words in `personality`, in this order: temperament (two adjectives and how they show up in a meeting); decision style; **what they specifically push back on**; plausible history (two prior roles, generic employers, no real names); technical background tied to the function; **their own blind spot stated plainly** so the lead can pair against it; how they behave in disagreement. One verbal habit allowed (a recurring question, an analogy style); no repeated catchphrases. Avoid: real people/companies, checkable credentials, stereotypes, sarcasm at a person's expense, profanity, emoji, appearance (that belongs in the image prompt). Two worked examples are included verbatim in `CASTING.md` — the Tinkerer ("a token cache is a coat check that burns the coats every fifteen minutes… pushes back on 'that's the standard approach' whenever nobody can say what the standard protects against; blind spot: novelty bias") and the Principled Architect ("will not accept a control without naming the attack it stops… blind spot: over-specification; changes position when shown evidence, and says so") — so the contrast Warren asked for is concrete.
+
+   - *Orchestration pattern catalog* (full protocols; cost in agent-turns = one hire invocation + reply):
+     - **Adversarial pair** — Proposer drafts; Designated Skeptic writes numbered objections; Proposer revises; lead rules. 3 turns + lead. Artifact: decision with "objections considered". *Use:* search-API authz scoping (`profile:search` vs `profile:read:own`, object-level policy); the `Search()` query shape in `multi-db-strategy.md`.
+     - **Red team / blue team** — Adversary writes an attack tree against one surface; Principled Architect answers each leaf with a control or an accepted risk; lead scores residual risk. 2–3 turns. Artifact: attack-tree table appended to `connector-security.md`. *Use:* the connector token lifecycle only (TTL, at-rest encryption, per-vendor keying, fail-closed). Waste on DAO CRUD or a Dockerfile.
+     - **Three hats** — Tinkerer (optimist), Veteran (pessimist), Spreadsheet/Minimalist (pragmatist) each write ≤300 words in parallel; lead synthesizes. 3 turns + lead. *Use:* multi-DB abstraction (per-driver implementations vs dialect branches vs codegen); Go layout (one binary vs two).
+     - **Rotating devil's advocate** — a standing "Objection" seat that moves per decision so nobody becomes "the negative one". 1 turn per decision. *Use:* Renata's implementation calls (error semantics, context propagation, test doubles). Cheapest pattern; run often.
+     - **Structured written debate** — position → rebuttal → lead synthesis, both positions preserved. 3 turns. *Use:* Naomi's central framing (password baseline: deliberate simplification or contradiction at a passkey company?); Marcus's core claim in `ai-workflow-narrative.md`.
+     - **Newcomer's question** — Newcomer reads a finished hand-off cold and lists what it could not act on without re-deriving; author fixes. 1–2 turns. *Use:* every 05→03 and 02→03 hand-off, the README, `PLANNING.md`. Directly tests the hand-off standard; highest-ROI pattern in the project.
+     - *Never debate what the assignment text fixes* (endpoint paths, JSON bodies). Theo's track: one hire, one Newcomer's-question pass on 03's config surface and 02's secrets inventory, nothing else.
+
+   - *Registry table* — one row per hire, appended by the hiring lead after team-lead's "hiring go": `Slug | Name | Track | Function | Archetype | Temperament tags | Model | Patterns & role | Persona path | Agent def path | Portrait (queued/done)`.
+
+3. **`.claude/agents/`** (root, new directory) — one `<slug>.md` per hire. Frontmatter: `name`, `description` (function + track + archetype, so the Agent tool picker reads it), `model` (pinned per Marcus's tiers: haiku for research fan-out, sonnet for design/debate/implementation, opus only for the connector token-lifecycle seat), `tools` narrowed where sensible (debate/research hires: no Write/Edit — they return prose to the lead, who writes the artifact), and a `hooks` block with a once-only `PreToolUse` command (matcher `.*`) that runs `show_profile.py --clear` then `show_profile.py --profile <own persona> --root <track-dir>` on the first tool call. Body (plain markdown, no `@` imports — not documented for agent bodies): the persona paragraph copied from its profile, pointers to root and track `CLAUDE.md`, the pattern(s) and role it plays, and the hard rules (`cd <track-dir>` first; no code until Warren's go-ahead; hand-offs by file path; do not spawn subagents — depth cap). Team-lead writes `.claude/agents/_TEMPLATE.md`; leads copy it per hire.
+
+3a. **`.claude/settings.json`** (project, new) — `modelSettings.haiku.effortLevel: "low"` so throwaway research fan-out runs cheap; everything else inherits Warren's `high`. Done via the `update-config` skill. This is the only effort lever the harness offers per model; it stands in for Marcus's low/medium/high tiers.
+
+4. **Root `CLAUDE.md` edits** (at a turn boundary, for cache stability): update *Status* (design docs complete, planning phase in progress, code wiped/paused); add a short *Org, hiring and orchestration* section pointing to `PLANNING.md`, `CASTING.md`, `02-ai-security-architecture/planning-approach.md`, and `.claude/agents/`; state the rules that hires never get CLAUDE.md markers and never spawn subagents. Keep the six existing persona markers as they are.
+
+5. **`scripts/portrait-queue.sh`** (root `scripts/`, new — the only script; it is ops tooling, not assignment code): a serialized background job that walks `CASTING.md` rows marked `Picture: queued`, generates one portrait at a time via `generate_image.py` with the shared workflow (the ComfyUI box is shared with other agents and takes 2–10 minutes per SDXL image under load — parallel submissions only slow everyone), writes to the pre-declared image path, and flips the row to `done`. Team-lead runs it with `nohup … &` after Phase 2 and never blocks on it.
+
+### Phase 1 — Every lead plans, in plan mode (parallel; one message from team-lead to each lead)
+
+Team-lead sends each lead one brief containing: pointer to `PLANNING.md`, `CASTING.md`, `planning-approach.md`; the model/effort assigned to their track's planning; the hire cap for their track; and the requirement to `EnterPlanMode` and produce a track plan with these mandatory sections:
+
+- *Deliverables and tasks* for the track, each sized to become one Jira Story (Epic = the track), with the hand-off it produces or consumes named as a file path (the "receiver can act without re-deriving" standard).
+- *Hire roster* — per hire: function, archetype from the palette (respecting the variance rules and the track's suggested cast), proposed name, a persona draft written to the persona-writing standard (history + technical background + temperament + stated blind spot), model (haiku for research fan-out, sonnet for design/debate/implementation, opus only for the connector token-lifecycle seat in 03), and which orchestration pattern(s) the hire sits in and in what role.
+- *Debate plan* — which decisions in this track get which pattern, and which decisions explicitly do **not** (waste). Suggested anchors: red/blue on the connector token lifecycle (02/03); three hats on the multi-DB abstraction (05); adversarial pair on search-API authz scoping (02→03); newcomer's-question pass on the product framing (01); Theo's track is small — at most one hire and one pattern.
+- *Dependencies* — what this track needs from others and provides to others, consistent with the planning-approach.md order (01/02/05 first wave with 05 on the critical path; 03 split start; 04 last on three named inputs).
+
+Track-specific additions:
+- **02 (Marcus)** additionally reviews and ratifies the pattern catalog in `CASTING.md` as the AI-architecture owner (he may amend protocols or add the red/blue attack-tree template as an appendix to `planning-approach.md`, not a new doc — one source of truth), and names the two deferred hand-offs (02→03 receiver-shaped auth hand-off; 02→04 secrets inventory + never-log list) as Phase 3 deliverables.
+- **03 (Renata)** fills the *Service boundaries* section of `PLANNING.md` (one binary or two, package layout, config surface, DAO driver-selection mechanism) as a planning output, so 04 can plan against it.
+- **05 (Priya)** runs at opus/high for this phase (respawn required — model is fixed at spawn) and commits to the Go-shaped contract inside `multi-db-strategy.md` as her first Phase 3 deliverable.
+
+Approval gate (manual, because teammate plan mode auto-approves): after `ExitPlanMode`, the lead copies its plan to `<track-dir>/PLAN.md` (the durable, submission-visible version — `~/.claude/plans/` is outside the repo), updates its `PLANNING.md` row to "plan drafted — awaiting hiring go", and messages team-lead. Team-lead reviews against (a) the variance rules across **all** rosters received so far — this is where cross-team variance is actually enforced, so rosters are approved in arrival order and later leads take what the palette has left (fine for 04's single seat), (b) planning-approach.md's model tiers, (c) the hand-off standard, and (d) the 18-hire cap (3–4 per track) — and replies with an explicit "hiring go" or specific revisions. No lead runs profile-gen or spawns anything before that message. Team-lead relays a one-paragraph summary of each approved plan to Warren, who can read any `PLAN.md` directly.
+
+### Phase 2 — Hiring (after a lead's plan is approved; leads execute, team-lead audits)
+
+Per hire, the lead:
+1. Confirms the archetype is still available in `CASTING.md` (first-come registry; team-lead breaks ties).
+2. Runs profile-gen **text-first**: `write_profile.py --fields-file <fields.json> --root <track-dir> --output file --assets tracked`, with the finished `personality` paragraph (history + technical background + temperament), `image` pre-declared as `profiles/<slug>/<slug>.png`, `display.autostart: false`, and `generation` filled with the intended prompt and `backend: comfyui`. Persona lands at `<track-dir>/profiles/<slug>/<slug>.md`. No CLAUDE.md marker.
+3. Writes `.claude/agents/<slug>.md` from the template with the assigned model/effort.
+4. Appends the registry row to `CASTING.md` with `Picture: queued` and the portrait prompt it wants.
+5. Spawns the hire via the Agent tool with `subagent_type: <slug>` and `name: <slug>`; the spawn prompt's first three actions are fixed: `cd <track-dir> && pwd`, read root + track `CLAUDE.md` + own persona, `show_profile.py --profile <own persona> --root <track-dir>`. The harness opens a new tmux pane per hire.
+
+Team-lead: runs `scripts/portrait-queue.sh` in the background once the first rows are queued; re-flows the tmux layout as panes appear (one window per team if the pane count exceeds ~8 in a window — see Open items); spot-checks two personas per team against the persona-writing standard; watches for variance drift as later teams register.
+
+### Phase 3 — Planning debates inside each team, then plan finalization
+
+Each lead runs its planned patterns with its hires on the decisions named in its plan; each pattern run ends in a durable artifact in the track directory (e.g., `03-engineering-delivery/decisions/authz-scoping-debate.md`: positions, rebuttals, the lead's synthesis and decision). Leads then revise their track plan and `PLANNING.md` row. Marcus delivers the two deferred receiver-shaped hand-offs; Priya delivers the Go-shaped contract; Renata finalizes service boundaries. Team-lead runs the single fable cross-track consistency pass on the five finished plans (contradictions between tracks, e.g., two tracks deciding what `/identity` returns), and reports the result to Warren.
+
+### Phase 4 — Jira (after Warren says planning is done)
+
+Team-lead creates one Epic per track in `LT` (cloudId `db488eae-d6cb-4100-92a9-e7a4519fc176`) via the Atlassian MCP tools; each lead creates its Stories under its Epic from its approved plan (one story per deliverable/task, acceptance criteria = the hand-off standard), and links cross-track dependencies with issue links. Implementation still waits for Warren's explicit go-ahead.
+
+## Verification
+
+- Phase 0: `PLAN.md`, `LOG.md` (backfilled), `PLANNING.md`, `CASTING.md`, `.gitignore` exist at root; `.claude/agents/_TEMPLATE.md` exists; root `CLAUDE.md` Status updated; `git log` shows the Phase 0 milestone commit; `find . -name '*.go' -o -name '*.sql' -o -name 'go.mod'` still returns nothing.
+- Every later phase: `LOG.md` has an entry and `git log` has a milestone commit for it; `diff ~/.claude/plans/cuddly-nibbling-cherny.md PLAN.md` is empty or `PLAN.md` is newer.
+- Phase 1: five `plan_approval_request`s received and answered; each approved plan has all four mandatory sections; every roster passes the variance rules when read together (no archetype > 2×, each team has its lead's opposite, no duplicate archetype-per-function across teams); total hires ≤ cap.
+- Phase 2: for every registry row, `<track>/profiles/<slug>/<slug>.md` exists with a `## Personality` section containing history and technical background, `.claude/agents/<slug>.md` exists with model/effort frontmatter; `grep -c "profile-gen:start" */CLAUDE.md CLAUDE.md` still totals 6 (no hire markers); each hire's pane status bar shows its own track directory and its own persona name (tmux `capture-pane` check, as done for the leads); `portrait-queue.sh` log shows serialized progress.
+- Phase 3: each planned pattern produced its decision artifact file; `PLANNING.md` rows all read "plan approved"; consistency-pass report delivered.
+- Phase 4: one Epic per track and stories under them visible on the LT board.
+
+## Decisions confirmed with Warren before execution
+
+- Hire sizing: **confirmed by Warren** — the larger org, 3–4 per track, 18 total, hard cap 18.
+- Portraits: **confirmed by Warren** — text-first personas for all hires, portraits for all 18 via the serialized background queue (18 renders at 2–10 min each on the shared box ≈ 1–3 hours, overlapping the planning debates; personas display name-only until each lands).
+- Effort: implemented as inherit-high plus `haiku → low` via project `.claude/settings.json`, since the harness has no per-agent effort key.
+- tmux: leads stay in window 2 (the 3×2 grid); when hires appear, team-lead moves each team's hires into a new tmux window named for the track (`01-product`, `02-security`, …) so no window exceeds ~6 panes. Team-lead owns layout.

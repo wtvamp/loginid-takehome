@@ -1,0 +1,151 @@
+# Infra & DevOps — Research: Current Best Practices (2025–2026)
+
+This is a research/recommendation document only. No infrastructure is stood up here; this informs the containerization, CI/CD, local-dev, secrets, and observability design for the DAO service, its REST API, and the third-party IDP connector service described in `../CLAUDE.md` and `./CLAUDE.md`.
+
+AI tooling note: produced with Claude Code (Sonnet 5), using `WebSearch`/`WebFetch` against current (2025–2026) sources, read and synthesized directly rather than copy-pasted — citations are included per section so the reasoning can be checked against the primary source.
+
+---
+
+## 1. Containerization for small Go services
+
+Go's static binaries make it a natural fit for minimal multi-stage Docker builds — the build toolchain never needs to ship in the runtime image.
+
+**Pattern (build stage + minimal runtime):**
+
+- **Build stage**: `golang:1.2x` (pinned minor version, not `latest`) — `go mod download` before copying source so dependency layers cache independently of code changes; `CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app ./cmd/service` to produce a static, stripped binary.
+- **Runtime stage**: copy only the binary (and, if HTTPS calls are made, `/etc/ssl/certs/ca-certificates.crt` from the build stage or a `ca-certificates` layer) into a minimal base.
+
+**Base image choice** — current guidance converges on three tiers:
+- **`scratch`**: literally nothing but the binary. Smallest possible image (single-digit MB), zero OS-level CVEs to patch, but no shell, no CA certs, no non-root user by default — you must supply certs and a numeric `USER` yourself if the binary makes outbound TLS calls.
+- **`gcr.io/distroless/static` (distroless)**: adds CA certificates, timezone data, and a built-in non-root user (UID 65532), still with no shell or package manager. This is described repeatedly as "the sweet spot for most production services" — nearly as small as scratch, but without having to hand-roll certs/user setup.
+- **`alpine`**: only worth it when you need a shell in the runtime image for debugging/exec-ing in; it carries a package manager and more attack surface than the two above.
+
+**Recommendation for this project**: distroless (`gcr.io/distroless/static-debian12` or similar) as the default runtime base for both the DAO/API service and the IDP connector, non-root by default, with scratch offered as a "how you'd shrink further" footnote. Other practices worth naming: pin exact base image digests/tags, order Dockerfile layers for cache efficiency (`go.mod`/`go.sum` copy + download before source copy), and never run as root even though distroless already defaults to a non-root UID.
+
+Sources:
+- [How to Containerize Go Apps with Multi-Stage Dockerfiles](https://oneuptime.com/blog/post/2026-01-07-go-docker-multi-stage/view)
+- [Docker Multi-Stage Builds for Go: From 1GB to 12MB Images (2026 Guide)](https://dev.to/young_gao/docker-multi-stage-builds-for-go-from-1gb-to-12mb-production-images-2p1h)
+- [How to Create Minimal Docker Images for Go Applications](https://oneuptime.com/blog/post/2026-02-20-go-docker-minimal-image/view)
+- [Build Minimal Go Docker Images from Scratch (2026)](https://adhdecode.com/articles/docker/docker-scratch-image-golang/)
+- [Docker Multi-Stage Builds: The Complete Guide for 2026](https://devtoolbox.dedyn.io/blog/docker-multi-stage-builds-guide)
+
+---
+
+## 2. CI/CD pipeline design for a Go project
+
+A modern Go pipeline separates fast local-signal checks from slower/scheduled security scans, so PR feedback stays quick.
+
+**Typical stage sequence** (on every push/PR):
+1. **Checkout + setup Go** (pinned version, module cache restored).
+2. **`go vet`** and **`golangci-lint run`** — `golangci-lint` is a linter aggregator that already includes `go vet`, `staticcheck`, and `gosec` (a security-focused linter) as constituent linters, so gosec-class findings (weak crypto, SQL injection patterns, unhandled errors) surface here rather than needing a separate step. The official `golangci-lint-action` is the standard way to wire this into GitHub Actions.
+3. **`go build ./...`** — fail fast on compile errors before spending time on tests.
+4. **`go test ./... -race -cover`** — race detector and coverage on every run.
+5. **`govulncheck ./...`** — scans for known vulnerabilities *reachable from your actual call graph*, which is why it's kept distinct from a generic CVE scanner: it reports far fewer false positives than "does any dependency have a CVE" tools, so it's cheap to run on every PR.
+6. **Container build + Trivy scan** — once a Dockerfile/image exists, Trivy scans the built image for OS package and dependency CVEs. Some pipelines run this on every PR; a common cost/speed tradeoff seen in current sources is to run it on `main`/nightly/schedule rather than every PR, since it's slower and image-layer CVEs change on OS vendor timelines rather than on your commit cadence.
+7. (If publishing images) build multi-arch image, generate SBOM/provenance attestation, push to registry.
+
+**Sequencing logic**: cheap/fast checks (vet, lint, build) run first and gate everything else; `go test` next since it's the main correctness signal; `govulncheck` is cheap enough to run on every PR because of its call-graph-aware filtering; Trivy (container scan) is heavier and more often scheduled/gated to `main` merges rather than every PR push.
+
+Sources:
+- [How to Set Up Go CI Pipeline with GitHub Actions](https://oneuptime.com/blog/post/2025-12-20-go-ci-pipeline-github-actions/view)
+- [golangci-lint-action (official)](https://github.com/golangci/golangci-lint-action)
+- [Go Linting Best Practices for CI/CD with GitHub Actions](https://medium.com/@tedious/go-linting-best-practices-for-ci-cd-with-github-actions-aa6d96e0c509)
+- [Continuous integration with Go and GitHub Actions](https://aran.dev/posts/continuous-integration-with-go-and-github-actions/)
+- [Go Package CI/CD with GitHub Actions](https://forcepush.tech/go-package-ci-cd-with-git-hub-actions)
+
+---
+
+## 3. Local development loop
+
+**docker-compose pattern**: a `docker-compose.yml` that runs the Go service(s) alongside a local database container, with the service configured (via env vars) to point at the compose-network hostname rather than localhost.
+
+- **PostgreSQL**: standard `postgres:<pinned-version>` image, environment-configured user/db/password, a named volume for data persistence across restarts, and a healthcheck (`pg_isready`) so the app container's `depends_on` can wait for readiness rather than racing startup.
+- **CockroachDB**: runs equally well in Docker; single-node `cockroach start-single-node --insecure` is the common local/dev pattern (insecure mode is explicitly a local-dev-only convenience, never a deployment recommendation). Because CockroachDB speaks the Postgres wire protocol, the same Go Postgres drivers/ORMs (pgx, pq, GORM, upper/db, etc.) work against it — see section 6.
+- **SQLite**: doesn't need a compose service at all — it's the "zero-dependency" option, a single file on disk (or `:memory:`) the binary talks to directly via `database/sql` + a SQLite driver (e.g. `mattn/go-sqlite3` or the pure-Go `modernc.org/sqlite`). This is the natural default for fast local iteration and for unit/integration tests in CI (no container startup latency, trivially parallelizable, disposable).
+
+**Recommendation for this project**: a docker-compose file offering Postgres and CockroachDB as selectable/swappable profiles (matching the DAO's storage-agnostic driver-selection design from `../05-data-ops/CLAUDE.md`), with SQLite as the documented no-compose-needed path for quick local runs and for the test suite — the DAO's storage abstraction is exactly what makes swapping among all three a config change rather than a code change.
+
+Sources:
+- [Use containers for Go development — Docker Docs](https://docs.docker.com/guides/golang/develop/)
+- [How to Run CockroachDB in Docker with Clustering](https://oneuptime.com/blog/post/2026-02-08-how-to-run-cockroachdb-in-docker-with-clustering/view)
+- [cockroachdb-docker-compose](https://github.com/lhsribas/cockroachdb-docker-compose)
+- [How to Use Docker Compose for Local Development Environments](https://oneuptime.com/blog/post/2026-02-20-docker-compose-development/view)
+
+---
+
+## 4. Secrets management: proportionate vs. over-engineered
+
+Current guidance is consistent: plain environment variables are acceptable for *non-secret configuration* (log level, retry counts, feature flags) but are explicitly discouraged for actual secrets in a real deployment, because env vars are exposed through process listings, crash dumps, and accidental logging, and `.env`-file/env-var leakage is cited as a leading cause of real production credential incidents.
+
+**Real-deployment options** (in increasing operational weight):
+- **Cloud-native managed secret store** — AWS Secrets Manager or GCP Secret Manager: managed, IAM/role-scoped access, automatic rotation support (e.g., built-in RDS credential rotation), lowest operational overhead if you're already on that cloud. Best fit when the deployment target is a single cloud.
+- **HashiCorp Vault**: more powerful (dynamic/short-lived secrets, multi-cloud, fine-grained policy), but meaningfully more infrastructure to run and operate (Vault itself needs to be deployed, unsealed, and maintained) — the right call for multi-cloud/hybrid or when dynamic secret issuance is a real requirement, overkill otherwise.
+- **Env-var injection at deploy time from a secret store** (not secrets committed to env files) — i.e., the platform (Kubernetes Secrets backed by a external-secrets operator, ECS task definition secrets pulled from Secrets Manager, etc.) injects the value into the process environment at container start, so the *application code* still just reads `os.Getenv(...)`, but the secret's at-rest storage, access control, and rotation are handled by the managed store rather than a plaintext file in the repo.
+
+**What's proportionate for this take-home**: naming a managed secrets manager (AWS Secrets Manager or GCP Secret Manager, whichever the rest of the take-home's narrative leans toward) as the target-state design, with env-var injection at container start as the actual mechanism the containers see — i.e., "secrets never live in the image or the repo; they're injected as env vars at deploy time, sourced from a managed secret store with rotation and IAM-scoped read access." Standing up Vault, writing rotation Lambdas, or designing a full PKI would be over-engineering for a take-home whose code doesn't need to run in a live environment — the design should *name* the mechanism and *why* the DB credentials/IDP credentials/signing keys never touch source control, not build the secret store.
+
+Sources:
+- [Secrets Management: Vault, AWS Secrets Manager, or SOPS?](https://dev.to/instadevops/secrets-management-vault-aws-secrets-manager-or-sops-2ce1)
+- [HashiCorp Vault vs AWS Secrets Manager: Enterprise Secret Management](https://www.openempower.com/blog/vault-vs-aws-secrets-manager-enterprise-secret-management)
+- [Secrets Management in DevOps: AWS Secrets Manager vs HashiCorp Vault](https://acquaintsoft.com/blog/secrets-management-aws-vault-devops-implementation)
+- [HashiCorp Vault vs AWS Secrets Manager | 2025 Guide](https://cybersnowden.com/hashicorp-vault-vs-aws-secrets-manager/)
+
+---
+
+## 5. Observability basics for a Go API service
+
+**Structured logging**: Go's standard-library `log/slog` (stable since Go 1.21) is the current default choice — structured key/value logging, JSON output for aggregation, `context`-aware child loggers for request/trace-ID correlation, and level control from environment/config. This avoids adding a third-party logging dependency for a service of this size.
+
+**What must never be logged** (directly relevant to this project, which handles `user_credential.password`, third-party IDP `access_token`s, and PII in `user_profile`/`/identity` responses):
+- Raw passwords or password hashes, at any log level — sources are explicit that this holds even for debug-level logs, since debug logging tends to get left on in more environments than intended.
+- Access tokens, refresh tokens, `Authorization`/bearer headers, API keys, and other credential-shaped secrets.
+- Full request/response bodies logged wholesale, since they often carry the above (auth headers, form data) even when the intent was just to log "the request."
+- PII fields returned by `/identity` (name, phone, street address, etc.) beyond what's needed for a correlation ID — log a request ID / hashed identifier, not the person's actual data, in ordinary operational logs.
+- Standard practice for redaction: don't rely on "remembering not to log it" per call site — use `slog.HandlerOptions.ReplaceAttr` (or an equivalent middleware/wrapper) to redact known-sensitive keys (`password`, `token`, `authorization`, `secret`, `api_key`, `access_token`, `refresh_token`, and PII field names) centrally, so a redaction rule applies uniformly rather than depending on every call site getting it right.
+
+**Metrics/tracing**: OpenTelemetry (OTel) is the standard, vendor-neutral choice for Go — the Go SDK/API cover traces and metrics under OTel's stability guarantees (logs support has also reached usable-in-production maturity as of 2026), and `opentelemetry-go-contrib` provides near-zero-effort instrumentation wrappers for common dependencies (HTTP handlers, gRPC, SQL drivers, Kafka clients). For a take-home, the honest framing is: name OTel as the mechanism you'd wire in (a tracer for request spans across the API → DAO → IDP-connector call chain, and basic RED metrics — rate, errors, duration — per endpoint) without actually standing up a collector/backend, since doing so wouldn't be exercised by anyone reviewing the take-home.
+
+Sources:
+- [Golang Slog Explained: Structured Logging Best Practices](https://uptimerobot.com/knowledge-hub/logging/guide-to-golang-slog/)
+- [Redacting Sensitive Data in Go's slog: A Practical Guide with masq](https://dev.to/mizutani/redacting-sensitive-data-in-gos-slog-a-practical-guide-with-masq-158o)
+- [Logging Best Practices using slog in Go (Golang)](https://novrian.substack.com/p/logging-best-practices-in-go-golang)
+- [Instrumentation — OpenTelemetry Go docs](https://opentelemetry.io/docs/languages/go/instrumentation/)
+- [OpenTelemetry Go (GitHub)](https://github.com/open-telemetry/opentelemetry-go)
+- [The Ultimate Go Observability Cheat Sheet (OpenTelemetry Edition)](https://medium.com/@ancilartech/the-ultimate-go-observability-cheat-sheet-opentelemetry-edition-9e020eecc747)
+
+---
+
+## 6. CockroachDB's Postgres-wire-protocol compatibility — deployment/config impact
+
+CockroachDB implements the PostgreSQL wire protocol (pgwire v3), which is why the same Go Postgres drivers (`pgx`, `lib/pq`) and ORMs (GORM, upper/db, etc.) work against both Postgres and CockroachDB largely unchanged — for many applications, the connection-string-and-driver layer really can be shared, which is directly relevant to this DAO's requirement to support both databases through one abstraction.
+
+**Caveats that matter for a DAO design**, not just "it's compatible":
+- **Not full feature parity**: CockroachDB does not support everything Postgres does (e.g., no PostgreSQL range types; no primary/standby distinction, so drivers checking `in_hot_standby` always read `off`). The DAO's SQL should stay in the common subset — standard DDL/DML, no Postgres-only extensions — if it's meant to run unmodified against both.
+- **Transaction retries are the real semantic difference.** CockroachDB defaults to `SERIALIZABLE` isolation and, being a distributed database, can surface a client-visible serialization error (SQLSTATE `40001`, "restart transaction") when it cannot resolve a write conflict automatically — something that essentially never happens the same way against a single-node Postgres instance under normal load. The documented fix is **client-side retry handling**: catch `40001`, and either issue `ROLLBACK TO SAVEPOINT` and replay the transaction, or use a retry-wrapping library (Cockroach Labs ships `cockroachdb/cockroach-go/crdb` specifically for this, compatible with `pgx`-based code). A DAO written only against Postgres semantics and pointed at CockroachDB without this retry loop will intermittently fail under concurrent writes in a way it never would locally.
+- **Practical implication for this project's abstraction layer**: the DAO's CockroachDB code path should wrap write transactions in a retry helper (or use `crdb.ExecuteTx`-style helper), while the Postgres/SQLite paths don't need one — this is exactly the kind of driver-specific behavior the storage-agnostic interface (`../05-data-ops/CLAUDE.md`) needs to isolate behind the abstraction rather than leaking into API/service-layer code.
+- **Local dev implication**: `cockroach start-single-node --insecure` for local/dev is fine (no TLS, no retry contention at that scale) but should be called out as dev-only, matching how Postgres's dev docker-compose setup uses trust-auth/simple passwords that also wouldn't be appropriate in production.
+
+Sources:
+- [PostgreSQL Compatibility — CockroachDB docs](https://www.cockroachlabs.com/docs/stable/postgresql-compatibility)
+- [Why CockroachDB and PostgreSQL are compatible](https://www.cockroachlabs.com/blog/why-postgres/)
+- [Install a Driver or ORM Framework — CockroachDB docs](https://www.cockroachlabs.com/docs/stable/install-client-drivers)
+- [Transaction Retry Error Reference — CockroachDB docs](https://www.cockroachlabs.com/docs/stable/transaction-retry-error-reference)
+- [Advanced Client-side Transaction Retries — CockroachDB docs](https://www.cockroachlabs.com/docs/stable/advanced-client-side-transaction-retries)
+- [What to do when a transaction fails in CockroachDB](https://www.cockroachlabs.com/blog/what-to-do-when-a-transaction-fails-in-cockroachdb/)
+- [pgx (jackc/pgx) — Go Packages](https://pkg.go.dev/github.com/jackc/pgx/v5)
+
+---
+
+## Recommendations for this assignment
+
+A concrete, proportionate design — enough to show intentionality, not enough to be a real ops project:
+
+**Containerization**: One multi-stage Dockerfile per service (DAO/API service, IDP connector service). Build stage: `golang:1.2x`, `CGO_ENABLED=0`, static stripped binary. Runtime stage: `gcr.io/distroless/static-debian12`, non-root (distroless's built-in UID 65532), CA certs copied in for outbound TLS to the IDP vendor endpoints. Pin base image versions. Mention scratch as a further-shrink option, not the default.
+
+**CI pipeline (GitHub Actions, sketch only — no actual workflow file)**: On every PR — checkout, setup-go, `golangci-lint run` (covers vet + gosec-class checks), `go build ./...`, `go test ./... -race -cover`, `govulncheck ./...`. On merge to main (or nightly) — build the container image and run Trivy against it, since image-layer CVE scans are heavier and track OS vendor timelines rather than every commit. Keep PR feedback fast; push the slow/scheduled scan to main.
+
+**Local dev loop**: `docker-compose.yml` with two profiles — Postgres and CockroachDB (`cockroach start-single-node --insecure` for the latter), each with a healthcheck the app container's `depends_on` waits on. SQLite documented as the no-compose-needed default for quick iteration and for the test suite (fast, disposable, parallelizable). The DAO's driver-selection config (env var choosing the backend) is what makes all three swappable without touching the app.
+
+**Secrets**: Name AWS Secrets Manager (or GCP Secret Manager) as the target-state store for DB credentials, IDP vendor credentials, and signing keys, with env-var injection at container start as the actual delivery mechanism the app sees (`os.Getenv`, never a literal in the image or repo). Explicitly scope out Vault as over-engineered for this take-home's actual deployment footprint — name it as "the multi-cloud/dynamic-secret answer if this grew," not something to build now.
+
+**Observability**: `log/slog` with a central `ReplaceAttr`-based redaction rule for password/token/PII-shaped keys, so no call site can accidentally leak a credential or a citizen's PII into logs; JSON output; request-ID correlation. Name OpenTelemetry (traces across API → DAO → IDP-connector, RED metrics per endpoint) as the intended instrumentation approach without standing up a collector — this is a "here's what I'd wire in" note, not a working pipeline.

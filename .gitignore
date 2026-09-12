@@ -1,0 +1,10 @@
+# Local-only Claude Code state — never part of the submission
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+*.lock
+
+# Background job output
+scripts/portrait-queue.log
+
+# OS noise
+.DS_Store
