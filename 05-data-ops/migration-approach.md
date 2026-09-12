@@ -16,16 +16,26 @@ Version numbering: timestamped filenames during development (avoids collisions w
 
 ```
 migrations/
-  shared/     # applied to every backend, in order
-  postgres/   # Postgres + CockroachDB only
-  sqlite/     # currently empty, kept so its emptiness is deliberate rather than forgotten
+  shared/     # seed data only — no CREATE TABLE
+  postgres/   # all DDL for Postgres + CockroachDB, plus the trigram index
+  sqlite/     # all DDL for SQLite
 ```
 
-`shared/` carries `auth_method`, `user_profile`, `user_credential`, **`deletion_log`** (required by the retention mechanism in `./pii-governance.md`), and the `auth_method` seed row. `postgres/` currently holds exactly one file — the `pg_trgm` trigram index on `user_profile`'s name column. (`pg_trgm` is a PostgreSQL extension that indexes three-character fragments of text so that substring searches like `LIKE '%smith%'` can use an index instead of scanning every row — it is what makes name search fast. CockroachDB has the same capability built in; SQLite has no equivalent, so the index is omitted there rather than faked.). That parity gap is documented and deliberate (`./multi-db-strategy.md`); SQLite is the local/dev/demo backend, not a production peer.
+**Corrected after the cross-track consistency pass (F28).** This section previously put every `CREATE TABLE` in `shared/`, with `postgres/` holding one index file. That was wrong, and wrong in a way the rest of this track's own work had already ruled out: the field-level schema in `multi-db-strategy.md` §5 gives **every** table per-engine DDL — `UUID DEFAULT gen_random_uuid()` vs `TEXT`, `TEXT COLLATE "C"` vs `TEXT COLLATE BINARY`, a regex `CHECK` vs a `GLOB` `CHECK`, `TIMESTAMPTZ` vs `TEXT`, `BYTEA` vs `BLOB`, `BOOLEAN` vs `INTEGER`. A single shared `CREATE TABLE` series cannot express that. SQLite's type affinity would quietly swallow the differing *type names*, which is what made the original claim look survivable, but it does nothing for collation clauses or CHECK syntax — those are hard syntax differences, not affinity.
+
+The document already carried the right answer as a hypothetical fallback ("per-backend `CREATE TABLE` files and `shared/` reduced to seed data") and left it contingent on an open item marked "under review in story S1". **S1 closed, the review resolved it in favour of the fallback, and this document was not updated** — so a document marked "final" was carrying a provisional default that its own dependency had already overruled. That is the failure, and it is worse than the layout error: the fallback was correct, written down, and left unpromoted.
+
+So:
+
+- **`shared/`** carries the `auth_method` seed row and nothing else. No `CREATE TABLE`.
+- **`postgres/`** carries the full DDL for `auth_method`, `user_profile`, `user_credential` and `deletion_log` in Postgres/CockroachDB types, plus the `pg_trgm` trigram expression index on `LOWER(name)`.
+- **`sqlite/`** carries the same four tables in SQLite types and collations, and no trigram index — there is no SQLite equivalent and it is omitted rather than faked.
+
+**Nothing in §3–§6 changes, and neither does 04's design**, exactly as the earlier text promised: the two-invocation mechanism, the separate version tables, R1–R5 and the seed-data rule are untouched. R3's worked example still holds and in fact reads better now — a service can have `shared/` current with the `pg_trgm` index unapplied, which is why fail-closed must check both version tables. (`pg_trgm` is a PostgreSQL extension that indexes three-character fragments of text so that substring searches like `LIKE '%smith%'` can use an index instead of scanning every row — it is what makes name search fast. CockroachDB has the same capability built in; SQLite has no equivalent, so the index is omitted there rather than faked.). That parity gap is documented and deliberate (`./multi-db-strategy.md`); SQLite is the local/dev/demo backend, not a production peer.
 
 **Mechanism 04 needs:** goose applies one directory per invocation, so a migration run is **two invocations** — `shared/` then the backend directory — and each needs its own version table (`goose -table goose_db_version_shared`, then `-table goose_db_version_<driver>`). One shared table across two directories would interleave version numbers from independent sequences and corrupt the history. Both invocations must succeed for the run to count as successful.
 
-**One open item, flagged rather than buried:** whether a single `shared/` DDL series survives all three backends depends on type names (`UUID`, `BOOLEAN`, `TIMESTAMPTZ`) passing through SQLite's type-affinity rules without surprises — SQLite does not enforce column types the way PostgreSQL does: it assigns each column a loose "type affinity" — a preference for how to store values — and falls back to NUMERIC affinity for any type name it does not recognise, `UUID` included, which is benign for text UUIDs but is exactly the kind of thing that is benign until it isn't. This is under review in story S1 — the DAO contract deliverable — in `./PLAN.md`. **If the review forces a split, the fallback is per-backend `CREATE TABLE` files and `shared/` reduced to seed data — the three-directory layout, the two-invocation mechanism, and everything in §3–§6 are unchanged.** 04 can build against this now; the open item cannot invalidate the infra work.
+**That open item is now closed.** It asked whether a single `shared/` DDL series survives all three backends, given that SQLite does not enforce column types the way PostgreSQL does — it assigns each column a loose "type affinity" and falls back to NUMERIC for any type name it does not recognise, `UUID` included. The answer turned out to be no, and for a reason narrower than type affinity: affinity would have absorbed the type names, but collation clauses and CHECK syntax differ outright. Resolved in favour of the per-backend split above. No open items remain in this document.
 
 ## 3. Requirements on 04 — the part I actually need decided
 

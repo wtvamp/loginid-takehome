@@ -54,6 +54,8 @@ Phase 2 (execution): all four hires spawned and live as named teammates in this 
 
 Next: available for cross-track consistency pass; open to review/adjustment as 03's and 05's implementation surfaces any gaps in the S3/S4/S6 hand-offs.
 
+**Phase 4 — consistency-pass fixes (2026-09-12):** the cross-track consistency pass (`../decisions/cross-track-consistency.md`) named this track owner on 15 findings; all fixed in place, none requiring a debate reopened. Headline fixes: F3 (the vendor token had no consistent home — `connector-security.md` §1 now states our `/auth` returns it to the authenticated internal caller, which presents it as a header on the following `/identity` call; connector stays stateless); F13 (signing-key custody contradiction — the issuer is now a second Deployment of the same `api-service` image with its own ServiceAccount, not RBAC alone on a shared mount); F-pag (corrected the pagination reasoning against 05's accepted `Offset int` contract rather than reopening it); F39–F42 (this track's own narrative and decision records undercounted their own evidence — fixed to report the tallies honestly, including where the correction strengthens rather than weakens the pattern's case). Two new backlog stories added (`backlog.md` S12, S13, `from-consistency-pass`) for the genuine new implementation surface F13/F3/F15 created. Bounded two-party sentences sent directly to Naomi (F3), Theo (F13), Renata (F50); Priya confirmed F-pag needs no change to her contract. `PLANNING.md` row set to `plan approved`.
+
 <!-- profile-gen:start slug=marcus-ilori -->
 @profiles/marcus-ilori/marcus-ilori.md
 <!-- profile-gen:end slug=marcus-ilori -->

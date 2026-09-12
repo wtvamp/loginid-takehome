@@ -117,16 +117,19 @@ All seven items below are **already done** — this track closed all six `PLAN.m
 
 ---
 
-## Story 7 — Address cross-track consistency pass findings _(placeholder)_ (LT-13)
+## Story 7 — Address cross-track consistency pass findings (LT-13)
 
-**Description:** Reserved for whatever the Phase 3 cross-track consistency pass (run by team-lead, fable/high, once 02/03/05 close) sends back to this track — a contradiction between this track's docs and another track's, a claim that doesn't hold up against another track's finished decision, or a hand-off gap the pass finds. Empty until the pass reports; created now so the Epic's story list doesn't need a second Jira-authoring pass later.
+**Description:** The Phase 3 cross-track consistency pass (`decisions/cross-track-consistency.md`, F1–F50) named Naomi owner on four findings. F2 — the connector rationale's contract summary told 03 to build a two-method interface (`Authenticate`/`FetchIdentity`) whose token crosses the caller boundary, contradicting 02's rule that the vendor token never leaves the adapter; fixed by making both methods internal to the adapter behind one exported identity-lookup call. F33 — the framing claimed passkey extensibility "without changing the table shape," contradicting the accepted schema (no public-key/credential-id columns exist); fixed by rewording to "without changing the `method` discriminator," matching what `industry-framing.md` actually needs to claim. F9 — `personas-use-cases.md` required partial-match search on both name and phone, contradicting 05's accepted exact-only phone contract; resolved directly with Priya Nandakumar (05), two-party per `planning-approach.md` §2 (`decisions/f9-phone-search-ruling.md`) — phone stays exact-after-E.164-normalization, name partial-match unaffected, UX toggle scoped to name only. F48 — the three `decisions/*.md` files lacked the `CASTING.md` §5 model-and-turns footer; appended to all three. F3 (vendor-token ambiguity between 01's UX and 02's connector design) named Marcus as owner; 01 applied his exact sentence to `ux-notes.md:27` verbatim, unchanged.
 
 **Acceptance criteria:**
-- [ ] Every finding the consistency pass assigns to 01 is either fixed in the relevant document or explicitly recorded as a decision not to change, with reasoning, in a `decisions/` file.
-- [ ] No finding is silently dropped — the pass's report and this track's response to each item are both traceable in `LOG.md` or a `decisions/` file.
+- [x] F2 fixed: `api-connector-design-rationale.md`'s contract summary now states the two-method shape is the adapter's internal interface, with one exported identity-lookup operation, so the vendor token never crosses the adapter boundary — consistent with `../02-ai-security-architecture/connector-security.md`.
+- [x] F33 fixed: `industry-framing.md`:36 and `api-connector-design-rationale.md`:13 both now say "without changing the `method` discriminator" (method-specific columns/side table arrive by migration), not "without changing the table shape."
+- [x] F9 fixed: `personas-use-cases.md`'s search-authorization appendix states phone as exact-match-after-normalization with reasoning and enforcement site named; `ux-notes.md`'s search screen scopes the partial-match toggle to name only; ruling recorded in `decisions/f9-phone-search-ruling.md`.
+- [x] F48 fixed: `decisions/claims-audit.md`, `decisions/password-baseline-debate.md`, and `decisions/rationale-cold-read.md` each end with a model-and-turns footer.
+- [x] F3 fixed: Marcus's exact sentence appended to `ux-notes.md:27`, stating the token is held only by the onboarding flow, only for the span between the two calls, never persisted past the signup step, citing `../02-ai-security-architecture/connector-security.md` §1.
 
-**Depends on:** Cross-track consistency pass (root, Phase 3) — Dana Whitfield
-**Model/effort:** sonnet, medium (same hire roster, same rotating-advocate/claims-audit patterns as needed)
+**Depends on:** Cross-track consistency pass (root, Phase 3) — Dana Whitfield; F9 resolved directly with 05 (Priya); F3 resolved with 02 (Marcus) supplying the exact wording.
+**Model/effort:** sonnet, medium (lead-authored fixes; one direct two-party exchange with 05; one verbatim sentence applied from 02)
 **Type:** Story
 **Labels:** `track-01`, `from-consistency-pass`, `no-code-yet`
-**Status:** Open — not yet actionable, no findings received.
+**Status:** Closed — all 5 assigned findings resolved (F2 corrected during the consistency-pass re-run per the addendum in `decisions/rationale-cold-read.md`).

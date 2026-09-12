@@ -20,8 +20,8 @@ strategy — it operationalizes what's already agreed in `planning-approach.md` 
 | S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
 | S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
 | S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
-| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: TTL, storage, refresh, never-persist-in-plaintext) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
-| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
 | S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
 
 ## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
@@ -55,7 +55,7 @@ reviewer, a different function — allowed per variance rule 2).
 ## 3. Debate plan
 
 - **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
-  ceremony) / Callum (pessimist: two binaries, because a shared-everything binary is how a
+  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
   card-issuing platform he worked on ended up with the connector's outbound vendor calls
   taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
   herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
@@ -63,9 +63,14 @@ reviewer, a different function — allowed per variance rule 2).
   Decision recorded in `decisions/go-layout-debate.md`.
 - **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
   errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
-  generated mocks). Seat rotates Oren → Callum → Marisol → Ines per decision so no one hire
+  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
   becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
   S2–S4.
+
+  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+  this section simply hadn't been updated to match. Fixed above; no roster change.)*
 - **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
   This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
   the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
@@ -88,6 +93,13 @@ prose form — implementable now, refined if 02's deferred receiver-shaped versi
 anything.
 
 **Service boundaries (written into root `PLANNING.md` alongside this plan):**
+
+*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+Service boundaries section is the current, authoritative version — it has since gained
+`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+connector's own audience/client-credential variables (consistency-pass F15). Consult
+`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
 
 - **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
   token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different

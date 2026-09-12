@@ -178,3 +178,129 @@ Terms used without definition whose meaning changes what the receiver must do. `
 
 ---
 Model: fable (consistency-pass, fresh context). Turns consumed: 1 pass.
+
+---
+
+# Re-run — 2026-09-12, after the five leads' fixes
+
+Scope per team-lead: seams 1/4, 3, 5, 7, 9, 10, 11 and the mechanical checks, read fresh from the current files (line numbers below are from the fixed documents). Seams 2, 6, 8, 12 and the vocabulary sweep were not reopened except where a fix touched them. Classification per seam is again by the most severe finding. Regressions — contradictions introduced by a fix — are marked **NEW**.
+
+## Seams 1 and 4 — connector `/auth`/`/identity` and token lifecycle — CONTRADICTION (narrower than before; one regression)
+
+**What changed.** F3 is answered: `connector-security.md:23` now states that our `/auth` "returns the vendor `access_token` to whichever authenticated `connector:identity-lookup`-scoped caller invoked it", that the token "travels as a request header on the subsequent `/identity` call (e.g. `X-Vendor-Access-Token`)", that the connector "still never caches or persists the token", and that "it is the caller's responsibility — not the connector's — to hold the token for the short span between the two calls." `ux-notes.md:27` carries the matching sentence. F5 is closed (`handoff-03-auth.md:10` no longer carries the contradicting parenthetical). Three of the F17 stale-cache sites are fixed (`secrets-delivery.md:16-17`, `observability.md:37`, `context-propagation.md:37`).
+
+**Still open — F17, three sites untouched.** `handoff-04-secrets.md:22` row 7 still says the red/blue is "(in progress)" with caching as the "current direction"; `:21` row 6 still says "If cached at all"; `:55` still says the connector "may [cache], under the conditions in #6". `03/PLAN.md:23` still consumes "token lifecycle: TTL, storage, refresh, never-persist-in-plaintext"; the go-layout diagram (`go-layout-debate.md:45-47`) still reads "TTL/refresh/no-plaintext-persist". Owners: Marcus (three lines in one document), Renata (two one-line edits).
+
+**NEW — F3's resolution contradicts the rest of `connector-security.md` §1–§2 and the attack-tree record.** With the caller holding the token between calls: `:19` "the token is fetched fresh from `/auth` for each `/identity` call" and `:20` "A retried `/identity` call re-fetches via `/auth`" are no longer possible — the connector holds neither the user's password (row 9) nor a token of its own to re-fetch with; `:28` "Token refresh/re-auth on expiry handled by the connector transparently — a caller of our `/identity` endpoint should not need to know or manage vendor token lifecycle" is the opposite of `:23`'s "it is the caller's responsibility … to hold the token"; `:20` "not passed up the call stack beyond the vendor-call function" cannot hold for a token the `/auth` handler serializes into an HTTP response. The attack-tree row 3 (`:81`) still justifies the accepted replay risk by "fetch-per-call bounds the exposure window to one request's execution scope"; the window now spans the caller's hold, which `ux-notes.md:27` acknowledges and the record does not. Owner: Marcus. Smallest fix, one document: rewrite `:19-20` and `:28` so the connector's statelessness is stated as "uses the presented token once and discards it; re-auth is the caller's `/auth` call, not the connector's", and add one sentence to row 3 naming the caller's hold as part of the accepted window.
+
+**NEW — 01's F2 fix and 02's F3 fix are incompatible.** `api-connector-design-rationale.md:40,72` now say `Authenticate`/`FetchIdentity` are "the vendor adapter's internal interface, not the connector's exported operation … The adapter's one exported method is a single identity-lookup call (e.g. `LookupIdentity(username, password, phone, name) → PII`)" and "the calling code … never sees, holds, or passes a token between two calls of its own." Under 02's resolution the connector's `/auth` handler must return a token and its `/identity` handler must accept one, so the adapter must expose the two steps separately and the caller (`api-service`) does hold the token. A single `LookupIdentity(username, password, phone, name)` also has no way to serve the assignment's two endpoints, whose bodies split those four fields across two calls. Owner: Naomi — 02's resolution is anchored to the assignment's `/auth` contract, so 01 is the document to change: restore the two-method adapter, and state that the token crosses the connector's HTTP boundary to `api-service` (per `connector-security.md:23`) but never to the browser or end user.
+
+**Minor.** `handoff-04-secrets.md:25` row 9 lists the vendor password as used by "`idp-connector`, transient" — it now also transits `api-service` on its way to the connector's `/auth`; add `api-service` to the row so the never-log obligation is visibly on both binaries.
+
+## Seam 3 — Config surface and secrets — GAP (was CONTRADICTION)
+
+**What changed.** F12 fixed (`handoff-04-secrets.md:3` is v2; 04's five references agree). F13 fixed at its source and downstream: `handoff-04-secrets.md:8` and row 2 (`:17`) define the issuer as "a second Deployment of the same `api-service` image … with its own ServiceAccount that alone mounts the signing-key Secret"; `containerization-design.md:39,68-108` adds `api-service-issuer` with `APP_MODE: issuer` and removes the mount from `api-service`; `secrets-delivery.md:12,24` state why RBAC alone could not do it. F14 fixed: `local-dev-loop.md:14-48` uses compose file-based `secrets:` from an untracked `.dev-secrets/`, no literal secret values remain. F15 fixed: inventory row 10 (`handoff-04-secrets.md:26`); `PLANNING.md:46` adds `CONNECTOR_JWT_AUDIENCE`, `CONNECTOR_CLIENT_ID`/`CONNECTOR_CLIENT_SECRET`. `DB_DSN_FILE` precedence and the issuer/audience literals still agree everywhere.
+
+**Still open — leftover of F13.** `handoff-03-auth.md:20` (v3) still says the signing key "lives with the token-issuing function, which is a mode of `api-service` (not a separate binary — see `handoff-04-secrets.md` Assumption 2), scoped by RBAC so the verification code path and the issuing code path don't share Secret access even though they're the same binary" — the RBAC-alone claim F13 rejected, now contradicting the Assumption 2 it cites. Owner: Marcus; one sentence.
+
+**NEW — `APP_MODE` is required by three documents and defined by none.** `handoff-04-secrets.md:8` calls it "an environment variable 03 adds to the config surface"; `containerization-design.md:95,108` uses it and says it "is 03's addition to the config surface"; `PLANNING.md:46` Service boundaries (03's) does not list it, and no 03 document mentions it (grep: zero hits). The config surface's own rule is "environment variables only … No flags", so the variable must appear there. Owner: Renata; one entry.
+
+**NEW — the issuer Deployment has no Service.** `containerization-design.md:61-66` defines a `Service` for `api-service` only; `api-service-issuer` (`:68-105`) has none, yet callers must reach its token endpoint and `api-service` must reach its JWKS at `AUTH_JWT_ISSUER = https://auth.loginid-takehome.internal` (`PLANNING.md:46`). Owner: Theo; one manifest stanza.
+
+**Minor.** `PLANNING.md:46` lists `CONNECTOR_CLIENT_SECRET` and `IDP_ABC_CLIENT_SECRET` as environment variables while inventory rows 5 and 10 (`handoff-04-secrets.md:20,26`) say "file mount"; unlike `DB_DSN`, no `_FILE` variant is named. Either the config surface names `_FILE` variants or the rows accept env delivery. Owners: Renata/Marcus. `PLANNING.md:46` and `03/CLAUDE.md:36` still cite `handoff-03-auth.md` "v2"; v3 added four new requirements on 03 (response masking, empty-body rejection, opaque cursor, in-handler `authorize()` placement — `handoff-03-auth.md:33-39,43`) that 03 has not yet acknowledged accepting.
+
+## Seam 5 — DAO contract — CONTRADICTION (one regression; two carry-overs)
+
+**What changed.** F21 closed by `multi-db-strategy.md` §3c (`:251-286`): `DeleteExpired(ctx, class, olderThan, maxRows) (SweepResult, error)` and `DeleteProfile(ctx, id, externalRef) error` on the composite (`:104-106`), one transaction per batch, `deletion_log` written in the same transaction, reason asserted by the method "not a parameter" (`:280-282`), `SweepResult.OldestSurvivingAt` meaningful only when `Drained` (`:268-270`); 03's S11 (`03/backlog.md:185-197`) and 04's `observability.md:39` consume it consistently. F-pag closed: `handoff-03-auth.md:43` and `api-auth-design.md:59` now say "opaque cursor at the API boundary … may encode the DAO's offset" with the enumeration reasoning corrected; 05's `Offset int` unchanged. F9 closed: `01/decisions/f9-phone-search-ruling.md`, `personas-use-cases.md:41`, `ux-notes.md:11` all say phone is exact after E.164 normalization with the B-tree index as site. F19 closed: `context-propagation.md:35` moves the detach into the handler; the contract's "cancellation is honoured" (`:233`) stands. F7 closed: `error-semantics.md:40` (401 / 403 identical body). F23 closed: `PLANNING.md:47-48`. Sentinel set still byte-identical.
+
+**NEW — `pii-governance.md:65` mis-states the addendum it points to.** It gives `DeleteExpired(ctx, class, olderThan) (SweepResult, error)` — missing the required `maxRows` — and `DeleteProfile(ctx, id, reason, externalRef)` with `reason` as a parameter, which `multi-db-strategy.md:280-282` explicitly rules out ("`reason` set internally … it is not a parameter … a deliberate narrowing from the first draft"). The policy document now describes the first draft the contract rejected. Owner: Priya; one sentence.
+
+**Carry-over, still open — F20.** `multi-db-strategy.md:9-13` still says `Update` is "implemented as a portable upsert", phone is "exact/prefix", pagination is bare "limit/offset" and there is one sentinel; all retracted at `:219-227` and `:323-`. No banner was added. Owner: Priya.
+
+**Carry-over, still open — F22.** `multi-db-strategy.md:227` still says resolving an `/identity` payload "is the connector's problem … The connector decides identity and then calls `Create` or `Update`", while `go-layout-debate.md:78-80` says the connector "has no DB access, by design". Owner: Priya; "the connector's caller (`api-service`)".
+
+**Minor.** Class naming: the contract's `RetentionClass` is `"idp_cache_orphan"` (`:258`); `observability.md:37` labels the same class `orphan`. Pick one.
+
+## Seam 7 — Migrations — AGREE
+
+**What changed.** F28 closed: `migration-approach.md:17-38` makes `shared/` "seed data only — no CREATE TABLE", `postgres/` and `sqlite/` carry all DDL, the correction is visible in place, and "No open items remain in this document" (`:38`). R1–R5 unchanged and still matched by `containerization-design.md:116-120` and `ci-pipeline.md`; the two-invocation mechanism and R3's worked example still hold. The goose `version_id` item remains presented as unverified (`:50`) — left open, as instructed. F27 fixed: `ci-pipeline.md:9` no longer claims `-race` catches R2. F26 fixed: `local-dev-loop.md:56`. Nothing provisional remains; no regression found.
+
+## Seam 9 — Retention and deletion — GAP (narrower than before; one regression)
+
+**What changed.** The deletion-gap ruling was adopted: never-log items 10 (driver `DETAIL`/`Key (...)=(...)` text, site = 03's translation layer) and 11 (username) added at `handoff-04-secrets.md:50-51`; `error-semantics.md:42` names the translation layer as the site for item 10; `observability.md:41-43` replaces the mutual disclaimer with "the log sink's own retention policy … configured to 05's audit-log retention row"; `04/backlog.md:104-111` Story 6 (LT-20) has real acceptance criteria; `observability.md:37` uses 05's class names; `observability.md:39` consumes `Drained` correctly. Windows 24 months / 30 days / 7 days and the alert rule are unchanged and still agree.
+
+**NEW — 05 added a retention row for the wrong artifact, and 04 points at a row that does not exist.** `pii-governance.md:35` adds a row for "`deletion_log` (the audit trail itself)" — the database table — with clock `deleted_at` and disposal "Hard delete of expired entries". `observability.md:43` and LT-20 configure the log sink "to 05's audit-log retention row" — meaning the *log stream* of `sub`/scope/record-id/timestamp, which has no row in 05's table. Two different artifacts, one word. Furthermore the `deletion_log` table row has no mechanism: `RetentionClass` (`multi-db-strategy.md:258`) has no value for it, so `DeleteExpired` cannot sweep it, and nothing else in the contract deletes from that table. Owner: Priya — add the audit-stream row (window proposed, basis unknown, mechanism = 04's sink retention) and either add a `deletion_log` class to `DeleteExpired` or mark the table's window "no mechanism yet"; Theo then cites the right row.
+
+**Minor.** `observability.md:23-27` still says "Hand-off's nine items" and maps items 1–9 only; items 10 and 11 are unmapped in 04's operationalization, and the lint list at `:10` still lacks `username`. Owner: Theo.
+
+## Seam 10 — Narrative claims — AGREE
+
+F39 fixed (`ai-workflow-narrative.md:36`: 2 deleted, 1 new variant closed, 1 tightened, 1 null — matching `connector-token-lifecycle-redblue.md:46-48` and `ai-workflow-claim-debate.md:20,29`). F40 fixed and consistent across both documents (`ai-workflow-narrative.md:39`, `second-review-security-docs.md:43`: 11 items, 10 defects plus 1 completeness note). F41 fixed (`:40` "2 hits — one review, two findings"). F42 fixed (the stray "wait" is gone). The corrections are marked in place rather than silently applied. No regression.
+
+## Seam 11 — Root files — AGREE (trivia only)
+
+Root `CLAUDE.md:69` Status is current (Phases 0–3 complete, Phase 4 under way). `03/CLAUDE.md:36` and `04/CLAUDE.md:37` are current. All five `PLANNING.md` track rows read "plan approved" (`:11-15`). `CASTING.md:141-142` reflect the S8 reassignment. `03/PLAN.md:70-72` annotates the Callum→Nolan rename. Footers: **17 of 17** decision files (including the new `f9-phone-search-ruling.md`) carry model and turns. Trivia: `03/CLAUDE.md:36`, `PLANNING.md:46` and `03/backlog.md:101` still cite `handoff-03-auth.md` v2 (now v3 — see seam 3 on what v3 added).
+
+## Mechanical checks (re-run)
+
+- `profile-gen:start` markers: **6**. Pass.
+- Code artifacts (`*.go`, `*.sql`, `go.mod`, `Dockerfile`): **none**. Pass.
+- `CASTING.md` §8: **18** rows, **18** `done`. Pass.
+- Decision footers: **17/17**. Pass (was 11/14).
+- `.claude/agents/`: 18, all with `model:`. Pass.
+- Stray drafting artifacts (" — wait, "): none. `vendor_token_cache`: only as a marked correction. Pass.
+- Working tree: 38 modified files and one new decision file since the pass's commit `3459a6e`; the seven fixed backlogs were not reviewed beyond 03's S11 and 04's Story 6.
+
+## Seams not reopened — carry-overs still open, listed for completeness only
+
+F25 (conformance suite) is now in `03/PLAN.md:24` and `03/backlog.md:78` — closed incidentally. F33/F34 fixed incidentally (`industry-framing.md:36`, `threat-model.md:12`). Still open from seam 12: F51 (phone E.164 normalization has no named enforcement site — `multi-db-strategy.md:45,385`, no §6 row) and F52 partly (F52's sites were added in `handoff-03-auth.md:43-46` — closed). From seam 6: F31 (stale research-doc text) untouched.
+
+## Verdict
+
+Closer, not there. Of the fourteen sections, seams 7, 10 and 11 are now clean, and every one of the six gating findings named in the original verdict has been acted on. But the fixes introduced four contradictions of their own, and they cluster on the one design that matters most: 02's resolution of the vendor-token flow (F3) is contradicted by the unrevised remainder of `connector-security.md` §1–§2 and its attack-tree row 3, and is incompatible with 01's simultaneous F2 fix (a single `LookupIdentity` that never surfaces a token); the F21 addendum is mis-stated by the policy document that depends on it; and the deletion-gap ruling landed as a retention row for the `deletion_log` table while 04 built against an audit-stream row that does not exist. None reopens a debate; each is one document and one to three sentences (owners: Marcus for `connector-security.md` and `handoff-03-auth.md:20`, Naomi for `api-connector-design-rationale.md:40,72`, Priya for `pii-governance.md:35,65`, Renata for `APP_MODE` in `PLANNING.md`, Theo for the issuer Service). With those applied, plus the F17 leftovers and the F20/F22 carry-overs, the submission is internally consistent enough to declare planning done; a third pass is needed only on seams 1/4, 3, 5 and 9, and can be a diff-read rather than a fresh read.
+
+---
+Model: fable (consistency-pass re-run, same fresh-context session). Turns consumed: 1 re-run pass.
+
+---
+
+# Third pass — 2026-09-12, after the re-run fixes
+
+Scope per team-lead: diff-read of seams 1/4, 3, 5, 9 against the current files, plus the new seam 13 (restatements) from `PLAN.md:143`, applying its scope rule — flag restatements that assert current truth; do not flag decision records quoting prior state; superseded copies removed under a banner are correct. Line numbers are from the files as they stand now.
+
+## Seams 1 and 4 — AGREE
+
+`connector-security.md` §1 (`:19-23`) and §2 (`:27-28`) now describe one model throughout: the caller (`api-service`) calls our `/auth`, holds the vendor token for the span between calls, presents it as a header on our `/identity`; the connector uses a presented token once, never caches, never re-fetches or retries on its own initiative; re-auth is the caller's decision. Attack-tree row 3 (`:81`) re-justifies the accepted replay risk on the two-party no-persist discipline rather than the abandoned one-function window. `api-connector-design-rationale.md:40,72` now say `Authenticate`/`FetchIdentity` "map one-to-one onto the connector's own exported `/auth` and `/identity` endpoints" and that the onboarding flow, via `api-service`, "does hold the token briefly between the two calls — that is the design" — the re-run's regression is gone. `ux-notes.md:27`, `handoff-04-secrets.md` rows 6 and 7 (`:21-22`) and "What 04 does not decide" (`:55`) restate the same model. `context-propagation.md:37` and `secrets-delivery.md:16-17` are clean. No regression.
+
+## Seam 3 — AGREE
+
+`handoff-03-auth.md:20` now says the signing key "never touches the verifying `api-service` Deployment … runs as its **own Deployment** (`APP_MODE=issuer`, its own ServiceAccount) … the separation has to be a second Deployment, not RBAC alone" — matching `handoff-04-secrets.md:8,17`. `PLANNING.md:46` lists `APP_MODE` = `verifier` (default) | `issuer` alongside `CONNECTOR_JWT_AUDIENCE` and `CONNECTOR_CLIENT_ID`/`_SECRET`. `containerization-design.md:68-115` adds the `api-service-issuer` Deployment, its `Service` (`:109-111`) and a reachability paragraph (`:115`: the verifier fetches JWKS from `https://api-service-issuer.loginid-poc.svc/jwks`). `local-dev-loop.md` remains file-based. Version labels in 04's five references still read v2 and the hand-off is v2. No regression.
+
+## Seam 5 — AGREE
+
+`multi-db-strategy.md:7-11` replaces the stale preamble listing with a banner that names each retracted claim and points to §1–§5 as authoritative — a superseded copy removed under a banner, which seam 13 defines as correct. `:225` now attributes identity resolution to `api-service` "which is the party that both decides identity and holds a DAO handle", citing the go-layout diagram; F22 closed. `pii-governance.md:76-77` restates §3c exactly (`DeleteExpired(ctx, class, olderThan, maxRows) (SweepResult, error)`; `DeleteProfile(ctx, id, externalRef)` with `reason` "not a parameter"). `03/PLAN.md:23` and `go-layout-debate.md:45-48` no longer describe a token cache. Sentinel set unchanged and still byte-identical in `error-semantics.md:33`. No regression.
+
+## Seam 9 — AGREE
+
+`pii-governance.md:35` adds the "Audit-log stream" row (clock: entry timestamp; window proposed, basis unknown; disposal "Expiry at the sink"); `:37-45` names 04's log-sink policy as its enforcement site and states, with two reasons, why the `deletion_log` table is deliberately not a retention row (PII-free, so no storage-limitation clock forces one; no `RetentionClass` sweeps it — a future window is a contract change, owner 05 then 03). `observability.md:41-45` cites that row by name, states the disposal identically, and separates the stream from the table in its own paragraph. `04/backlog.md:110` (LT-20) matches. Never-log items 10–11 and `error-semantics.md:42` unchanged and consistent. No regression.
+
+## Seam 13 — Restatements — CONTRADICTION (five stale restatements, none load-bearing)
+
+Method: for each authoritative definition, grep every other document and compare. Checked: `dao.New` and the `Repository` composite; `Search`/`ProfileQuery` and the `Limit`/`Offset` bounds; `DeleteExpired`/`DeleteProfile`; the seven sentinels; `user_credential` shape (`secret_state`); every config variable in `PLANNING.md:46`; the issuer/audience literals; hand-off version labels; the four retention rows and class names. Matches: `dao.New` (6 restatements, all identical); `Search` signature (`search-query-shape.md:23` identical); `DeleteExpired`/`DeleteProfile` (`pii-governance.md:76-77`, `05/backlog.md:127`, `03/backlog.md:191-198` all match §3c); the sentinel set (`error-semantics.md:33`; `:20`'s old names sit under a "Superseded" heading — history, not flagged); `secret_state` (two backlogs, consistent); the literals `https://auth.loginid-takehome.internal`, `loginid-api-service`, `idp-connector-service`, `connector:identity-lookup` (identical in every document); retention numbers 24 months / 30 days / 7 days (only `pii-governance.md` and the `PLANNING.md` 05 row, consistent); `handoff-04-secrets.md` v2 (all five 04 references correct); `03/PLAN.md:97-102` now carries a Phase 1 snapshot banner deferring to `PLANNING.md` — correct under the rule. Not flagged: `PLAN.md:133-134` name "v2"/"v1" inside the checklist as written before the pass — a record of what was to be checked, i.e. prior state; `search-authz-scoping.md:20` "cursor-based (not offset)" is the proposal as debated — history.
+
+Stale restatements asserting current truth:
+
+1. **`03/PLAN.md:23`** — S4 consumes "token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens" — the connector-fetches model that `connector-security.md:19-23` superseded under F3 (the connector no longer fetches; the caller presents). Written during the F17 fix, so it asserts current truth. Owner: Renata.
+2. **`go-layout-debate.md:45-48`** — the diagram's connector box now reads "no-cache-by-default, fetch-per-call" (same superseded model), and its `internal/config` list (`:63-66`) omits `CONNECTOR_JWT_AUDIENCE`, `CONNECTOR_CLIENT_ID`/`_SECRET` and `APP_MODE`. The `:107` note covers only `internal/app`. Either extend that note to say the diagram predates F3/F13/F15, or redraw. Owner: Renata.
+3. **`PLANNING.md:47`** — the composite is restated as `Profiles()`, `Credentials()`, `Methods()`, `CreateProfileWithCredential`, `Close()`; the contract's composite (`multi-db-strategy.md:91-106`) also carries `DeleteExpired` and `DeleteProfile` (§3c). `03/backlog.md:28` restates the same incomplete set. Owner: Renata.
+4. **`PLANNING.md:46`** cites "`handoff-03-auth.md` v2" and **`03/CLAUDE.md:36`** says "`handoff-03-auth.md` v2 accepted"; the hand-off is v3 and `03/backlog.md:101,111,131` already say "v3, accepted". Owner: Renata.
+5. **`observability.md:37`** labels the orphan class `orphan` "matching 05's actual retention classes"; the contract's `RetentionClass` value is `"idp_cache_orphan"` (`multi-db-strategy.md:256`). A metric label may legitimately differ from a Go constant, but the sentence claims a match that is not literal. Owner: Theo — one word, or drop "matching".
+
+All five are one-line edits by the restating document's author; none changes what any track builds.
+
+## Verdict
+
+**The submission is now internally consistent enough to declare planning done.** All four re-run regressions and every listed leftover are fixed, and the fixes introduced no new regression: the connector's token model is stated identically in 01, 02 and 04; the issuer topology is one design across 02, 03's config surface and 04's manifests; the DAO contract's preamble no longer competes with the contract; and the audit-stream/`deletion_log` distinction is drawn the same way by 05 and 04. Seam 13 found five stale restatements, all cosmetic, four of them in 03's documents — they can be cleaned during Phase 4 transcription without another consistency pass. Carry-overs deliberately left open and correctly labelled as such: goose `version_id` uniqueness (unverified), the `deletion_log` table's retention window (no mechanism, flagged as a contract change), and F51 (phone E.164 normalization site, seam 12 — not reopened here).
+
+---
+Model: fable (consistency-pass third pass, same fresh-context session). Turns consumed: 1 diff-read pass.

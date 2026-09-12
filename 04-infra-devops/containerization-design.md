@@ -36,7 +36,7 @@ spec:
     metadata:
       labels: {app: api-service}
     spec:
-      serviceAccountName: api-service       # scoped per handoff-04-secrets.md row #2 — this SA's Role can `get` the JWT signing key only from the issuing code path, not the verification path
+      serviceAccountName: api-service       # this SA mounts nothing from the signing-key row — see the issuer Deployment below
       securityContext:
         runAsNonRoot: true
         readOnlyRootFilesystem: true
@@ -52,6 +52,49 @@ spec:
             - {name: DB_DSN_FILE, value: /secrets/db/dsn}
           volumeMounts:
             - {name: db-dsn, mountPath: /secrets/db, readOnly: true}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
+      volumes:
+        - name: db-dsn
+          secret: {secretName: api-service-db-dsn}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: api-service}
+spec:
+  selector: {app: api-service}
+  ports: [{port: 443, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service-issuer
+  namespace: loginid-poc
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: api-service-issuer}
+  template:
+    metadata:
+      labels: {app: api-service-issuer}
+    spec:
+      serviceAccountName: api-service-issuer   # the ONLY SA that mounts the JWT signing key, per handoff-04-secrets.md row #2 / F13's fix
+      securityContext:
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+      containers:
+        - name: api-service
+          image: registry.internal/loginid-poc/api-service:<tag>   # same image as api-service — mode selected below, not a separate build
+          resources:
+            requests: {cpu: "100m", memory: "128Mi"}
+            limits: {cpu: "500m", memory: "256Mi"}
+          envFrom:
+            - configMapRef: {name: api-service-config}
+          env:
+            - {name: DB_DSN_FILE, value: /secrets/db/dsn}
+            - {name: APP_MODE, value: issuer}   # 02's resolution to F13: same image as the verifying Deployment, a second Deployment/SA, selected by this env var — not a third binary, not a flag (the config surface permits none)
+          volumeMounts:
+            - {name: db-dsn, mountPath: /secrets/db, readOnly: true}
             - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
@@ -63,11 +106,15 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata: {name: api-service}
+metadata: {name: api-service-issuer}
 spec:
-  selector: {app: api-service}
+  selector: {app: api-service-issuer}
   ports: [{port: 443, targetPort: 8080}]
 ```
+
+**Reachability:** the verifying `api-service` Deployment fetches the JWKS from `api-service-issuer`'s in-cluster `Service` (`https://api-service-issuer.loginid-poc.svc/jwks`) at startup and on rotation, per row #3's "fetched from the issuer" option — no config variable or NetworkPolicy rule exists yet for this path, both are 04's to add once 03 wires the JWKS fetch client (flagged in the vocabulary sweep, receivers Theo/Renata). Nothing blocks this by default: the `NetworkPolicy` in §5 above is a default-deny scoped to `idp-connector`'s ingress only, so egress from `api-service` (and from `idp-connector`, if it ever needs a token from the issuer directly) to `api-service-issuer`'s `Service` is unrestricted namespace-default traffic, not something this design has to open a hole for.
+
+**Why two Deployments of one image, not RBAC on one:** a `Role` restricting `get` on the signing-key `Secret` does nothing once that `Secret` is already volume-mounted into a container — every replica of that Deployment can read the file regardless of who's allowed to `kubectl get` it. The only way to keep the verification code path (every `api-service` replica) from being able to read the private key is to never mount it there at all. `APP_MODE=issuer` on the second Deployment is 03's addition to the config surface (env-var only, no flags, per `PLANNING.md`); the same binary handles both modes, wired by that variable, not two separate images. This was F13 in the consistency pass — the earlier version of this manifest mounted the key into `api-service` directly, which the RBAC comment here used to (incorrectly) imply was sufficient.
 
 `idp-connector`'s manifest is the same shape with its own two `Secret` volume mounts (per-vendor client credentials, one `Secret` per vendor per handoff row #5), its own `resources` block (`idp-connector` is I/O-bound waiting on vendor calls, not CPU-heavy — requests `{cpu: 50m, memory: 64Mi}`, limits `{cpu: 250m, memory: 128Mi}`), and no inbound `Service` — it is called by `api-service` or invoked as a job, never exposed to anything outside the cluster. Exact invocation shape (long-running service vs. on-demand job) is undecided; either way the container/image design above doesn't change.
 

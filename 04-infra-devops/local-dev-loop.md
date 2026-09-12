@@ -11,43 +11,53 @@ services:
     build: {context: ., dockerfile: cmd/api-service/Dockerfile}
     environment:
       DB_DRIVER: ${DB_DRIVER:-sqlite}
-      DB_DSN: ${DB_DSN:-file:/data/dev.db}
+      DB_DSN_FILE: /run/secrets/db_dsn
       HTTP_ADDR: ":8080"
     ports: ["8080:8080"]
     volumes: ["sqlite-data:/data"]
+    secrets: [db_dsn]
     profiles: ["sqlite"]
 
   api-service-pg:
     extends: {service: api-service}
     environment:
       DB_DRIVER: postgres
-      DB_DSN: postgres://dev:dev@postgres:5432/loginid_dev?sslmode=disable
     depends_on: [postgres]
     profiles: ["postgres"]
 
   postgres:
     image: postgres:16-alpine
-    environment: {POSTGRES_USER: dev, POSTGRES_PASSWORD: dev, POSTGRES_DB: loginid_dev}
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     ports: ["5432:5432"]
+    secrets: [postgres_password]
     profiles: ["postgres"]
 
   idp-connector:
     build: {context: ., dockerfile: cmd/idp-connector/Dockerfile}
     environment:
       IDP_ABC_BASE_URL: ${IDP_ABC_BASE_URL:-http://mock-idp:9090}
-      IDP_ABC_CLIENT_ID: dev-client
-      IDP_ABC_CLIENT_SECRET: dev-secret
+    secrets: [idp_abc_client_id, idp_abc_client_secret]
     profiles: ["sqlite", "postgres"]
+
+secrets:
+  db_dsn: {file: ./.dev-secrets/db_dsn}                       # untracked; developer creates once, e.g. "file:/data/dev.db" or a postgres:// DSN
+  postgres_password: {file: ./.dev-secrets/postgres_password}
+  idp_abc_client_id: {file: ./.dev-secrets/idp_abc_client_id}
+  idp_abc_client_secret: {file: ./.dev-secrets/idp_abc_client_secret}
 
 volumes:
   sqlite-data:
 ```
 
-`docker compose --profile sqlite up` for the zero-dependency path (no Postgres container, fastest inner loop); `docker compose --profile postgres up` when a developer needs to exercise the Postgres-specific code path (the `pg_trgm` index, per `../05-data-ops/multi-db-strategy.md`). CockroachDB isn't in the local loop — it's wire-compatible enough with Postgres per 05's strategy doc that the Postgres profile exercises the shared code path; a CockroachDB-specific compose profile would test the same code again, not new code.
+`.dev-secrets/` is `.gitignore`d; a `.dev-secrets/README` (or a `make dev-secrets-init` target) writes the four files with placeholder dev values on first run. This isn't cosmetic — the inventory's rules apply to every environment, including dev: row 5 says vendor client credentials are "never in source or committed config", and row 1's `DB_DSN_FILE` is "Required, not preferred," with no development exemption written anywhere. Compose's file-based `secrets:` mechanism is the local equivalent of the `Secret` volume mounts in `./secrets-delivery.md` — same shape (a file path the process reads), just backed by a bind-mounted file instead of a Kubernetes object.
+
+`docker compose --profile sqlite up` for the zero-dependency path (no Postgres container, fastest inner loop); `docker compose --profile postgres up` when a developer needs to exercise the Postgres-specific code path (the `pg_trgm` index, per `../05-data-ops/multi-db-strategy.md`). CockroachDB is omitted here for loop speed, not because it's redundant — the CockroachDB code path (`withRetry`'s engine-aware retry, `multi-db-strategy.md`) is genuinely different code from the Postgres path, which is exactly why `./ci-pipeline.md` runs a dedicated CockroachDB job; the local loop just doesn't need every backend on every save.
 
 ## Dev credentials are dev credentials
 
-The `dev`/`dev` Postgres password and the hardcoded `dev-client`/`dev-secret` above are local-only, never used outside a developer's own machine, and never the pattern used in `./containerization-design.md` or `./secrets-delivery.md` — those go through the mechanisms 02 specifies. Worth stating explicitly so nobody reads this file as the security design.
+The values developers put in `.dev-secrets/*` are local-only, never used outside a developer's own machine, and never the pattern used in `./containerization-design.md` or `./secrets-delivery.md` — those go through the mechanisms 02 specifies. Worth stating explicitly so nobody reads this file as the security design.
 
 ## Migrations locally
 

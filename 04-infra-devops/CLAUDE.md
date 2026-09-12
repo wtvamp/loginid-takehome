@@ -34,7 +34,7 @@ Record which AI tool/workflow was used to produce this track's design output and
 
 ## Status
 
-No infra work has started. Do not begin until the engineering track's service boundaries are defined enough to containerize and deploy against.
+Plan approved, hires spawned 3/3, five deliverables drafted and reviewed (`containerization-design.md`, `ci-pipeline.md`, `local-dev-loop.md`, `secrets-delivery.md`, `observability.md`), `backlog.md` written (Epic LT-4). All consistency-pass findings owned by this track are fixed, including F12/F13 (the JWT-signing-key issuer now runs as a separate `api-service-issuer` Deployment, never mounted into the verifying `api-service` Deployment). No code or config committed — still design-only per root `CLAUDE.md`.
 
 <!-- profile-gen:start slug=theo-bergman -->
 @profiles/theo-bergman/theo-bergman.md

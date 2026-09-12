@@ -43,8 +43,8 @@ External callers
 │   - router                   │        │   - POST /auth  (client)     │
 │   - auth middleware ─────────┼──┐     │   - POST /identity (client)  │
 │   - handlers (search/get     │  │     │   - token lifecycle          │
-│     user_profile)            │  │     │     (TTL/refresh/no-        │
-│    │                         │  │     │      plaintext-persist,      │
+│     user_profile)            │  │     │     (no-cache-by-default,    │
+│    │                         │  │     │      fetch-per-call,         │
 │    ▼                         │  │     │      per 02 connector-       │
 │  internal/dao                │  │     │      security.md)            │
 │   - Repository (composite):  │  │     │    │                         │

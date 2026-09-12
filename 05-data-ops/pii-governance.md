@@ -32,7 +32,17 @@ This separation is treated as a governance control, not merely a normalization c
 | `user_profile`, `source='direct'` | `updated_at` | **24 months** since last update | *unknown — needs product/legal ruling.* Engineering basis only: long enough that a dormant account surviving a slow re-engagement cycle is not destroyed, short enough to be a defensible answer to "why do you still hold this." No regulation supplies this number | Hard delete | Cascade FK destroys all `user_credential` rows — the account stops existing | unknown — no named legal owner on this POC | Proposed |
 | `user_profile`, `source='idp_cache'` | `updated_at` | **30 days** since last hydration | Engineering: **a cache is not a record.** Re-hydration costs one `/identity` call, so deleting too early costs a vendor round-trip. Vendor data also goes stale — a 14-month-old cached address is a correctness problem before it is a privacy one. We are downstream custodian of another party's collected PII with no independent relationship to the subject, which argues for the shortest window that still functions | Hard delete | Cascade FK; a cached profile should not normally have credentials — if it does, it is no longer merely a cache and product must say which clock wins | unknown | Proposed |
 | `user_profile`, `source='idp_cache'`, **no referencing `user_credential`** (orphaned cache) | **`created_at`**, deliberately not `updated_at` | **7 days** since creation | Engineering: lookup residue, not an account — someone called `/identity`, we cached the answer, nothing was ever built on it. **The clock is `created_at` because `updated_at` is touched by the read and re-hydration path: an orphan re-read on any schedule would keep resetting its own expiry and never die.** Closing that loop is the entire reason this row exists | Hard delete | Nothing — by definition it has no children | unknown | Proposed |
+| **Audit-log stream** (the emitted log entries evidencing deletions, as read by 04's sink) | the entry's own timestamp | **Proposed, pending ruling — see basis** | **unknown — needs a legal ruling.** The audit stream evidences that a deletion happened, which is useful for exactly as long as someone may ask. That period is a question about limitation windows and regulator expectations, not an engineering one, and no engineering rationale substitutes for it | Expiry at the sink | Nothing | unknown — needs product/legal ruling | **Proposed** |
 | `user_credential` | — | **No independent window** | Wholly governed by its profile's window via the cascade FK. A credential cannot outlive its profile; a credential row with no profile cannot exist. A second clock could only ever disagree with the first, with no resolution rule | n/a | n/a | **Ruled** |
+
+**The audit-stream row is enforced by 04, not by this schema.** Its enforcement site is 04's log-sink retention policy (`../04-infra-devops/observability.md`), which is what the consistency pass ruled and what `LT-20` cites. Nothing in the DAO reaches it: the sweep methods in `multi-db-strategy.md` §3c operate on `RetentionClass` values, all three of which are `user_profile` classes.
+
+**The `deletion_log` table itself has no sweeper, and that is a named gap rather than an omission.** It is not in the table above because it would be a row nobody can act on. Two facts make it awkward in a way worth stating rather than tidying away:
+
+1. **Nothing forces a window on it.** The table is PII-free by construction (`multi-db-strategy.md` §6.11), so it is *not* subject to the storage-limitation clock every other row here answers to. "Keep it forever" is therefore the path of least resistance rather than a decision anyone made — which is precisely why it needs one.
+2. **No method sweeps it.** `DeleteExpired` takes a `RetentionClass`, and there is no class for it. If a window is ruled, implementing it is a **contract change** — either a fourth class or a separate method — not a configuration value someone can set. Flagging that now so the cost is visible at the time of the ruling rather than discovered after it.
+
+Owner of the ruling: unknown, same as the windows above. Owner of the implementation once ruled: 05 (contract) then 03 (code), by the same route as F21.
 
 ### Two consequences that surprise people, stated loudly
 
@@ -56,6 +66,19 @@ Re-hydration moves `updated_at`, so an actively-used cache row can live indefini
 **Why subject deletion reuses the sweep's code path.** A separate "real delete" path used rarely is a path that is broken when you need it.
 
 **Why the `deletion_log` holds no PII.** Otherwise the log is just a second copy of the problem with no clock on it. The retained UUID identifies a row that no longer exists and is not linkable to a person once the profile is gone.
+
+### Where the mechanism lives in the contract
+
+Added after the cross-track consistency pass (F21) found that none of the above was reachable from the DAO interface: the policy was specified here and had no method to be implemented against, and no track owned the gap.
+
+`multi-db-strategy.md` §3c now defines, on the composite:
+
+- **`DeleteExpired(ctx, class, olderThan, maxRows) (SweepResult, error)`** — one retention class per call, using that class's own clock column, cascading to credentials and writing a `deletion_log` row in the same transaction. **Batched: `maxRows` is required (1..10 000) and each batch is its own transaction**, so an interrupted sweep leaves fewer rows deleted rather than a half-written batch. The caller loops until `SweepResult.Drained` is true. It must not be called with a request-scoped context — a sweep cancelled because an inbound request went away is a retention policy silently dependent on request lifetimes.
+- **`DeleteProfile(ctx, id, externalRef)`** for subject requests, on the same code path. **`reason` is not a parameter** — the method asserts `subject_request` internally, as `DeleteExpired` asserts `retention_sweep`. A caller-supplied reason code would let a copy-paste error mislabel an audit row, which destroys the one property the log exists to have: that its reasons are trustworthy.
+
+`SweepResult` carries rows examined, rows deleted, `Drained`, and the age of the oldest surviving row — the health check below.
+
+*(This paragraph previously described the pre-review signatures and was corrected after the consistency-pass re-run. It is the same failure this track has now hit three times: a document left pointing at a dependency that had moved.)*
 
 ### The health check, which is a requirement rather than a suggestion
 

@@ -4,13 +4,11 @@ Owner: 05-data-ops. Implemented by: `03-engineering-delivery`, from the prose co
 
 ## The interface contract (prose, not code)
 
-Three repository interfaces, one per entity, each implemented by two backend packages (below) and never containing SQL themselves — the service layer depends only on these shapes:
-
-- **`ProfileRepository`** — `Get(ctx, id) (*UserProfile, error)`; `Search(ctx, query) (results []UserProfile, total int, error)` where `query` filters by name (partial/fuzzy), phone (exact/prefix), region, country, plus limit/offset for pagination; `Create(ctx, *UserProfile) (*UserProfile, error)`; `Update(ctx, *UserProfile) (*UserProfile, error)` implemented as a portable upsert; `Delete(ctx, id) error`.
-- **`CredentialRepository`** — `GetByUsername(ctx, username) (*UserCredential, error)` as the primary auth lookup path; `ListByUserID(ctx, userID) ([]UserCredential, error)`; `Create`, `Update`, `Delete` mirroring `ProfileRepository`'s shape. Never accepts or returns `UserProfile` fields.
-- **`AuthMethodRepository`** — `Get(ctx, id)`, `GetByName(ctx, name)`, `List(ctx, activeOnly bool)`. Read-heavy; writes to this table are an operational action (adding a supported method), not part of the normal request path.
-
-Domain types implied by the above: `UserProfile` (`ID`, `Name`, `Phone`, `StreetAddress`, `Locality`, `Region`, `PostalCode`, `Country`, `Source` — `"direct"` or `"idp_cache"` — `CreatedAt`, `UpdatedAt`); `UserCredential` (`ID`, `UserID` FK, `Username` unique, `MethodID` FK, `Secret` as bytes/nil, `HashAlgo`, `HashCost`, `CreatedAt`, `UpdatedAt`); `AuthMethod` (`ID`, `Name`, `RequiresSecret` bool, `IsActive` bool). A shared `ErrNotFound` sentinel is returned by every backend implementation for a missing row, so the service layer never has to distinguish `sql.ErrNoRows` from a SQLite-specific miss.
+> **This section's interface listing has been removed, not corrected.** It restated the repository methods, the domain types and the error sentinel, and every one of those restatements had drifted from the authoritative version: `Update` was described as a portable upsert (it never creates — `Upsert` is a separate method), phone search as exact/prefix (exact only, per finding F9 with 01), pagination as bare limit/offset (there are `Limit` 1..100 and `Offset` 0..10 000 ceilings, enforced with `ErrInvalidQuery`), and `ErrNotFound` as the only sentinel (there are seven).
+>
+> **The authoritative definitions are below, in "The Go-shaped contract":** §1 the factory and composite, §2 domain types, §3 the interfaces, §3b–§3c the cross-table operations, §4 error semantics, §5 field-level schema.
+>
+> I first tried to fix this by striking through the wrong claims inline. That was the wrong instinct — a corrected restatement is still a restatement, and it would have drifted again the next time the contract moved. Deleting it removes the failure mode rather than patching this instance of it. Found by this track's own seam-13 sweep and finding F20; the reasoning that follows is unaffected and still stands.
 
 Two concrete implementations satisfy all three interfaces:
 
@@ -97,8 +95,13 @@ type Repository interface {
     Methods()     AuthMethodRepository
 
     // CreateProfileWithCredential writes both rows in ONE transaction.
-    // The only cross-table operation in this contract. See §3b.
+    // See §3b.
     CreateProfileWithCredential(ctx context.Context, p *UserProfile, c *UserCredential) (*UserProfile, *UserCredential, error)
+
+    // Retention and deletion. Both write deletion_log in the SAME transaction
+    // as the delete. See §3c.
+    DeleteExpired(ctx context.Context, class RetentionClass, olderThan time.Time, maxRows int) (SweepResult, error)
+    DeleteProfile(ctx context.Context, id string, externalRef *string) error
 
     Close() error
 }
@@ -215,11 +218,11 @@ The one residual difference, accepted and named: Postgres `lower()` is locale-aw
 
 - `Create` — insert. `ErrAlreadyExists` if the ID is taken.
 - `Update` — update an existing row by ID. **`ErrNotFound` if the row does not exist.** It never creates.
-- `Upsert` — the portable `INSERT ... ON CONFLICT (id) DO UPDATE` form. Exists because the IDP hydration path genuinely does not know whether the row exists, which is a real caller rather than a hypothetical one. Any other caller should use `Create` or `Update`.
+- `Upsert` — the portable `INSERT ... ON CONFLICT (id) DO UPDATE` form. For a caller that **already holds the `id`** and does not know whether the row is still present — re-hydrating a known profile. Any other caller uses `Create` or `Update`. (This bullet previously justified `Upsert` by the IDP hydration path, a justification retracted three paragraphs below and left standing here; caught in the same sweep as F20.)
 
 **`Update` and `Upsert` are FULL REPLACEMENTS, not partial patches.** This is the single most consequential thing in this document and it was missing from the first draft. Every column is written from the struct you pass. **A nil `Phone` sets the stored phone to NULL; it does not leave the existing value alone.** A caller wanting patch semantics must read, modify, and write back. Stated this loudly because both readings are reasonable and the wrong guess silently destroys data.
 
-**`Upsert` conflicts on `id` only, and the caller must already hold that `id`.** It exists for re-hydrating a row already known to exist — not for resolving an unknown one. A cold read caught the circularity in the original justification: the IDP path "does not know whether the row exists" and therefore does not know its `id` either, so `Upsert` could not have served the caller it was justified with. **Resolving an `/identity` payload to an existing profile row is the connector's problem, not the DAO's** — there is deliberately no unique key on `phone` or `name` to match on, because neither is unique in reality. The connector decides identity and then calls `Create` or `Update`.
+**`Upsert` conflicts on `id` only, and the caller must already hold that `id`.** It exists for re-hydrating a row already known to exist — not for resolving an unknown one. A cold read caught the circularity in the original justification: the IDP path "does not know whether the row exists" and therefore does not know its `id` either, so `Upsert` could not have served the caller it was justified with. **Resolving an `/identity` payload to an existing profile row is not the DAO's problem** — there is deliberately no unique key on `phone` or `name` to match on, because neither is unique in reality. It belongs to **`api-service`**, which is the party that both decides identity and holds a DAO handle: 03's layout gives `idp-connector` no database access at all (`../03-engineering-delivery/decisions/go-layout-debate.md`), so the connector fetches the payload and its caller decides what the payload *is* and then calls `Create` or `Update`. An earlier version of this sentence said "the connector" and was wrong about which process can reach the database (finding F22).
 
 **`Delete` on a missing row returns `ErrNotFound`**, in both repositories — not a silent nil. Consistent with `Update`. Callers wanting idempotent delete check `errors.Is(err, ErrNotFound)` and treat it as success.
 
@@ -243,6 +246,43 @@ That orphan is the same failure class as the orphaned IDP cache row in `pii-gove
 - Errors: any of `Credentials().Create`'s errors, plus `ErrInvalidArgument`. On any failure **neither row exists**.
 - This is the *only* cross-table operation in the contract, and it stays that way. A second one is a change to this contract, not an implementation decision.
 
+## 3c. Retention and deletion — added after the consistency pass (F21)
+
+`pii-governance.md` specifies a bulk retention sweep and a subject-deletion request sharing **the same code path**, each writing a `deletion_log` row, and §5 of this contract defines that table. **None of it was reachable from the interface.** There was no sweep method, no log method, `Profiles().Delete` wrote no log row, and §3 forbids 03 from opening a transaction to combine the two — so a policy this track ruled on could not be implemented against the contract this track wrote, and no track owned the gap. Found by the cross-track consistency pass, not by any of this track's four reviewers, because every one of them was scoped to a single document and the contradiction lived between two.
+
+Both methods sit on the **composite**, for the same reason as `CreateProfileWithCredential`: they span `user_profile` and `deletion_log`, and the DAO is the only layer permitted to open a transaction.
+
+```go
+type RetentionClass string // "direct" | "idp_cache" | "idp_cache_orphan"
+
+type SweepResult struct {
+    RowsExamined      int
+    RowsDeleted       int
+    OldestSurvivingAt *time.Time // see "what nil means" below — NOT "nothing was old enough"
+    Drained           bool       // true when this class had no more deletable rows at the batch limit
+}
+```
+
+**What `OldestSurvivingAt` means, stated precisely because three conditions were collapsing into one nil.** It is the clock-column value of **the oldest row remaining in this class after this call** — every remaining row, not only rows that were candidates for deletion. It is `nil` **only when the class has zero rows remaining**, and never for any other reason. In particular it is *not* nil when nothing was old enough to delete: survivors exist, and their oldest age is exactly the number the health check wants (it will simply be younger than the window, which is the healthy case). Without this, "sweep is working and the data is young" and "sweep has stopped and I cannot tell" both returned nil, which would have defeated the field's only purpose.
+
+**`OldestSurvivingAt` is meaningful only when `Drained` is true.** This falls out of batching and neither review raised it on its own: mid-sweep, deletable rows remain by construction, so the oldest survivor is old and the metric would fire spuriously on every batch but the last. 04 alerts on `OldestSurvivingAt` **only from a `Drained` result**; a non-drained batch reports progress, not health.
+
+**`DeleteExpired(ctx, class, olderThan, maxRows)`** — one class per call, never a mixed-class predicate, because a single predicate spanning two clocks is how the wrong window gets applied to the wrong rows.
+
+**Bounded by `maxRows`, and one transaction per batch — not one per sweep.** A class-wide delete with no chunking holds a single transaction over an unbounded row count, which is the failure mode 03 already identified for credential writes in their `context-propagation.md`. `maxRows` is required, must be in `1..10_000`, and returns `ErrInvalidArgument` outside it. The caller loops until `Drained` is true. Each batch is its own transaction, so an interrupted sweep leaves a consistent database with fewer rows deleted — never a half-written batch.
+
+**`DeleteExpired` must not be called with a request-scoped context.** It is a background operation governed by the job's own timeout; a sweep cancelled halfway because an inbound HTTP request went away is a retention policy that silently depends on request lifetimes. Constructing that context is 03's layer, not the DAO's — stated here as a requirement on the caller, with its enforcement site named as 03's sweep-invocation code plus a conformance test asserting an already-cancelled context returns before deleting anything. The clock column is the class's own: `updated_at` for `direct` and `idp_cache`, **`created_at` for `idp_cache_orphan`** — a clock the read path touches would let an orphan reset its own expiry and never die. Each deleted profile cascades to its credentials and writes one `deletion_log` row with reason `retention_sweep`, in the same transaction as the delete.
+
+`SweepResult` returns the three metrics `pii-governance.md` requires, and **`OldestSurvivingAt` is the load-bearing one**: it is the only signal that detects a silently stopped sweep, because rows-deleted cannot distinguish a broken sweep from a legitimately empty one — both report zero. Returning it from the DAO rather than leaving 04 to compute it is deliberate: the DAO is the only layer that can answer it in the same query plan as the sweep.
+
+**`DeleteProfile(ctx, id, externalRef)`** — subject-deletion. Writes the `deletion_log` row in the same transaction, with **`reason` set internally to `subject_request`; it is not a parameter.**
+
+That is a deliberate narrowing from the first draft, which took `reason` as a caller-supplied string. A free string lets a caller write `retention_sweep` onto a subject-deletion row by copy-paste, which silently destroys the one property the audit trail exists to have: that its reason codes are trustworthy. **The reason a row exists is a fact about which method was called, so the method should assert it — not the caller.** `DeleteExpired` writes `retention_sweep` the same way. The two reason codes in `ck_deletion_log_reason` are therefore exhaustive by construction rather than by convention, and a third value is a contract change that adds a method, not a new string a caller may pass.
+
+**This supersedes `Profiles().Delete` for anything governed by retention.** `Profiles().Delete(ctx, id)` remains for ordinary application deletes and still writes **no** log row — deliberate, because a log of every incidental delete is not an audit trail, it is noise with PII-adjacent identifiers in it. If that distinction proves wrong in implementation, flag it rather than making `Delete` log.
+
+**Neither method is a "third cross-table operation" loophole.** These two plus `CreateProfileWithCredential` are the complete set; a fourth is a change to this contract.
+
 ## 3a. Per-method summary — read this row before writing that method
 
 Added after a cold read observed that this document is organized by *artifact* (factory, types, interfaces, errors, schema) while an implementer works by *verb* — so answering "I am about to write `Create`, what do I need?" meant holding five sections open at once. Four of that read's fourteen blocking questions existed only because a method's full story was never assembled in one place. This table closes them by construction; the prose above remains the authority where they disagree.
@@ -263,7 +303,7 @@ Added after a cold read observed that this document is organized by *artifact* (
 | `Methods().Get` / `GetByName` | yes / name | — | — | `ErrNotFound` |
 | `Methods().List` | — | — | — | empty slice when none |
 
-`CreateProfileWithCredential` (§3b) is not in the table above because it spans two rows: IDs DAO-generated for both, `c.UserID` ignored on input and set from the created profile, both timestamps DAO-set, and on failure neither row exists.
+`DeleteExpired` and `DeleteProfile` (§3c) are not in the table above: both are composite-level, both write `deletion_log` in the same transaction as the delete with the reason code asserted by the method rather than the caller, `DeleteExpired` returns counts rather than rows and is batched by a required `maxRows`, and both return `ErrInvalidArgument` on a bad class or batch bound. `CreateProfileWithCredential` (§3b) is likewise not in it because it spans two rows: IDs DAO-generated for both, `c.UserID` ignored on input and set from the created profile, both timestamps DAO-set, and on failure neither row exists.
 
 Every write method above additionally runs inside the retry seam described in §4 when the engine is CockroachDB.
 
@@ -439,7 +479,15 @@ Numbered so there is no ambiguity. Each names **the enforcement site that makes 
 
 This is the condition the whole per-driver ruling rests on (`decisions/multi-db-abstraction.md`). Two implementations behind one interface guarantee both *compile*; nothing guarantees they *behave* alike, and the failure mode produces no error — just different results. Every defect this phase found (the `LIKE` case divergence, the collation ordering divergence, `Country` normalization) is invisible when either implementation is read in isolation, because each is correct on its own terms.
 
-Mechanism is 03's. The requirement is 05's, and at minimum the suite asserts: identical result sets and identical ordering for the same `Search` across backends; `errors.Is` sentinel parity for every error condition in §4; the secret-state rules in §5 and §6.10; and empty-string rejection on every `*string` filter.
+Mechanism is 03's. The requirement is 05's, and at minimum the suite asserts: identical result sets and identical ordering for the same `Search` across backends; `errors.Is` sentinel parity for every error condition in §4; the secret-state rules in §5 and §6.10; empty-string rejection on every `*string` filter; and for the retention methods in §3c —
+
+- a zero-value `RetentionClass` (`""`) returns `ErrInvalidArgument` — a caller-reachable invalid input, unlike `ErrAlreadyExists`, and therefore owed an explicit assertion rather than only prose;
+- `maxRows` outside `1..10_000` returns `ErrInvalidArgument`;
+- `OldestSurvivingAt` is non-nil when rows remain and nothing was old enough to delete, and nil **only** when the class is empty;
+- `Drained` is false while deletable rows remain at the batch limit and true on the final batch;
+- every delete writes exactly one `deletion_log` row in the same transaction, with the reason code the *method* asserts;
+- an already-cancelled context returns before deleting anything;
+- `deletion_log` carries no PII-shaped column (§6.11).
 
 ---
 

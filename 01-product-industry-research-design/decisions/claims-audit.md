@@ -24,3 +24,6 @@ Every quantitative or evaluative claim in the three framing/rationale docs gets 
 ## Outcome
 
 Two unsourced quantitative-flavored claims and two evaluator-intent claims softened in place across `industry-framing.md` and `personas-use-cases.md`; one claim (ROPC status) strengthened to match its actual source. All other claims in the three docs were already properly sourced or correctly hedged as vendor marketing — no further changes needed. Nothing required deep research; S2 (the structured written debate on the password-baseline framing) can now proceed arguing over claims that have been checked.
+
+---
+Model: sonnet (Desmond Okafor, claims audit) / sonnet (Naomi Voss, lead, synthesis and edits applied). Turns consumed: 1 (Desmond's audit, returned in full in one reply) + lead — matches the 1–2-turn budget in `PLAN.md` §1.

@@ -1,10 +1,10 @@
 # Backlog — Track 02: AI Architecture & Security Architecture
 
-Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira key: _pending team-lead transcription_). Format per `../PLAN.md` Phase 4. All eleven stories from `PLAN.md` are listed in dependency order; ten are done (marked below) and shown as-run, not rewritten as if planned in hindsight — an honest backlog shows the work. S11 is the one open story, gated on Warren's implementation go-ahead.
+Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira key: LT-2). Format per `../PLAN.md` Phase 4. All eleven stories from `PLAN.md` are listed in dependency order; ten are done (marked below) and shown as-run, not rewritten as if planned in hindsight — an honest backlog shows the work. S11 is the one open story, gated on Warren's implementation go-ahead.
 
 ---
 
-## S1 — Ratify the orchestration-pattern catalog and add the attack-tree template
+## S1 — Ratify the orchestration-pattern catalog and add the attack-tree template (LT-21)
 
 **Status: done.**
 
@@ -25,7 +25,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S2 — Harness-constraints addendum to `planning-approach.md`
+## S2 — Harness-constraints addendum to `planning-approach.md` (LT-22)
 
 **Status: done.**
 
@@ -45,7 +45,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S3 — Red/blue: connector token lifecycle
+## S3 — Red/blue: connector token lifecycle (LT-23)
 
 **Status: done.**
 
@@ -68,7 +68,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S4 — Adversarial pair: search-API authorization scoping
+## S4 — Adversarial pair: search-API authorization scoping (LT-24)
 
 **Status: done.**
 
@@ -92,7 +92,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S5 — Structured written debate: `ai-workflow-narrative.md`'s core claim
+## S5 — Structured written debate: `ai-workflow-narrative.md`'s core claim (LT-25)
 
 **Status: done.**
 
@@ -113,7 +113,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S6 — Hand-off 02→03: auth scheme, validation point, authorization requirements
+## S6 — Hand-off 02→03: auth scheme, validation point, authorization requirements (LT-26)
 
 **Status: done** (`handoff-03-auth.md`, v2 after S8 revisions).
 
@@ -138,7 +138,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S7 — Hand-off 02→04: secrets inventory and never-log list
+## S7 — Hand-off 02→04: secrets inventory and never-log list (LT-27)
 
 **Status: done** (`handoff-04-secrets.md`, v1).
 
@@ -163,7 +163,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S8 — Independent second review of the security-graded documents
+## S8 — Independent second review of the security-graded documents (LT-28)
 
 **Status: done.**
 
@@ -185,7 +185,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S9 — Revise `ai-workflow-narrative.md` for the org layer
+## S9 — Revise `ai-workflow-narrative.md` for the org layer (LT-29)
 
 **Status: done.**
 
@@ -207,7 +207,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S10 — `threat-model.md` maintenance
+## S10 — `threat-model.md` maintenance (LT-30)
 
 **Status: done — verified already satisfied, no edit required.**
 
@@ -227,7 +227,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ---
 
-## S11 — Post-implementation independent review of 03's auth middleware and connector token code
+## S11 — Post-implementation independent review of 03's auth middleware and connector token code (LT-31)
 
 **Status: open — gated on Warren's implementation go-ahead.**
 
@@ -252,3 +252,47 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 ## Room for pass-driven stories
 
 Any story arising from the cross-track consistency pass that touches this track's surfaces (auth scheme, secrets inventory, connector security, threat model) will be added below this line with the `from-consistency-pass` label, in the same format as above, once the pass reports.
+
+---
+
+## S12 — Split the token issuer into its own Deployment with isolated signing-key custody (LT-32)
+
+**Status: open** (from `../decisions/cross-track-consistency.md` F13).
+
+**Description:** The pass caught a real contradiction: `handoff-04-secrets.md` said the JWT signing private key "never touches `api-service`" while also defining the issuer as "a mode of `api-service`," and 04's manifest resolved that by mounting the signing key into every replica of a single `api-service` Deployment — RBAC on a Secret's `get` verb does nothing to stop a volume already mounted into a running container. Fixed at the design level in `handoff-04-secrets.md` Assumption 2 and row 2: the issuer runs as a second Deployment of the same `api-service` image, selected by an environment variable (`APP_MODE=issuer` vs. default), with its own ServiceAccount that alone mounts the signing-key Secret. This story is the implementation and manifest work that design change requires — it did not exist as a story before the pass.
+
+**Acceptance criteria:**
+- [ ] `api-service` supports an `APP_MODE` environment variable selecting issuer vs. verifying behavior from one binary/image.
+- [ ] Two Kubernetes Deployments exist, each with its own ServiceAccount; only the issuer Deployment's pod spec mounts the JWT signing-key Secret — enforcement site: the manifest's volume mounts plus RBAC Role scoping `get`/`list` to the issuer's ServiceAccount.
+- [ ] The verifying Deployment's pod spec contains no reference to the signing-key Secret at all (not just RBAC-denied — physically absent from its mounts).
+- [ ] `containerization-design.md`'s mount at the lines the pass named is removed and replaced with the two-Deployment shape.
+
+**Depends on:** `handoff-04-secrets.md` v2 (this track); 03's `APP_MODE` config surface addition; 04's manifest change.
+
+**Model/effort:** sonnet, high (03 implementation); sonnet, high (04 manifest).
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`, `from-consistency-pass`, `no-code-yet`
+
+---
+
+## S13 — Wire `api-service`'s client credential to call the connector, and the vendor-token header pass-through (LT-33)
+
+**Status: open** (from `../decisions/cross-track-consistency.md` F3 and F15).
+
+**Description:** Two related gaps the pass found: (1) nothing said what our own `/auth` returns to its caller or how `/identity` obtains vendor authority, given the assignment's fixed `/identity` body has no credential field (F3) — resolved in `connector-security.md` §1: `/auth` returns the vendor token to the authenticated internal caller, which presents it as a request header (not body field) on the subsequent `/identity` call; the connector itself still never caches it. (2) `api-service` needs its own client credential to authenticate to the connector's now-required inbound auth (`connector-security.md` §5) in the first place, and no inventory row covered it — added as row 10 in `handoff-04-secrets.md` (F15). This story is the implementation work both design fixes require.
+
+**Acceptance criteria:**
+- [ ] `api-service` obtains and presents a `connector:identity-lookup`-scoped token (via its own client credential, row 10 of `handoff-04-secrets.md`) when calling `idp-connector`'s `/auth` and `/identity`.
+- [ ] The onboarding flow's vendor-auth step receives the vendor `access_token` from our `/auth` response and holds it only for the span between that call and the following `/identity` call — enforcement site: the handler/service layer that mediates the onboarding flow, not the connector itself (which remains stateless per S3).
+- [ ] `/identity` accepts the vendor token as a request header, not a body field, and fails closed with a generic error if it is missing or rejected by the vendor.
+- [ ] `01-product-industry-research-design/ux-notes.md`'s two-screen flow and this mechanism agree on what the frontend/onboarding-flow layer actually holds between screens (coordinate directly with Naomi if the UX description needs a one-sentence update to match).
+
+**Depends on:** `connector-security.md` (this track); `handoff-04-secrets.md` row 10 (this track); 03's connector-client implementation.
+
+**Model/effort:** sonnet, high.
+
+**Type:** Story
+
+**Labels:** `track-02`, `security-graded`, `from-consistency-pass`, `no-code-yet`

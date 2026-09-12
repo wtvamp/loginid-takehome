@@ -120,9 +120,31 @@ All seven stories carry `no-code-yet`: no `.go`, `.sql` or `go.mod` exists in th
 
 ---
 
-## Story 7 — Extend subject-deletion to derived data *(open — awaiting consistency pass)* (LT-20)
+## Story 8 — Add the retention/deletion methods to the DAO contract (F21) (LT-50)
 
-**Type:** Story · **Labels:** `track-05`, `security-graded`, `no-code-yet`, `from-consistency-pass` · **Model/effort:** TBD with owner · **Status:** **open. Owner TBD by the consistency pass** — likely 04 as the enforcement-site owner, with 02 and 05 linked as dependencies.
+**Type:** Story · **Labels:** `track-05`, `security-graded`, `no-code-yet`, `from-consistency-pass` · **Model/effort:** opus/high (contract addendum) + sonnet (03's first-pass review) · **Status:** contract change delivered; awaiting 03's addendum review · **Jira key:** LT-50
+
+**Description.** The cross-track consistency pass (F21) found that `pii-governance.md` specified a bulk retention sweep and a subject-deletion request sharing one code path, each writing a `deletion_log` row, and `multi-db-strategy.md` §5 defined the table — but **no method on the interface could reach any of it.** `Profiles().Delete` wrote no log row, and §3 forbids 03 from opening a transaction to combine the two, so a policy this track ruled on could not be implemented against the contract this track wrote, and no track owned the gap. Fixed by adding two composite-level methods in `multi-db-strategy.md` §3c: `DeleteExpired(ctx, class, olderThan, maxRows) (SweepResult, error)` and `DeleteProfile(ctx, id, externalRef)`, both writing `deletion_log` in the same transaction as the delete (signatures as finalized after 03's review — batched, and with `reason` asserted by the method rather than passed by the caller). `SweepResult` returns rows examined, rows deleted, and the age of the oldest surviving row — the last being the only signal that detects a silently stopped sweep, since rows-deleted cannot distinguish a broken sweep from an empty one.
+
+**Acceptance criteria.**
+- [x] Both methods sit on the composite, not on a sub-repository — they span `user_profile` and `deletion_log`, and the DAO is the only layer permitted to open a transaction.
+- [x] One retention class per call; never a mixed-class predicate.
+- [x] Each class uses its own clock column — `created_at` for orphans, because a clock the read path touches lets a row reset its own expiry.
+- [x] `OldestSurvivingAt` returned from the DAO rather than left for 04 to compute, since only the DAO can answer it in the same query plan.
+- [x] `Profiles().Delete` deliberately still writes no log row, with the reason recorded.
+- [x] The complete set of cross-table operations is stated as three; a fourth requires a contract change.
+- [x] **03 accepted the addendum** after a Detail Hawk first-pass review that raised four findings, all accepted: `OldestSurvivingAt`'s nil case narrowed to "class is empty" only (three conditions had been collapsing into it, including the two the metric exists to distinguish); `RetentionClass` zero value given an explicit conformance assertion; **`reason` removed as a parameter** on `DeleteProfile` and asserted by the method, since a caller-supplied reason code makes an audit trail's reasons caller-assertable; and `DeleteExpired` bounded by a required `maxRows` with one transaction per batch, never one per sweep, plus a never-request-scoped-context requirement.
+- [x] **An interaction between two of those fixes, raised by neither, caught at ruling:** batching makes deletable rows remain mid-sweep by construction, so `OldestSurvivingAt` would be old on every batch but the last and would fire the alert every run. It is therefore meaningful **only when `Drained` is true**. Two individually correct fixes would have shipped a flapping alert; a health signal that cries wolf gets muted, at which point it is not a health signal. Relayed to 04 so the alert rule is drained-gated.
+
+**Depends on:** Story 3 (LT-16), Story 5 (LT-18). **Blocks:** 03's **S11** — the sweep-invocation and subject-deletion-request code that calls `DeleteExpired`/`DeleteProfile` and surfaces `OldestSurvivingAt` to 04's observability (Jira key TBD — 03's backlog).
+
+> *Ownership of the sweep job, resolved.* The pass found that no track owned writing it: the contract made it writable, 03 had no such story, and `pii-governance.md` gave 04 only *where* jobs run. Renata claimed it as 03's S11 on 2026-09-12. The boundary is now three-way and clean — **05** defines the methods and what the metrics mean, **03** writes the code that calls them, **04** decides where it runs and reads the metrics. That was the orphan; it is no longer one.
+
+---
+
+## Story 7 — Extend subject-deletion to derived data *(owner ruled: 04)* (LT-20)
+
+**Type:** Story · **Labels:** `track-05`, `security-graded`, `no-code-yet`, `from-consistency-pass` · **Jira key:** LT-20 · **Model/effort:** TBD with owner · **Status:** **the pass ruled the enforcement site is 04's log-sink retention policy.** This row is retained as 05's linked dependency — 05 supplies the definition of what counts as PII; it is not a 05-owned story and LT-20 may be re-parented under 04 accordingly. My earlier guess that 02 owned the site (never-log list as the real control) was not what the pass ruled; 02's never-log list remains the cheaper upstream mitigation but the retention of what is already logged is 04's.
 
 **Description.** A subject-deletion request currently reaches `user_profile` and, by cascade, `user_credential`. **It does not reach derived data** — application logs, metrics, connector traces, or anything else that may have incidentally captured a name, phone or address in transit. That data has no `source` column, no retention clock, and in most cases no primary key to select on. This is **not** a ruling that derived data is out of scope for deletion; it is an unmodelled area, recorded so its absence is not mistaken for a decision. Raised by this track's Spreadsheet hire against her own stated blind spot — everything else became a row because it fit a column, and this resisted the table.
 
@@ -142,13 +164,19 @@ All seven stories carry `no-code-yet`: no `.go`, `.sql` or `go.mod` exists in th
 
 ---
 
-## Cross-track links (pending)
+## Cross-track links (resolved)
 
-Recorded by the Jira scribe at transcription time; the PM resolves these once 02/03/04 are transcribed, per the descriptive counterparts named in each story's Blocks/Linked line above.
+Resolved and created in Jira by the scribe once 01/02/03/04 were all transcribed. Table replaces the earlier pending list.
 
-- **LT-16** (Story 3) → blocks 03's DAO implementation story (title TBD — 03's backlog)
-- **LT-16** (Story 3) → blocks 04's migration-execution work via Story 5 (title TBD — 04's backlog)
-- **LT-18** (Story 5) → blocks 04's retention-sweep and observability work (title TBD — 04's backlog; already folded into their `observability.md`)
-- **LT-19** (Story 6) → blocks 04's migration-job and CI stages (title TBD — 04's backlog; "provisional" now dropped on their side)
-- **LT-20** (Story 7) → linked to 02's never-log list (not a Blocks relationship)
-- **LT-20** (Story 7) → linked to 04's log retention (not a Blocks relationship)
+| 05 key | Relationship | Counterpart | Note |
+|---|---|---|---|
+| LT-16 (Story 3) | blocks | LT-35 (03 S2 — DAO interface, domain types, sentinels, factory) | resolves "03's DAO implementation story" |
+| LT-16 (Story 3) | blocks | LT-19 (05 Story 6 — migration approach) | intra-track, not cross-track — supersedes the original "blocks 04's migration-execution work via Story 5" guess, which was itself corrected in place above (Story 3's Blocks line now reads "Story 6 / LT-19") |
+| LT-18 (Story 5) | blocks | LT-49 (04 Story 5 — Observability) | resolves "04's retention-sweep and observability work" |
+| LT-18 (Story 5) | blocks | LT-20 (04 Story 6 — log-sink retention for the audit trail, re-parented from 05) | 04's Story 6 depends on this track's `pii-governance.md` audit-log retention-window row |
+| LT-19 (Story 6) | blocks | LT-45 (04 Story 1 — Containerize) | migration tooling name feeds the migration `Job` |
+| LT-19 (Story 6) | blocks | LT-46 (04 Story 2 — Secrets delivery) | migration-runner credential provisioning, R4 |
+| LT-19 (Story 6) | blocks | LT-47 (04 Story 3 — CI/CD pipeline) | resolves "04's migration-job and CI stages" |
+| LT-20 (04 Story 6, ex-05 Story 7) | depends on | LT-27 (02 S7 — hand-off 02→04: secrets inventory and never-log list) | resolves "linked to 02's never-log list" as an actual Blocks link (LT-27 blocks LT-20) |
+
+"Linked to 04's log retention" from the original pending list is no longer a cross-track link — LT-20 **is** that 04 story now (re-parented), so the relationship collapsed into identity, not a link.
