@@ -62,4 +62,4 @@ Considered cutting `air` as unneeded polish, reconsidered: `docker compose build
 No local Kubernetes (`kind`/`minikube`) mirroring the lab cluster — compose is the right altitude for a two-service Go project's local loop; a local k8s cluster would be solving a problem this project doesn't have.
 
 ---
-*AI tooling note: drafted directly by Theo (Sonnet, this session) from 03's config surface and the containerization design above. Bree's and Callum's per-deliverable notes pending.*
+*AI tooling note: drafted directly by Theo (Sonnet, this session) from 03's config surface and the containerization design above. Bree's (capability-case) and Callum's (scope-cut) per-deliverable notes reviewed and folded in inline above, per PLAN.md §3.*

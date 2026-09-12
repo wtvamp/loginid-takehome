@@ -17,6 +17,7 @@ Per the hand-off's Kubernetes-specific requirements: every secret in the invento
 | #7 | KEK for envelope encryption | File. Per the hand-off's resolved v2: not a live requirement until TOTP or token-caching actually materializes — provisioned only if/when 05 or 02 confirms one of those features is real. If a KMS is used instead of a mounted key (row #7a), its access credential follows the same delivery discipline as row #2. | `api-service` and/or `idp-connector` SA, whichever feature lands |
 | #8 | TLS serving private keys | `kubernetes.io/tls` `Secret`, automated issuance preferred (cert-manager or equivalent) | Ingress, or each binary if TLS terminates at the pod |
 | #9 | End-user vendor password | Nothing to deliver — transient request-body data, never persisted | n/a |
+| — | Migration-runner DB credential (05's R4, not in 02's inventory — flagged there as belonging to this surface) | File, same discipline as row #1. **Provisioning differs by backend:** on PostgreSQL specifically this credential needs `CREATE EXTENSION` rights for `pg_trgm` (the trigram index behind `user_profile.name` search) — usually an allow-listed extension on managed Postgres, otherwise elevated privilege; CockroachDB needs nothing extra (trigram indexing is native); SQLite has no privilege model at all. Distinct from the runtime service credential (DML-only, no DDL) per R4 — provisioning one shared credential for both would hand the running service the same extension-install rights the migration job needs, which it has no reason to hold. | Migration `Job`'s own ServiceAccount only |
 
 ## RBAC discipline
 
@@ -33,4 +34,4 @@ Per the hand-off's explicit either/or: this design's answer is **enable encrypti
 No secret in an image layer, build arg, or CI log — enforced by the pipeline's own gitleaks stage (`./ci-pipeline.md` §4) plus the container design never `COPY`ing anything but the compiled binary. CI's own credentials to reach the registry and (in the describe-only deploy stage) the cluster are themselves managed as CI-platform secrets (GitHub Actions encrypted secrets or equivalent) — same discipline, different delivery surface, not re-specified here since it's a standard CI-platform mechanism rather than something this design invents.
 
 ---
-*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2. Bree's and Callum's per-deliverable notes pending.*
+*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2. Bree's (capability-case) and Callum's (scope-cut) per-deliverable notes reviewed and folded in inline above, per PLAN.md §3.*

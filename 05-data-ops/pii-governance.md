@@ -23,6 +23,54 @@ Tagging cache rows distinctly by `source` is what makes a targeted deletion requ
 
 This separation is treated as a governance control, not merely a normalization convenience: it's the reason a breach of one table doesn't cascade into exposing the other class of data.
 
+## Retention windows (S5)
+
+**Every number below is a proposed POC default pending a product/legal ruling.** One asymmetry belongs stated plainly rather than buried: GDPR Art. 5(1)(e) storage limitation is a **principle** — data kept "no longer than is necessary" — demanding a window someone justifies. It is not a number anyone can look up. So every basis below is either an engineering rationale or the honest word *unknown*. There is no third kind, and a citation implying a regulation supplies a specific duration would be a false statement in a client-facing document.
+
+| Data class | Clock column | Proposed window | Basis | Disposal | What cascades | Ratifier | Status |
+|---|---|---|---|---|---|---|---|
+| `user_profile`, `source='direct'` | `updated_at` | **24 months** since last update | *unknown — needs product/legal ruling.* Engineering basis only: long enough that a dormant account surviving a slow re-engagement cycle is not destroyed, short enough to be a defensible answer to "why do you still hold this." No regulation supplies this number | Hard delete | Cascade FK destroys all `user_credential` rows — the account stops existing | unknown — no named legal owner on this POC | Proposed |
+| `user_profile`, `source='idp_cache'` | `updated_at` | **30 days** since last hydration | Engineering: **a cache is not a record.** Re-hydration costs one `/identity` call, so deleting too early costs a vendor round-trip. Vendor data also goes stale — a 14-month-old cached address is a correctness problem before it is a privacy one. We are downstream custodian of another party's collected PII with no independent relationship to the subject, which argues for the shortest window that still functions | Hard delete | Cascade FK; a cached profile should not normally have credentials — if it does, it is no longer merely a cache and product must say which clock wins | unknown | Proposed |
+| `user_profile`, `source='idp_cache'`, **no referencing `user_credential`** (orphaned cache) | **`created_at`**, deliberately not `updated_at` | **7 days** since creation | Engineering: lookup residue, not an account — someone called `/identity`, we cached the answer, nothing was ever built on it. **The clock is `created_at` because `updated_at` is touched by the read and re-hydration path: an orphan re-read on any schedule would keep resetting its own expiry and never die.** Closing that loop is the entire reason this row exists | Hard delete | Nothing — by definition it has no children | unknown | Proposed |
+| `user_credential` | — | **No independent window** | Wholly governed by its profile's window via the cascade FK. A credential cannot outlive its profile; a credential row with no profile cannot exist. A second clock could only ever disagree with the first, with no resolution rule | n/a | n/a | **Ruled** |
+
+### Two consequences that surprise people, stated loudly
+
+1. **Deleting a profile silently destroys its credentials.** The account ceases to exist; there is no "profile deleted, login preserved" state. Deliberate.
+2. **The reverse does not hold.** Deleting a credential leaves the profile standing. **A user who removes their last login method still has PII in this database, running on the `direct` clock.** If product wants "removing your last credential deletes the account," that is a policy decision, not a schema one — and it is currently *not* what the schema does.
+
+### The cache window is "since last use", not "since first seen"
+
+Re-hydration moves `updated_at`, so an actively-used cache row can live indefinitely. That is correct, and it must be written down, because it means the 30-day window measures **time since last use**. It is also exactly why the orphan row is keyed on `created_at`: the two rules are one rule seen from two sides — a row that is still being used should survive, and a row that is only being *re-read by the sweep's own neighbours* should not be able to refresh itself into immortality.
+
+## The deletion mechanism (S5)
+
+| Trigger | Selection predicate | Scope | Effect on `user_credential` | Disposal | Evidence left behind | What 04 provides | Failure mode if it never runs |
+|---|---|---|---|---|---|---|---|
+| **Bulk retention sweep** (scheduled) | `source` = the class, plus that class's clock older than that class's window; orphan class additionally requires no referencing credential. **One class per pass — never a mixed-class sweep**, because a single predicate spanning two clocks is how the wrong window gets applied to the wrong rows | Many rows | Cascade delete, implicit and unmentioned in the predicate — the sweep selects profiles and destroys credentials as a side effect. Stated because it is invisible at the point of use | **Hard delete** | One row in a separate `deletion_log`: profile UUID, `source`, `deleted_at`, reason `retention_sweep`, job run id. **No name, phone or address** | Schedule it; run it per class; emit the metrics below | **Nothing errors.** No exception, no alert, no symptom — rows accumulate and the policy is fiction nobody can see is fiction |
+| **Subject-deletion request** | Exactly one profile id, resolved from the subject's identifier *before* the job runs — resolution is a lookup, not part of the deletion predicate | One profile plus its cascade | Cascade delete — the correct reading of "delete my data" | Hard delete, **same code path as the sweep** | Same `deletion_log` row, reason `subject_request`, plus the external request reference | An operator-invocable path that is **not** "someone runs SQL by hand against production" | Legal exposure rather than silent drift — this one gets noticed, which is why it must not be the only mechanism that works |
+| **IDP re-hydration overwrite** | Existing `idp_cache` profile matched on the lookup key, fresh `/identity` response | One row | **None** — the profile id is stable across re-hydration, so credentials survive | Upsert in place; old field values are **gone, not versioned** | None, and none wanted | Nothing — request-path behaviour, not a job | n/a — but see the clock-reset note above |
+
+**Why hard delete and not a soft-delete flag.** A flag means the PII is still sitting in the table, and every query written from that day forward must remember to filter it out. That is how a retention policy becomes decorative while still passing its own tests.
+
+**Why subject deletion reuses the sweep's code path.** A separate "real delete" path used rarely is a path that is broken when you need it.
+
+**Why the `deletion_log` holds no PII.** Otherwise the log is just a second copy of the problem with no clock on it. The retained UUID identifies a row that no longer exists and is not linkable to a person once the profile is gone.
+
+### The health check, which is a requirement rather than a suggestion
+
+A deletion job that stops running produces no error, no alert and no visible symptom. The only evidence is data that should be absent and isn't. So the sweep emits, per class and per run: **rows examined, rows deleted, and the age of the oldest surviving row in that class.**
+
+The third is the actual health check. **04 should alert when the age of the oldest surviving row exceeds that class's window plus one sweep interval** — that is the condition that detects a job which has silently stopped, which rows-deleted counts cannot.
+
+### Explicitly not modelled: derived data
+
+Flagged by the hire who wrote the tables above, against her own stated blind spot — everything in them became a row because it fit a column, and this did not.
+
+**A subject-deletion request currently reaches `user_profile` and, by cascade, `user_credential`. It does not reach derived data** — application logs, metrics, connector traces, or anything else that may have incidentally captured a name, phone or address in transit. That data has no `source` column, no retention clock, and in most cases no primary key to select on.
+
+This is **not** a decision that derived data is out of scope for deletion. It is an unmodelled area, recorded as such so that its absence is not mistaken for a ruling. It sits across `../02-ai-security-architecture/` (what may be logged at all, and the never-log list) and `../04-infra-devops/` (log retention and where those logs physically live). The cheapest mitigation is upstream of this track entirely: if PII never enters a log, there is nothing to delete from it — which makes 02's never-log list the real control here, not a deletion job this track could specify.
+
 ## Handoff notes
 
 - `02-ai-security-architecture` should build credential hashing (algorithm, cost factor, salt handling) on top of the `secret`/`hash_algo`/`hash_cost` columns already reserved in the schema — flagged directly to Marcus once this schema landed.

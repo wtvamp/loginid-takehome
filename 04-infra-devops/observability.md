@@ -30,9 +30,15 @@ Hand-off's nine items map to two enforcement surfaces, not nine separate mechani
 
 Per the hand-off's Kubernetes-specific requirements: the log stream carrying `sub`/scope/record-id/timestamp (the "fact of access" the never-log list still permits) is itself sensitive enough to reconstruct who looked up whom, so it gets its own RBAC — a distinct, narrower `Role` bound to an incident-review group, separate from any ServiceAccount's `Secret`-read grant (`./secrets-delivery.md`). Mechanism: if logs go to a cluster-local sink (e.g., Loki), that sink's read API gets its own RBAC/auth in front of it, not the same one guarding `kubectl get secrets`; if logs go to an external platform, the equivalent is a scoped read-only role in that platform, provisioned separately from any cluster credential.
 
+## Retention-sweep observability (05's S5 requirement, final)
+
+Per `../05-data-ops/pii-governance.md`: the retention sweep must emit, per data class per run, three metrics — rows examined, rows deleted, and **the age of the oldest surviving row in that class**. An alert fires when that age exceeds the class's stated retention window plus one sweep interval. This is the one metric in this document tied to a specific reasoning worth repeating: a sweep job that silently stops running produces no error and no symptom on its own — "rows deleted" can't tell a broken sweep from a legitimately empty one, since both report zero. Oldest-surviving-row age is the one number that keeps climbing when the job is dead and holds steady when it's healthy, which is why it's the alerting signal, not just a nice-to-have metric alongside the other two.
+
+Mechanism: the sweep job (whatever invokes it — a CronJob against the lab cluster, per 05's mechanism-agnostic requirement) emits these as Prometheus metrics with a `class` label (one label value per retention class, e.g. `vendor_token_cache`, `idp_identity_cache` — never a label carrying the PII itself, same discipline as the RED-metrics rule above) rather than only a log line, since a log line nobody's alerting on has the same "silent failure" problem the requirement exists to solve. The alert rule is `oldest_surviving_row_age_seconds{class="X"} > (retention_window_seconds + sweep_interval_seconds)`, evaluated per class.
+
 ## What's deliberately not here
 
 No SLOs/error-budget policy, no alerting-rule catalog, no log-retention-window design (that's 05's PII-retention territory for anything log-adjacent to PII, per `../05-data-ops/pii-governance.md` — this document only says logs must exclude PII values in the first place, not how long the remaining metadata is kept). A take-home needs the shape of an observability approach and a credible enforcement mechanism for the one hard requirement (never-log); it doesn't need a full SRE runbook.
 
 ---
-*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2's never-log list. Bree's and Callum's per-deliverable notes pending.*
+*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2's never-log list. Bree's (capability-case) and Callum's (scope-cut) per-deliverable notes reviewed and folded in inline above, per PLAN.md §3.*

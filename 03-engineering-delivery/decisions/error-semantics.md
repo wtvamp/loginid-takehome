@@ -26,5 +26,14 @@ All four accepted; no decline.
 
 Ruled. Carries into S2 (DAO sentinel definitions + per-backend translation) and S3 (handler-layer translation function, context-error handling).
 
+## Superseded in part — 05's contract lands (2026-09-12)
+
+05's `multi-db-strategy.md` §4 is the authoritative sentinel set and translation mechanism for the DAO layer; it supersedes the specific names and the translation rule this decision guessed at before the contract existed. What stands vs. what's replaced:
+
+- **Replaced:** the invented sentinel set (`ErrNotFound`/`ErrDuplicate`/`ErrInvalidInput`) is superseded by 05's actual seven: `ErrNotFound`, `ErrAlreadyExists`, `ErrDuplicateUsername`, `ErrInvalidMethod`, `ErrInvalidQuery`, `ErrInvalidArgument`, `ErrInvalidCredential`. These are 05's to own and extend (own-and-propose-before-adding now routes through them, not me, for anything DAO-internal) — my closed-set/no-ad-hoc-additions principle still applies, just to their list.
+- **Replaced:** "match SQLSTATE only" is superseded by 05's corrected rule — match structured error codes (SQLSTATE on Postgres/CockroachDB, extended result codes on SQLite) plus constraint names we define ourselves in DDL, never free-text messages. This is a more complete version of objection 2's concern (leaking driver text), not a contradiction of it.
+- **Stands unchanged:** the HTTP-boundary rule (objection 2 — `internal/api` never serializes `err.Error()` on an unmapped error; wrapped errors are for logs only) — this is 03's layer, not 05's, and 05's contract doesn't touch it. The context-cancellation rule (objection 4) also stands unchanged, same reason.
+- **Stands, now backed by a real mechanism instead of a guess:** objection 3's demand for mandatory per-backend translation — 05's contract §4 gives the actual mapping table (condition → PG/CRDB code → SQLite code → sentinel), and §7's conformance suite makes "sentinel parity for every error condition in §4" a stated, required test — stronger than what this decision asked for.
+
 ---
 Model: sonnet (Oren Castellan, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.

@@ -26,5 +26,9 @@ All three accepted; no decline.
 
 Ruled. Carries into S2 (Repository implementation contract: transaction scoping, detach points) and S3 (middleware deadline budget).
 
+## Resolved against 05's contract (2026-09-12)
+
+Oren's first-pass review of 05's DAO contract flagged a real tension: this ruling's item 1 requires any multi-table write to run in a single `Tx`, but the contract as first landed had no method spanning both `user_profile` and `user_credential`, and explicitly barred 03 from composing a cross-call transaction — leaving registration's profile+credential creation with no atomic path at all. 05 resolved it by adding `CreateProfileWithCredential(ctx, p, c)` on the `Repository` composite (05's §3b) — the one cross-table operation in the contract, DAO-generated IDs for both rows, single transaction, `c.UserID` ignored on input and set from the just-created profile. This ruling's item 1 now has exactly one caller-visible method satisfying it, rather than being a requirement with no concrete instance.
+
 ---
 Model: sonnet (Nolan Reyes, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.
