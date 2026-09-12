@@ -46,6 +46,8 @@ Threat model, API auth/authz design, and connector security design are drafted:
 
 Coordinated with `../05-data-ops/CLAUDE.md` on `user_credential.method` being modeled as a lookup table (not a native enum) — the credential-storage design in `threat-model.md` is method-aware as a result (password vs. WebAuthn vs. TOTP each have different storage requirements), not a single password-hashing assumption.
 
+Phase 1 (org planning): `PLAN.md` in this directory is the track plan — eleven Stories, a four-hire roster (Adversary, Principled Architect, Tinkerer, Designated Skeptic), the debate plan, and dependencies; `../CASTING.md` §5 ratified with four ⟨02⟩ amendments; `planning-approach.md` gained Appendix A (attack-tree template) and Appendix B (harness constraints). Awaiting team-lead's "hiring go" before any persona or agent definition is created.
+
 Next: available for `03-engineering-delivery` to implement against; open to review/adjustment as data-ops' schema and engineering's implementation surface any gaps.
 
 <!-- profile-gen:start slug=marcus-ilori -->

@@ -57,3 +57,21 @@ Three tracks offered a view and they converge. Naomi proposed a single root-leve
 ## Sources
 
 All Anthropic-attributed claims above trace to `research-claude-architecture-best-practices.md` in this directory, specifically: the orchestrator-worker pattern and the Opus-lead/Sonnet-subagent eval (§3, "How we built our multi-agent research system"), the context-rot/compaction/structured-note-taking/just-in-time-retrieval framework (§2, "Effective context engineering for AI agents"), and the prompt-caching mechanics around prefix stability (§4, Anthropic's prompt-caching docs). The model/effort-to-role pairings, the hub-and-spoke-with-exceptions coordination rule, the plan-mode usage rule, and the planning-artifact shape are this track's own judgment applied to this project — not claims of separate Anthropic endorsement.
+
+## Appendix A — Red team / blue team attack-tree template
+
+Referenced from `../CASTING.md` §5. One table per surface; the completed table is appended to that surface's design document (for the connector token lifecycle, `connector-security.md`), and the full positions, rebuttals, and ruling live in `decisions/<topic>.md`.
+
+| # | Leaf (attack path toward the goal) | Precondition (what the attacker must already hold) | Likelihood L/M/H | Impact L/M/H | Blue response: Control *or* Accepted risk | Owner (02 requirement / 03 implements / 04 mechanism) | Residual L/M/H | Source |
+|---|---|---|---|---|---|---|---|---|
+
+Rules of use: the Adversary ranks the top five leaves before blue responds, and the ranking is recorded. The Tinkerer's optional alternatives turn may delete a leaf by design change; a deleted leaf is kept in the table with "eliminated by design: …" in the Blue column so the reasoning survives. Blue answers every remaining leaf; "accepted risk" must say why it is acceptable for this system, not in general. The lead assigns Residual with a one-line justification in the record. Any Residual **H** produces either a follow-up Story or an accepted risk stated plainly enough that Warren can see it in the artifact. The Source column names the primary source behind the control (RFC, OWASP, NIST) or reads "judgment".
+
+## Appendix B — Harness constraints that modify §1's tiers
+
+Recorded after `PLAN.md` "Verified mechanics" was checked against `research-claude-architecture-best-practices.md` (no contradictions found). These are harness facts, verified by team-lead against the Claude Code docs, that change how §1 is implemented:
+
+1. There is no per-agent effort key in agent definitions; teammates inherit the lead session's effort (currently `high`), and the only per-model lever is `modelSettings.<model>.effortLevel` in `.claude/settings.json`, set to `low` for haiku only. Consequence: the sonnet-medium tier in §1 collapses to sonnet-high — accepted, since it errs upward on the tracks that matter — and the "sonnet/low" research option is unavailable. Research fan-out is haiku/low, or sonnet at high when judgment is needed, which costs more than §1 planned and should be used sparingly.
+2. Hires are one level below leads and do not spawn subagents (spawn-depth cap); all research fan-out is run by leads. This is consistent with §2's orchestrator-worker rule, just enforced by the harness rather than by convention.
+3. §4-style prompt-cache discipline applies one level down: a hire's `.claude/agents/<slug>.md` is part of that hire's stable prefix, so it is edited only at spawn boundaries, never while the hire is running.
+4. The per-agent `PreToolUse` hook mechanism and agent-frontmatter facts are outside this track's research scope; they are recorded here as verified by team-lead, not independently by 02.

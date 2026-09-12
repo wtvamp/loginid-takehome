@@ -1,0 +1,56 @@
+# Hand-off 02 → 04: Secrets inventory and never-log list
+
+Status: **v1** — Ingrid Solano's S7 objection turn is answered below and folded into the tables. Awaiting 04's Newcomer (`wesley-okonkwo`) cold read. Receiver: Theo Bergman, `../04-infra-devops/`. Written to the project's hand-off standard: 04 should be able to act on this without re-deriving the reasoning in `threat-model.md`, `api-auth-design.md`, or `connector-security.md`.
+
+## Assumptions this hand-off makes
+
+1. Deployment target is the **design-only Kubernetes lab cluster** 04 names (Warren's decision via Theo, `../LOG.md`). Delivery mechanism is therefore Kubernetes-native `Secret` objects unless 04 chooses an external store; every requirement below is written so it still holds if the mechanism changes.
+2. Service topology is 03's published boundary (`../PLANNING.md`, Service boundaries): two binaries, `cmd/api-service` (Q1 DAO + Q2 REST API) and `cmd/idp-connector` (Q3), env-var configuration only. Variable names below are 03's; two are marked as pending this track's final scheme. **The token-issuing authorization-server function is a mode of `api-service`, not a third binary** — this take-home's scope doesn't justify a standalone authz server, and 03 has published no third `cmd/` entrypoint. It runs under `api-service`'s own service account; RBAC in row #2 is scoped to that account, restricted (via a distinct Kubernetes Role, not a separate ServiceAccount) so that only the issuing code path — not the token-verification code path in the same binary — can `get` the signing-key Secret. If 03 later decides to split this out as its own binary, this row's RBAC target changes with it; flag that to me if it happens, don't silently re-derive it in 04.
+3. An **external operator agent applies manifests** to the cluster. That operator is a privileged actor outside this service: anyone who can apply a manifest can read any Secret it mounts. Consequence for 04: manifests reference Secrets by name and never carry values; values are set out-of-band. This is a named trust boundary in `threat-model.md`, not a silent assumption.
+4. Nothing is deployed and nobody contacts the cluster or its operator during the take-home. This document describes what *would* be delivered, not what has been.
+
+## Secrets inventory
+
+| # | Secret | Used by | Injection requirement (02 sets it) | Rotation expectation | Kubernetes-native note (04's mechanism) | Never-log |
+|---|---|---|---|---|---|---|
+| 1 | Database credentials, carried inside `DB_DSN` | `api-service` | Runtime-injected; never in source, image, or committed config. **Required, not preferred: file mount via a `DB_DSN_FILE` convention** (03 to add alongside `DB_DSN`), because a DSN's embedded password is exposed by `kubectl describe`, crash dumps, and child-process environment exactly as much as any other secret in this table — there is no citation that makes `DB_DSN` a lesser case, so this track is not treating it as one | On credential rotation; service restart or reload acceptable | `Secret` mounted read-only as a file, read via `DB_DSN_FILE`; env-var `DB_DSN` is a fallback only until 03 ships the file-based convention, not a permanent equal option | Yes — the DSN contains the password; log the driver name and host at most |
+| 2 | JWT signing **private** key (RS256/ES256), per `api-auth-design.md` | Token-issuing authorization-server component only — **not** `api-service`, which verifies with the public key | Runtime-injected as a **file**, never an env var; asymmetric so the API never holds it | Key rotation with a `kid` claim; publish old and new public keys together during overlap; TTL of tokens (5–15 min) bounds the overlap window | `Secret` mounted read-only as a file; restrict `get`/`list` on this Secret to the issuer's service account via RBAC | Yes |
+| 3 | JWT **public** key / JWKS | `api-service` middleware | Not a secret; may ship in config or be fetched from the issuer | Follows #2 | Plain `ConfigMap` or fetched URL; listed here so 04 does not over-protect it | No (but never log full tokens — see below) |
+| 4 | API caller `client_secret`s (OAuth2 client-credentials) | Authorization server (verifies); callers hold their own copy | **Stored hashed** (Argon2id, same floor as `threat-model.md` Asset 1), never plaintext at rest; issued once at provisioning and not recoverable | Per-client rotation on demand; revoke by deleting the hash | Lives in the issuer's datastore, not a Kubernetes `Secret`; 04 delivers only that datastore's credentials (#1-shaped) | Yes |
+| 5 | Connector's own vendor registration: `IDP_ABC_CLIENT_ID`, `IDP_ABC_CLIENT_SECRET` (and the XYZ pair if a second vendor is configured) | `idp-connector` | Runtime-injected; never in source or committed config; `client_id` is low-sensitivity but travels with the secret and gets the same handling | Per vendor's policy; expect manual rotation | One `Secret` per vendor so rotating ABC never touches XYZ; file mount preferred | Yes for the secret; keep the id out of logs too |
+| 6 | Vendor `access_token` (obtained via `/auth`, used for `/identity`) | `idp-connector`, in memory | **Not a deployed secret** — transient. If cached at all: TTL ≤ vendor expiry, encrypted at rest with #7, keyed per vendor account (`connector-security.md` §1) | Expires on its own; never persisted across restarts | No `Secret` object; if 04 provisions a cache, it must be encrypted using #7 and reachable only from `idp-connector` | Yes — never, including error paths |
+| 7 | Data-encryption key (KEK) for envelope encryption of any TOTP shared secrets and any cached vendor tokens | `api-service` (TOTP) and `idp-connector` (token cache), if either feature exists | Runtime-injected as a file; the KEK never leaves the process that decrypts | Rotation by re-wrapping DEKs; never requires re-hashing passwords (those are hashed, not encrypted) | `Secret` (file mount) or an external KMS if 04 prefers — the requirement is only that a KEK exists and is not in source | Yes |
+| 8 | TLS serving private keys for `api-service` and `idp-connector` | Ingress / each binary, per 04's termination choice | Runtime-injected; TLS 1.2+ only; certificate validation never disabled in any environment (`connector-security.md` §2) | Per certificate lifetime; automated issuance preferred | `kubernetes.io/tls` `Secret`; issuance mechanism is 04's call | Yes |
+| 9 | End-user's vendor password (`POST /auth` request body) | `idp-connector`, transient | Never persisted, never cached, held only for the vendor call | n/a | Nothing for 04 to deliver; listed so nobody creates a place for it | **Yes — under no circumstance, including stack traces** |
+
+Names marked pending in 03's boundary: `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` are configuration, not secrets; this track will confirm their final values in `handoff-03-auth.md`. They are listed here only so 04 does not classify them as secrets.
+
+## Kubernetes-specific requirements (04 implements; 02 sets)
+
+- **Secrets at rest in etcd are base64, not encrypted, by default.** Either enable encryption at rest for the `Secret` resource type, or source values from an external store that never writes plaintext to etcd. One or the other; the design must say which.
+- **RBAC:** no service account may `get`/`list` Secrets it does not mount. The operator agent's apply rights are a documented trust boundary, not a hole to close in this take-home — but the design should note that its scope could be narrowed to a namespace.
+- **Manifests carry references, never values.** Any manifest in the repository contains Secret *names*; values are provided out-of-band. This is what keeps assumption 3 honest.
+- **Prefer file mounts over env vars** for #2, #5, #7, #8. #1 is env-var only because 03's config surface is env-var only; if 03 accepts a `_FILE` suffix convention, move it.
+- **No secret in an image layer, build arg, or CI log.** CI redaction is 04's mechanism; the requirement is that a build log can be published without exposing anything in this table.
+
+## Never-log list (applies to every component, every environment, every log level, including error paths and stack traces)
+
+1. End-user vendor password (#9).
+2. Vendor `access_token` (#6) — and any `Authorization` header value, inbound or outbound, in full.
+3. PII field values from `user_profile` or from `/identity` responses: name, phone, `street_address`, `locality`, `region`, `postal_code`, `country`. Log the *fact* of access — caller `sub`, scope used, opaque record id, timestamp, status — never the values.
+4. Raw vendor error response bodies (they can echo submitted PII or partial credentials). Log status code and vendor error code only.
+5. JWT signing private key (#2) and any JWT in full — log `sub`, `aud`, `exp`, and `kid` if needed, never the token.
+6. API caller `client_secret`s (#4), in plaintext or hashed.
+7. `DB_DSN` (#1) or any connection string containing credentials.
+8. Full request bodies of `POST /auth` and `POST /identity` — both contain items above by construction.
+9. Search query parameters containing a name or phone fragment (`api-auth-design.md`, hardening) — they are PII; redact or hash before any access log, including proxy and ingress logs 04 controls.
+
+## What 04 does not decide (already decided upstream)
+
+Token TTLs and claim set (`api-auth-design.md`); scope vocabulary (`handoff-03-auth.md`, pending); password and client-secret hashing (`threat-model.md` Asset 1); whether the connector caches vendor tokens (`connector-security.md` §1 — it may, under the conditions in #6); PII retention windows (`../05-data-ops/pii-governance.md`).
+
+## Open items for the objection turn
+
+- Is anything in this table mis-owned between 02 (requirement), 03 (implements), and 04 (mechanism)?
+- Is a secret missing? Candidates I considered and excluded: session cookies (none — machine-to-machine API), SMTP/notification credentials (no such feature in scope), object-storage keys (no such component).
+- Is the env-var exception for #1 acceptable, or should 02 push 03 for a `_FILE` convention now?
