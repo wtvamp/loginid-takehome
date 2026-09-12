@@ -9,4 +9,7 @@ package app
 // with. The zero value below is what a `go build` without that flag
 // produces — visible as "unknown" rather than empty, so a health response
 // missing real build info is obviously wrong rather than silently blank.
+//
+// (LT-34 freshness-check commit: trivial, no behavior change — proves the
+// build field actually moves between two deploys, per the PO review script.)
 var Commit = "unknown"
