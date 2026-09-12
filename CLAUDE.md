@@ -45,6 +45,7 @@ Directories are numbered for reading order in the final submission, not for sequ
 - Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
 - Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
 - Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `<track>/refinement/<LT-key>.md`. Work happens on a `feature/<LT-key>` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/<LT-key> -b feature/<LT-key> main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `git@github.com:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
 
 ## Org, hiring, and orchestration
 
