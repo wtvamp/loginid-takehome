@@ -34,7 +34,7 @@ Two findings, both accepted, both outside the frame of the three S3 participants
 
 ## Downstream propagation
 
-Both `api-auth-design.md` fixes affecting implementation (finding 1's counter scope, findings 2–4) and `connector-security.md`'s new §5 (connector auth requirement) were folded into `handoff-03-auth.md` (now v2) and relayed directly to Renata Cole (03), who confirmed she will build the connector's handler auth to the new requirement from the start rather than retrofitting.
+Both `api-auth-design.md` fixes affecting implementation (finding 1's counter scope, findings 2–4) and `connector-security.md`'s new §5 (connector auth requirement) were folded into `handoff-03-auth.md` (v2 at the time; now v3 after the cross-track consistency pass) and relayed directly to Renata Cole (03), who confirmed she will build the connector's handler auth to the new requirement from the start rather than retrofitting.
 
 ## Why this run mattered (for `ai-workflow-narrative.md`, S9)
 

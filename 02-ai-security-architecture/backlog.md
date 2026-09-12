@@ -115,9 +115,9 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ## S6 — Hand-off 02→03: auth scheme, validation point, authorization requirements (LT-26)
 
-**Status: done** (`handoff-03-auth.md`, v2 after S8 revisions).
+**Status: done** (`handoff-03-auth.md`, now v3).
 
-**Description:** Synthesized S4's ruling and the token-shape decisions in `api-auth-design.md` into a receiver-shaped hand-off Renata Cole can build against without re-deriving this track's reasoning: token scheme, where it's validated, the final scope vocabulary and object-level policy hook, pagination/rate-limit numbers, the audit-log field list, and an explicit "not yours to decide" list. Revised to v2 after S8's independent review surfaced two implementation-relevant fixes (the decomposition counter's scope-coverage gap; the connector's own inbound-auth requirement). Accepted by 03 with a confirmed `authorize()` placement (in-handler, not middleware) and `DB_DSN_FILE` folded into the config surface.
+**Description:** Synthesized S4's ruling and the token-shape decisions in `api-auth-design.md` into a receiver-shaped hand-off Renata Cole can build against without re-deriving this track's reasoning: token scheme, where it's validated, the final scope vocabulary and object-level policy hook, pagination/rate-limit numbers, the audit-log field list, and an explicit "not yours to decide" list. Revised to v2 after S8's independent review surfaced two implementation-relevant fixes (the decomposition counter's scope-coverage gap; the connector's own inbound-auth requirement), then to v3 after the cross-track consistency pass resolved six further findings (F3, F5, F6, F8, F10, F-pag, F52) that touched this hand-off. Accepted by 03 with a confirmed `authorize()` placement (in-handler, not middleware) and `DB_DSN_FILE` folded into the config surface.
 
 **Acceptance criteria:**
 - [x] Receiving track (03) can act on this without re-deriving the reasoning in `api-auth-design.md`/`connector-security.md` — confirmed by Renata directly, cold read "clean."
@@ -140,7 +140,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 
 ## S7 — Hand-off 02→04: secrets inventory and never-log list (LT-27)
 
-**Status: done** (`handoff-04-secrets.md`, v1).
+**Status: done** (`handoff-04-secrets.md`, now v2).
 
 **Description:** Authored the secrets inventory and never-log list Theo Bergman's track needs to design secrets delivery against, then ran Ingrid Solano's single objection turn (S7's assigned pattern — one turn, not a full debate) and folded in all four accepted objections: the authorization-server's ownership was mis-scoped by omission, a KMS-access credential row was missing, the `DB_DSN` env-var exception was too weak, and audit-log read access needed its own RBAC line distinct from Secret access. Cold-read by 04's Newcomer (Wesley Okonkwo) caught two further gating gaps (TOTP/token-cache feature-status ambiguity; a non-self-contained trust-boundary reference), both fixed.
 
@@ -172,7 +172,7 @@ Lead: Marcus Ilori. Epic: **02 AI Architecture & Security Architecture** (Jira k
 **Acceptance criteria:**
 - [x] Every reviewer is verified independent (did not author or blue-team the document) at the moment the review runs, not just at planning time.
 - [x] Every accepted finding is fixed in the source document, not just recorded in the decision file.
-- [x] The two findings affecting 03's implementation (decomposition-counter scope, connector inbound-auth requirement) are propagated into `handoff-03-auth.md` v2 and relayed directly to 03.
+- [x] The two findings affecting 03's implementation (decomposition-counter scope, connector inbound-auth requirement) are propagated into `handoff-03-auth.md` (v2 at the time this story ran; now v3) and relayed directly to 03.
 - [x] Null results (documents/findings that didn't surface anything) are counted in the tally alongside hits, not silently omitted.
 
 **Depends on:** S3, S4

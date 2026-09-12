@@ -33,7 +33,7 @@ Record which AI tool/workflow generated this track's code (this project is being
 
 ## Status
 
-Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v2 accepted, `backlog.md` written (10 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
 
 <!-- profile-gen:start slug=renata-cole -->
 @profiles/renata-cole/renata-cole.md

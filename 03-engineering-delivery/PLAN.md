@@ -15,6 +15,8 @@ strategy — it operationalizes what's already agreed in `planning-approach.md` 
 
 ## 1. Deliverables & tasks (one Jira Story each; Epic = this track)
 
+*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+
 | Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
 |---|---|---|---|---|
 | S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |

@@ -61,9 +61,10 @@ External callers
                │
                ▼
        internal/config   ◄── shared by BOTH binaries
-        env-var loading only: DB_DRIVER, DB_DSN, DB_DSN_FILE,
-        HTTP_ADDR, AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE,
-        IDP_ABC_BASE_URL, IDP_ABC_CLIENT_ID/SECRET
+        env-var loading only — full current list in PLANNING.md's Service
+        boundaries section, not restated here (it has grown since this
+        diagram was drawn: CONNECTOR_JWT_AUDIENCE, CONNECTOR_CLIENT_ID/
+        SECRET, and APP_MODE were added by later consistency-pass fixes)
 
 --------------------------------------------------------------------------------
 DEPENDENCY DIRECTION (arrows = "depends on", never reversed)

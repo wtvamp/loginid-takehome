@@ -25,7 +25,7 @@ Split note on the DAO: the two-package abstraction (`postgres` serving Postgres+
 
 ## S2. DAO interface, domain types, sentinels, factory (LT-35)
 
-**Description:** Implement the interface layer from `05-data-ops/multi-db-strategy.md`'s Go-shaped contract (§1–§4): the `Repository` composite (`Profiles()`, `Credentials()`, `Methods()`, `Close()`), the three sub-interfaces, the domain structs (`UserProfile`, `UserCredential`, `AuthMethod`, `ProfileQuery`), the seven sentinel errors, and the `dao.New(driver, dsn)` factory signature. No backend logic yet — this is the shape both backend packages implement against, plus the fakes S9's tests use per `decisions/test-double-strategy.md`.
+**Description:** Implement the interface layer from `05-data-ops/multi-db-strategy.md`'s Go-shaped contract (§1–§4, §3c): the `Repository` composite (`Profiles()`, `Credentials()`, `Methods()`, `CreateProfileWithCredential()`, `DeleteExpired()`, `DeleteProfile()`, `Close()`), the three sub-interfaces, the domain structs (`UserProfile`, `UserCredential`, `AuthMethod`, `ProfileQuery`), the seven sentinel errors, and the `dao.New(driver, dsn)` factory signature. `DeleteExpired`/`DeleteProfile` are defined here as part of the composite skeleton; S11 owns the code that calls them, not their signatures. No backend logic yet — this is the shape both backend packages implement against, plus the fakes S9's tests use per `decisions/test-double-strategy.md`.
 
 **Acceptance criteria:**
 - [ ] A hire or reviewer unfamiliar with 05's reasoning can implement a backend against this package without re-reading `multi-db-strategy.md` — the Go types here are the contract, not a paraphrase of it.
