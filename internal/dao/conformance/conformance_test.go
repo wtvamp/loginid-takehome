@@ -501,10 +501,27 @@ func TestConformance_DeleteWritesExactlyOneDeletionLogRow(t *testing.T) {
 		if err := repo.DeleteProfile(ctx, p.ID, &ref); err != nil {
 			t.Fatalf("DeleteProfile: %v", err)
 		}
+
+		// The actual claim in this test's name: exactly one deletion_log
+		// row was written, checked directly against the table rather than
+		// inferred from DeleteProfile's return value — a backend writing
+		// zero, one, or three log rows per delete would otherwise pass
+		// this test identically, since idempotency of the delete (checked
+		// below) and correctness of the audit trail are different
+		// guarantees (Oren Castellan, PR #16 review).
+		if n := countDeletionLogRowsForProfile(t, repo, p.ID); n != 1 {
+			t.Errorf("deletion_log rows for %s = %d, want exactly 1", p.ID, n)
+		}
+
 		// Deleting again must not succeed (row is gone) — proves exactly
 		// one delete happened, not a retry writing a second log row.
 		if err := repo.DeleteProfile(ctx, p.ID, &ref); !errors.Is(err, dao.ErrNotFound) {
 			t.Errorf("second DeleteProfile on the same id = %v, want ErrNotFound", err)
+		}
+
+		// And the failed second delete must not have added a row either.
+		if n := countDeletionLogRowsForProfile(t, repo, p.ID); n != 1 {
+			t.Errorf("deletion_log rows for %s after a failed second delete = %d, want still exactly 1", p.ID, n)
 		}
 	})
 }
@@ -535,9 +552,8 @@ func TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing(t *test
 
 func TestConformance_CockroachDB_RealSerializationRetry(t *testing.T) {
 	repo := newPostgresFamilyFixture(t, "cockroachdb", "TEST_COCKROACHDB_DSN").repo
-	ctx := context.Background()
 
-	p, err := repo.Profiles().Create(ctx, &model.UserProfile{Name: "Contention Target", Source: "direct"})
+	p, err := repo.Profiles().Create(context.Background(), &model.UserProfile{Name: "Contention Target", Source: "direct"})
 	if err != nil {
 		t.Fatalf("creating profile: %v", err)
 	}
@@ -547,22 +563,43 @@ func TestConformance_CockroachDB_RealSerializationRetry(t *testing.T) {
 	// SQLSTATE 40001 internally. withRetry is expected to absorb every
 	// one of them transparently: every call below must return nil, not
 	// just "most of them".
+	//
+	// Each goroutine gets its own bounded context rather than sharing
+	// context.Background(): a stuck retry loop (a live-backend hiccup, a
+	// slow/cold CI container, backoff jitter compounding under sustained
+	// contention) must fail this test in seconds with a clear
+	// "deadline exceeded, retry did not converge" rather than hang until
+	// `go test -timeout`'s blanket ceiling kills the whole binary with a
+	// goroutine dump and no isolated failure (Nolan Reyes, PR #16 review
+	// — the exact shape of a retry loop that "will retry and settle
+	// eventually" turning into an unbounded hang under real load).
 	const n = 20
+	const perAttemptTimeout = 15 * time.Second
 	var wg sync.WaitGroup
 	errs := make([]error, n)
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), perAttemptTimeout)
+			defer cancel()
 			_, err := repo.Profiles().Update(ctx, &model.UserProfile{ID: p.ID, Name: "Contention Target", Source: "direct"})
 			errs[i] = err
 		}(i)
 	}
 	wg.Wait()
 
+	// Reported with %T alongside the error value: a genuine unabsorbed
+	// 40001 (a *pgconn.PgError withRetry gave up on), a context deadline
+	// (retry loop didn't converge inside perAttemptTimeout), and a plain
+	// connection error (pool exhaustion, a dropped connection under this
+	// test's own 20-connection burst) are three different failure classes
+	// that this loop used to report as one indistinguishable message —
+	// which one fired changes whether a triager reproduces a retry-logic
+	// bug or a CI-environment flake (Nolan Reyes, PR #16 review).
 	for i, err := range errs {
 		if err != nil {
-			t.Errorf("concurrent Update %d returned %v — a real 40001 was not fully absorbed by withRetry", i, err)
+			t.Errorf("concurrent Update %d returned %v (%T) — a real 40001 was not fully absorbed by withRetry, or the attempt timed out/lost its connection before it could be", i, err, err)
 		}
 	}
 }

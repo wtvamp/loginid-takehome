@@ -3,6 +3,7 @@ package conformance
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -30,13 +31,31 @@ func runAgainstAllBackends(t *testing.T, fn func(t *testing.T, repo dao.Reposito
 	}
 }
 
-var fixtureByRepo = map[dao.Repository]fixture{}
+// fixtureByRepoMu guards fixtureByRepo. The package comment on
+// runAgainstAllBackends still states the actual invariant — subtests
+// never run in parallel today, so there's exactly one live fixture at a
+// time — but that invariant lives in a comment, and the next reasonable
+// change to a three-live-database suite is t.Parallel() to cut wall-clock
+// time, which would make an unguarded map write race silently (invisible
+// without -race). The lock costs nothing today and turns tomorrow's
+// silent race into tomorrow's ordinary, expected synchronization (Nolan
+// Reyes, PR #16 review).
+var (
+	fixtureByRepoMu sync.Mutex
+	fixtureByRepo   = map[dao.Repository]fixture{}
+)
 
-func registerFixture(fx fixture) { fixtureByRepo[fx.repo] = fx }
+func registerFixture(fx fixture) {
+	fixtureByRepoMu.Lock()
+	defer fixtureByRepoMu.Unlock()
+	fixtureByRepo[fx.repo] = fx
+}
 
 func fixtureFor(t *testing.T, repo dao.Repository) fixture {
 	t.Helper()
+	fixtureByRepoMu.Lock()
 	fx, ok := fixtureByRepo[repo]
+	fixtureByRepoMu.Unlock()
 	if !ok {
 		t.Fatal("fixtureFor: no fixture registered for this repo — internal test-helper bug")
 	}
@@ -54,7 +73,17 @@ func seededMethodIDFor(t *testing.T, repo dao.Repository) string {
 	return m.ID
 }
 
-var authMethodCounter int
+var (
+	authMethodCounterMu sync.Mutex
+	authMethodCounter   int
+)
+
+func nextAuthMethodCounter() int {
+	authMethodCounterMu.Lock()
+	defer authMethodCounterMu.Unlock()
+	authMethodCounter++
+	return authMethodCounter
+}
 
 // createAuthMethod inserts a new auth_method row directly against the
 // backend's admin connection, since AuthMethodRepository is read-only per
@@ -63,8 +92,7 @@ var authMethodCounter int
 func createAuthMethod(t *testing.T, repo dao.Repository, namePrefix string, requiresSecret bool) (string, error) {
 	t.Helper()
 	fx := fixtureFor(t, repo)
-	authMethodCounter++
-	name := fmt.Sprintf("%s-%d", namePrefix, authMethodCounter)
+	name := fmt.Sprintf("%s-%d", namePrefix, nextAuthMethodCounter())
 
 	id := uuid.NewString()
 	var query string
@@ -106,6 +134,24 @@ func countProfiles(t *testing.T, repo dao.Repository) int {
 	var n int
 	if err := fx.admin.QueryRow("SELECT COUNT(*) FROM user_profile").Scan(&n); err != nil {
 		t.Fatalf("counting user_profile rows: %v", err)
+	}
+	return n
+}
+
+// countDeletionLogRowsForProfile returns the number of deletion_log rows
+// naming profileID — the out-of-interface check TestConformance_
+// DeleteWritesExactlyOneDeletionLogRow needs, since neither DeleteProfile
+// nor DeleteExpired returns a row count for its own log write.
+func countDeletionLogRowsForProfile(t *testing.T, repo dao.Repository, profileID string) int {
+	t.Helper()
+	fx := fixtureFor(t, repo)
+	query := "SELECT COUNT(*) FROM deletion_log WHERE profile_id = $1"
+	if fx.driver == "sqlite" {
+		query = "SELECT COUNT(*) FROM deletion_log WHERE profile_id = ?"
+	}
+	var n int
+	if err := fx.admin.QueryRow(query, profileID).Scan(&n); err != nil {
+		t.Fatalf("counting deletion_log rows for %s: %v", profileID, err)
 	}
 	return n
 }
