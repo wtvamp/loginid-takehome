@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"net/http"
 	"time"
 
@@ -27,16 +28,22 @@ const jwksCacheTTL = 15 * time.Minute
 // crash-looping the whole process when the DAO repository couldn't be
 // constructed at startup (no DB_DRIVER/DB_DSN yet, e.g. before the
 // database exists in this environment). /healthz must stay reachable
-// regardless (LT-34's live-URL story; LT-52 is what teaches /healthz to
-// actually report DB status, not this function); the two protected
-// routes fail closed with 503 instead of panicking on a nil Repository
-// or silently pretending to work. This is a startup-shape decision, not
-// an ongoing health check — a repo that stops answering after a
-// successful open is /healthz's job to surface (LT-52), not this
-// router's.
-func NewVerifierRouter(cfg config.Config, repo dao.Repository) http.Handler {
+// regardless (LT-34's live-URL story); the two protected routes fail
+// closed with 503 instead of panicking on a nil Repository or silently
+// pretending to work.
+//
+// pingDB (LT-52 criterion 5) is a separate, lightweight *sql.DB used
+// only for /healthz's bounded connectivity probe — deliberately not the
+// dao.Repository above, since 05's Repository contract exposes no Ping
+// and this story has no reason to ask for one just for a health check.
+// pingDB may be nil (same startup-failure path as repo above); either
+// way /healthz keeps reporting "status":"ok" and "db":"down" rather
+// than going unreachable — a DB outage is this router's problem to fail
+// the two DB-backed routes closed on, not a reason to take the whole
+// process's liveness probe down with it.
+func NewVerifierRouter(cfg config.Config, repo dao.Repository, pingDB *sql.DB) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthHandler("api-service"))
+	mux.HandleFunc("/healthz", healthHandlerWithDB("api-service", pingDB))
 
 	auditLog := api.StdoutAuditLogger{}
 	keys := api.NewJWKSCache(cfg.AuthJWKSURL, jwksCacheTTL, nil)
