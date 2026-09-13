@@ -1,0 +1,9 @@
+# One-time, out-of-band bootstrap — applied by hand alongside deploy/rbac.yaml
+# and the runner-set helm install, never by CI. Contains exactly what needs a
+# cluster-scoped verb the loginid-takehome-deployer ServiceAccount correctly
+# does not have (deploy/rbac.yaml is namespace-scoped by design). Everything
+# else the deploy actually manages lives in deploy/manifests.yaml, which CI
+# applies on every merge to main.
+apiVersion: v1
+kind: Namespace
+metadata: {name: loginid-takehome}
