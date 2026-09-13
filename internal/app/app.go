@@ -7,6 +7,7 @@ package app
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -22,14 +23,24 @@ type healthResponse struct {
 	Build   string `json:"build"`
 }
 
-// ModeVerifier and ModeIssuer are api-service's two run modes (LT-32),
-// selected by config.Config.AppMode and passed to NewRouter by cmd/
-// api-service/main.go. idp-connector has no issuer/verifier split — its
-// main.go passes ModeVerifier, the only mode that adds no route beyond
-// /healthz, since that value is also this package's harmless default.
+// Mode is api-service's run mode (LT-32). A defined type rather than a
+// bare string so NewRouter's switch below can have a real default case —
+// config.Load already validates APP_MODE to exactly "verifier"/"issuer"
+// before it reaches here, but NewRouter must not depend on that: the whole
+// point of this story is that a misconfiguration is loud, not silently
+// downgraded, and a router that quietly falls back to verifier behavior on
+// any unrecognized value (a case-mismatch, a stray space) is the same
+// failure class one layer up (Oren Castellan, PR #18 review).
+type Mode string
+
+// ModeVerifier and ModeIssuer are api-service's two run modes, selected by
+// config.Config.AppMode and passed to NewRouter by cmd/api-service/main.go.
+// idp-connector has no issuer/verifier split — its main.go passes
+// ModeVerifier, the only mode that adds no route beyond /healthz, since
+// that value is also this package's harmless default.
 const (
-	ModeVerifier = "verifier"
-	ModeIssuer   = "issuer"
+	ModeVerifier Mode = "verifier"
+	ModeIssuer   Mode = "issuer"
 )
 
 // NewRouter builds the http.Handler shared by both binaries' main.go.
@@ -45,11 +56,24 @@ const (
 // scope, not this story's (refinement/LT-32.md's non-goals) — this only
 // proves the wiring exists and is reachable on the Deployment that is
 // supposed to have it, and absent on the one that isn't.
-func NewRouter(service string, mode string) http.Handler {
+//
+// An unrecognized mode logs loudly and falls back to the verifier route
+// set — the safer of the two failure directions (an issuer Deployment
+// stuck without its route is externally visible as 404s on /auth/token,
+// while a verifier Deployment that accidentally grew the issuer route
+// would be the actual security regression this story exists to prevent)
+// — rather than panicking a running server over a value config.Load
+// should already have rejected before this ever runs.
+func NewRouter(service string, mode Mode) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler(service))
-	if mode == ModeIssuer {
+	switch mode {
+	case ModeIssuer:
 		mux.HandleFunc("/auth/token", issuerPlaceholderHandler)
+	case ModeVerifier:
+		// no additional routes
+	default:
+		log.Printf("app: NewRouter called with unrecognized mode %q — serving verifier routes only", mode)
 	}
 	return mux
 }

@@ -99,14 +99,22 @@ func Load() (Config, error) {
 }
 
 // resolveSigningKeyPath enforces LT-32's issuer-mode requirement: in
-// "issuer" mode, JWT_SIGNING_KEY_FILE must name a file this process can
-// actually open, checked now rather than left for whatever code first
-// tries to sign a token — a startup failure here is the only thing that
-// distinguishes "issuer mode with no key" from "issuer mode with a key",
-// and the whole point of the physical-absence criterion is that those two
-// must never be confused for one another. In "verifier" mode the variable
-// is not read at all: the verifying binary has no legitimate use for a
-// signing-key path, set or not.
+// "issuer" mode, JWT_SIGNING_KEY_FILE must name a regular file this
+// process can actually read at least one byte of, checked now rather than
+// left for whatever code first tries to sign a token — a startup failure
+// here is the only thing that distinguishes "issuer mode with no key"
+// from "issuer mode with a key", and the whole point of the
+// physical-absence criterion is that those two must never be confused for
+// one another. In "verifier" mode the variable is not read at all: the
+// verifying binary has no legitimate use for a signing-key path, set or
+// not.
+//
+// This checks openable-and-non-empty at startup, not "will still be a
+// valid key when S7 reads it" — a Secret rotated to empty or a volume
+// re-provisioned later isn't something a one-time startup check can see
+// (Nolan Reyes, PR #18 review). That's S7's problem to solve when it
+// exists, not this story's: LT-32 only owns making a *missing* key loud
+// at startup, not monitoring a *present* key's ongoing validity.
 func resolveSigningKeyPath(appMode string) (string, error) {
 	if appMode != "issuer" {
 		return "", nil
@@ -115,11 +123,33 @@ func resolveSigningKeyPath(appMode string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("config: APP_MODE=issuer requires JWT_SIGNING_KEY_FILE to be set")
 	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("config: APP_MODE=issuer set but JWT_SIGNING_KEY_FILE %q is not accessible: %w", path, err)
+	}
+	// os.Open succeeds on a directory as readily as on a regular file —
+	// no error, nothing distinguishing the two. JWT_SIGNING_KEY_FILE
+	// pointed at a mount directory instead of the file inside it (an easy
+	// Kubernetes subPath-vs-mount-root mistake, and exactly the class of
+	// misconfiguration this story exists to catch) would otherwise pass
+	// this check and only fail later, whenever S7's signing code first
+	// tries to read it — deferring the failure this check exists to make
+	// immediate (Oren Castellan, PR #18 review).
+	if fi.IsDir() {
+		return "", fmt.Errorf("config: APP_MODE=issuer set but JWT_SIGNING_KEY_FILE %q is a directory, not a file", path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("config: APP_MODE=issuer set but JWT_SIGNING_KEY_FILE %q is not readable: %w", path, err)
 	}
-	_ = f.Close()
+	defer func() { _ = f.Close() }()
+	// Read one byte rather than open-close: an empty file (a Secret
+	// mounted but never populated) opens without error and would
+	// otherwise pass silently.
+	var buf [1]byte
+	if _, err := f.Read(buf[:]); err != nil {
+		return "", fmt.Errorf("config: APP_MODE=issuer set but JWT_SIGNING_KEY_FILE %q is empty or unreadable: %w", path, err)
+	}
 	return path, nil
 }
 
