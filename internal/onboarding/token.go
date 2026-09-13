@@ -142,6 +142,15 @@ func NewTokenSource(client TokenClient, clientID, clientSecret string) (*TokenSo
 // client_id/secret rejected, or the token endpoint itself unreachable)
 // — separate from a downstream connector-unreachable failure, per this
 // story's own criterion that the two must not be lumped together.
+//
+// Known simplification, not an oversight (Oren Castellan's review, PR
+// #54): the lock is released between the cache-read check and the
+// fetch-and-write below, so several goroutines racing Token() right as
+// the cached token crosses refreshMargin can each decide to fetch and
+// all call FetchToken concurrently — a thundering herd, never a
+// correctness bug (every write is a valid, idempotent last-write-wins;
+// no goroutine can ever read a torn value). Not worth a
+// singleflight-style dedup at this take-home's scale.
 func (s *TokenSource) Token(ctx context.Context) (string, error) {
 	s.mu.Lock()
 	if s.cached != "" && time.Now().Before(s.expiry.Add(-refreshMargin)) {
