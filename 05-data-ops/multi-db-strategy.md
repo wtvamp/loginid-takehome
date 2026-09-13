@@ -431,6 +431,12 @@ A blanket rule breaks three methods, so the rule names its parameters:
 4. **(A6)** The same phone string is accepted or rejected identically by every backend's `ck_user_profile_phone_e164` — the boundary cases are what matter, so assert at 6, 7, 15 and 16 digits.
 5. **(A6)** Two usernames differing only by **ASCII** case collide on every backend, and `GetByUsername` finds a row regardless of the case the caller supplies.
 
+**Forward requirement — credential verification, for whenever it is built.** There is deliberately no password-verification code in this system today: `user_credential` is pure storage and the API authenticates by JWT. This is therefore a requirement on code that does not yet exist, not an assertion that can be written now.
+
+**Any future credential-verification helper must treat `secret_state != 'set'` as no-match, and must never panic or error on a nil `Secret`.** A credential with `secret_state = 'none'` is a legitimate, reachable state — one of the three the column exists to separate — and the review fixtures in `deploy/demo-data/` create exactly such rows. A verifier that reaches a hash comparison with a nil secret can panic, can surface a driver error, or worst can treat an empty comparison as a match, which would let an un-provisioned credential authenticate.
+
+**The conformance assertion is added with the first story that introduces such a helper**, not before — an assertion about a function nobody has written is a test that cannot run. Recorded here so the requirement outlives the conversation it came from.
+
 The first two together prove the distinction is syntactic rather than existential. **The third is what tests the defect this amendment was revised to fix** — without it, the uppercase-hex divergence is untested and A4 would have shipped its own bug.
 
 ### The write-path retry seam — a decision, not an observation
