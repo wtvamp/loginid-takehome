@@ -46,6 +46,13 @@ rules:
     # deploy workflow deletes the previous db-migrate Job before
     # re-applying one with a new image tag on every deploy (LT-52).
     verbs: [get, list, watch, create, delete]
+  - apiGroups: ["batch"]
+    # LT-44's retention-sweep CronJob. update/patch (not delete) since a
+    # CronJob's own template isn't immutable the way a bare Job's is —
+    # `kubectl apply` can update it in place on every deploy, no
+    # delete-then-recreate dance needed.
+    resources: [cronjobs]
+    verbs: [get, list, watch, create, update, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

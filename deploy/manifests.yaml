@@ -62,13 +62,17 @@ spec:
   # per-pod state; a 12-request burst passed a 10 req/min limit because
   # the load balancer split it across two pods, each with its own
   # independent counter. Both reductions only tighten headroom further,
-  # never loosen it, so the numbers below are unchanged, now with more
-  # margin than shown):
-  #   requests.cpu:    550m existing + postgres 100m + migrate 50m  = 700m  (limit "1" = 1000m, fits)
-  #   requests.memory: 704Mi existing + postgres 256Mi + migrate 64Mi = 1024Mi (was AT the 1Gi limit already — bumped to 2Gi for real headroom)
-  #   limits.cpu:      2750m existing + postgres 500m + migrate 200m = 3450m (was "3" = 3000m — bumped to "4")
-  #   limits.memory:   1408Mi existing + postgres 512Mi + migrate 128Mi = 2048Mi (was AT the 2Gi limit — bumped to 3Gi)
-  #   pods: 6 existing + postgres 1 + migrate 1 (transient) = 8, fits under 10
+  # never loosen it. LT-44 adds one more transient pod (retention-sweep,
+  # 100m/128Mi requests, 500m/256Mi limits) — same shape as the
+  # migration Job, never running concurrently with anything unusual
+  # since it's a daily off-peak CronJob, not a per-deploy one):
+  #   requests.cpu:    700m existing (incl. postgres+migrate) + sweep 100m = 800m  (limit "1" = 1000m, fits)
+  #   requests.memory: 1024Mi existing + sweep 128Mi = 1152Mi (limit 2Gi, fits)
+  #   limits.cpu:      3450m existing + sweep 500m = 3950m (limit "4" = 4000m — fits, but only 50m of
+  #                    headroom left; the NEXT thing added here needs to either bump this limit or trim
+  #                    an existing one, not assume there's still room)
+  #   limits.memory:   2048Mi existing + sweep 256Mi = 2304Mi (limit 3Gi, fits)
+  #   pods: 8 existing (incl. postgres+migrate transient) + sweep 1 (transient) = 9, fits under 10
   # Shown here, not discovered as a second FailedCreate, per the standing
   # checklist in containerization-design.md §5a.
   #
@@ -710,3 +714,88 @@ spec:
           # middleware. JWKS (/.well-known/jwks.json) deliberately has NO
           # rule here — in-cluster only, per handoff-03-auth v6.
           - {path: /profiles, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}
+---
+# LT-44 (S11): retention sweep. Own ServiceAccount, per the same
+# one-workload-one-identity discipline Amber's LT-46 provisioning
+# established for postgres/db-migrate/idp-connector — this pod reads
+# the same db-runtime-credential DSN api-service already does (Renata
+# confirmed the sweep needs nothing else: DeleteExpired/DeleteProfile
+# run under the runtime role, which already has DELETE per
+# 01-create-roles.sh's ALTER DEFAULT PRIVILEGES grant), but it's a
+# distinct workload on a distinct schedule, not the same pod — sharing
+# api-service's own ServiceAccount would mean either identity could
+# authenticate to Vault as the other.
+#
+# TODO(LT-44, blocked on Amber): this needs a sixth Vault
+# Kubernetes-auth role, loginid-takehome-retention-sweep, bound to the
+# retention-sweep ServiceAccount below, read-only on the EXISTING
+# secret/loginid-takehome/db-runtime-credential path (no new KV entry —
+# same credential api-service's own role already reads). Vault
+# annotations aren't added here yet for the same reason as everywhere
+# else in this file before Amber's names landed: a fabricated role
+# name is worse than an obviously-missing one.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: retention-sweep, namespace: loginid-takehome}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: retention-sweep, namespace: loginid-takehome}
+spec:
+  # Daily, 03:00 UTC — off-peak for this take-home's traffic pattern,
+  # comfortably inside all three retention windows (shortest is
+  # idp_cache_orphan's 7 days) so a missed day or two from
+  # concurrencyPolicy: Forbid skipping an overrun doesn't risk the
+  # alert rule's own tolerance (retention_window_seconds +
+  # sweep_interval_seconds in observability.md's alert expression:
+  # sweep_interval_seconds = 86400 for this schedule).
+  schedule: "0 3 * * *"
+  # Forbid, not the Kubernetes default Allow — per Tobias's (01)
+  # objection on refinement/LT-44.md: a slow first-ever sweep (no
+  # prior-run history, a possible real backlog across all three
+  # classes) could otherwise overlap with its own next scheduled
+  # invocation, recreating the exact "two schedulers hit the same
+  # tables concurrently" risk already solved once for the migration Job
+  # (LT-45) and carried forward here. A skipped-due-to-overlap run is
+  # NOT silently invisible: Kubernetes' own CronJob controller emits a
+  # Warning event with reason JobAlreadyActive
+  # ("Not starting job because prior execution is running and
+  # concurrency policy is Forbid"), visible via `kubectl describe
+  # cronjob retention-sweep` / `kubectl get events` — verified this is
+  # real, documented controller behavior before relying on it, not
+  # assumed. startingDeadlineSeconds bounds how long a skipped tick
+  # waits to retry before Kubernetes gives up on it entirely, per the
+  # documented interaction between Forbid and this field.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 900
+  jobTemplate:
+    spec:
+      # No backoffLimit override (defaults to 6) and no explicit
+      # activeDeadlineSeconds — a stuck sweep should retry like any
+      # other Job, not be treated as a fixed-duration batch the way the
+      # migration Job's own backoffLimit: 2 was tuned for a
+      # fail-fast-on-schema-error case; this story doesn't have that
+      # same reasoning to import.
+      template:
+        metadata: {labels: {app: retention-sweep}}
+        spec:
+          serviceAccountName: retention-sweep
+          securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
+          restartPolicy: Never
+          containers:
+            - name: retention-sweep
+              # Same image as api-service, different APP_MODE — per
+              # refinement/LT-44.md's explicit non-goal ("no new
+              # container image"), matching team-lead's "half-day
+              # story" framing. PR #55 (03) wires APP_MODE=sweep to run
+              # the DeleteExpired loop once per class until Drained,
+              # then exit — never http.ListenAndServe.
+              image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
+              securityContext: {readOnlyRootFilesystem: true}
+              resources:
+                requests: {cpu: "100m", memory: "128Mi"}
+                limits: {cpu: "500m", memory: "256Mi"}
+              env:
+                - {name: APP_MODE, value: sweep}
+                - {name: DB_DRIVER, value: postgres}
+                - {name: DB_DSN_FILE, value: /secrets/db/dsn}
