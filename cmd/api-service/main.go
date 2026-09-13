@@ -94,12 +94,14 @@ func validateAuthConfig(mode app.Mode) error {
 // own outbound call to cmd/idp-connector — from cfg's already-resolved
 // fields. Returns an error, not a Fatal-worthy one, when
 // CONNECTOR_CLIENT_ID/SECRET or the two connector-related URLs aren't
-// configured yet: unlike auth verification, this is a new capability
-// with no existing traffic depending on it, so main() logs and starts
-// up without it (the same "fail this one capability closed, not the
-// whole binary" precedent NewVerifierRouter's own nil-repo handling
-// already sets), rather than crash-looping api-service over a story
-// that may not have its manifest wiring in place yet.
+// configured yet: this is a new capability with no existing traffic
+// depending on it and, as of this story, no handler that calls it at
+// all — its one caller in main() below uses this purely as a
+// startup-time config smoke test, discarding the returned *Service, so
+// there is nothing here for a Fatal to protect yet. Once a real
+// onboarding-flow handler consumes this, that handler's own call sites
+// are where a request-time failure actually matters, not this
+// constructor.
 func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
 	if cfg.IssuerTokenURL == "" {
 		return nil, fmt.Errorf("ISSUER_TOKEN_URL must be set")
@@ -178,17 +180,23 @@ func main() {
 		}
 
 		// LT-33: api-service's own outbound call to cmd/idp-connector.
-		// No public route consumes this yet (no assignment question asks
+		// Constructed here ONLY as a startup-time config smoke test — no
+		// handler exists yet that calls it (no assignment question asks
 		// for an onboarding endpoint, and this story's own non-goals rule
-		// one out) — constructed here so misconfiguration is visible at
-		// startup, and available to whatever onboarding-flow handler is
-		// added later. Best-effort like repo/pingDB above: this
-		// capability not being ready yet must not crash-loop the whole
-		// verifying Deployment.
+		// one out), so the constructed *onboarding.Service below is
+		// deliberately discarded, not stored anywhere reachable. This is
+		// NOT the same pattern as repo/pingDB above: those two ARE
+		// consumed by NewVerifierRouter's handlers; this exists only so
+		// a missing/malformed CONNECTOR_CLIENT_ID, ISSUER_TOKEN_URL, etc.
+		// is visible in this process's own log the moment it starts,
+		// rather than only when a future onboarding-flow handler first
+		// tries to use it (Oren Castellan's review, PR #54: the original
+		// "ready" wording here overstated this — nothing is actually
+		// wired to use it yet).
 		if _, err := newOnboardingService(cfg); err != nil {
-			log.Printf("api-service: onboarding (LT-33) connector integration not available: %v", err)
+			log.Printf("api-service: onboarding (LT-33) config check failed, no consumer wired yet: %v", err)
 		} else {
-			log.Printf("api-service: onboarding (LT-33) connector integration ready")
+			log.Printf("api-service: onboarding (LT-33) config check passed, no consumer wired yet")
 		}
 
 		handler = app.NewVerifierRouter(cfg, repo, pingDB)
