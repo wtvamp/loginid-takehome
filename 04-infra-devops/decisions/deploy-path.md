@@ -41,6 +41,10 @@ Following the cluster's existing, uniform pattern rather than inventing a new on
 - A namespace-level `ResourceQuota` added as a backstop.
 - Everything else (two Deployments, the issuer split, `NetworkPolicy`, resource limits per container, the migration `Job`) is unchanged — those were designed correctly for "shared infrastructure, isolate aggressively" even under the earlier, wrong assumption that this was a private sandbox.
 
+## 5a. Deploy stage: full auto-deploy on merge, no manual gate
+
+For this take-home's scale, the merge-to-main workflow deploys automatically — no manual approval gate on the actual deploy step. Recorded here (not just in chat to Naomi/01) since it changes LT-47's acceptance criterion from "documented but not invoked" (the design-phase framing) to "invoked on every merge."
+
 ## 6. CI/CD sequencing (per team-lead's split)
 
 The PR-check workflow (lint, build, `-race` tests, `govulncheck`) needs none of the above and ships first, on GitHub-hosted runners — no cluster access required. The merge-to-main workflow (build+push images to GHCR, apply manifests via the new scoped runner set, print the public URL + commit SHA in the job summary) follows once the runner set and namespace exist. Both live at `.github/workflows/` at the repo root.
