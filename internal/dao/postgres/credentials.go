@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 
 	"loginid-takehome/internal/dao"
 	"loginid-takehome/internal/model"
@@ -26,10 +25,17 @@ func scanCredential(scan func(dest ...any) error) (*model.UserCredential, error)
 	return &c, nil
 }
 
-// GetByUsername lower-cases its input inside the DAO, matching the UNIQUE
-// on lower(username) index — callers pass whatever the user typed.
+// GetByUsername case-folds entirely in SQL — LOWER(username) = LOWER($1)
+// is the same expression that builds uq_user_credential_username's index,
+// so index and lookup agree by construction within this backend. Folding
+// in Go first (removed here, contract amendment A6) gave the same
+// uniqueness guarantee two different ways that could disagree, not one:
+// Go's strings.ToLower is Unicode-aware, Postgres's lower() is
+// locale-aware, and neither is guaranteed to agree with the other on
+// non-ASCII input — folding in Go was redundant on ASCII and wrong to
+// trust on anything else.
 func (cr credentialRepo) GetByUsername(ctx context.Context, username string) (*model.UserCredential, error) {
-	row := cr.r.db.QueryRowContext(ctx, "SELECT "+credentialColumns+" FROM user_credential WHERE LOWER(username) = LOWER($1)", strings.ToLower(username))
+	row := cr.r.db.QueryRowContext(ctx, "SELECT "+credentialColumns+" FROM user_credential WHERE LOWER(username) = LOWER($1)", username)
 	return scanCredential(row.Scan)
 }
 
