@@ -723,6 +723,34 @@ spec:
         - {podSelector: {matchLabels: {app: idp-connector}}}
         - {namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}
 ---
+# LT-49: api-service had NO NetworkPolicy at all before this — reachable
+# from anything in the namespace, matching Amber's observability
+# inventory note ("api-service currently has no policy, so it's
+# reachable"). Adding the metrics-scrape rule for Prometheus means
+# adding a policy at all, which (per NetworkPolicy semantics) switches
+# this pod from default-allow to default-deny-except-listed — so the
+# public Ingress path (ingress-nginx -> :8080) has to be named
+# explicitly here too, or this change would silently break the live
+# site while only intending to admit a metrics scrape.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: api-service-default-deny, namespace: loginid-takehome}
+spec:
+  podSelector: {matchLabels: {app: api-service}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - {namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}
+      ports: [{protocol: TCP, port: 8080}]
+    # Prometheus's own scrape traffic — ClusterRole grants it cluster-wide
+    # get/list/watch on pods/services/endpoints already (Amber's
+    # inventory); this is the ingress half letting the scrape actually
+    # reach the pod. Metrics port only, nothing else admitted from
+    # ns=monitoring.
+    - from:
+        - {namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}
+      ports: [{protocol: TCP, port: 9101}]
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -886,3 +914,115 @@ spec:
                 # *, I = 24h) so the log says the real interval instead
                 # of "unset".
                 - {name: SWEEP_INTERVAL_SECONDS, value: "86400"}
+---
+# LT-49: ServiceMonitor for api-service's /metrics port, per Amber's
+# observability inventory. release: prometheus is the exact label the
+# Prometheus CR's serviceMonitorSelector matches (empty
+# serviceMonitorNamespaceSelector means every namespace is already
+# watched) — adopted with no edit to the Prometheus CR or any object
+# in ns monitoring. No namespaceSelector needed here: an omitted one
+# defaults to this object's own namespace, which is exactly the
+# api-service Service it targets.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: loginid-takehome-api-service
+  namespace: loginid-takehome
+  labels: {release: prometheus}
+spec:
+  selector: {matchLabels: {app: api-service}}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+# LT-49: retention-sweep alert rules, per Priya's (05) three-rule
+# ruling in refinement/LT-49.md — none suppressing another. Same
+# release: prometheus adoption mechanism as the ServiceMonitor above.
+# I (sweep_interval_seconds) = 86400 (schedule "17 3 * * *"); W per
+# class from pii-governance.md (direct: 24mo/730d, idp_cache: 30d,
+# idp_cache_orphan: 7d). If the CronJob's schedule ever changes, I
+# here must change with it — Priya's own note: "If I changes, rules 1
+# and 2 both change," which is why these are written as literal
+# second values derived from I/W rather than hand-simplified, so the
+# arithmetic stays checkable against her table.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loginid-takehome-retention
+  namespace: loginid-takehome
+  labels: {release: prometheus}
+spec:
+  groups:
+    - name: loginid-takehome-retention
+      rules:
+        # Rule 1 — RetentionSweepNotReporting, per class. Fires when no
+        # fresh sample in > 2I (172800s). A single Forbid-skip produces
+        # a gap of exactly 2I and does not fire (Priya's stated grace
+        # for that case); two consecutive skips (3I) does fire, as does
+        # a genuinely dead sweep. Reads the always-up api-service's own
+        # gauge, never the CronJob pod directly (Amber's finding: a
+        # short-lived pod can't be reliably scraped at all).
+        - alert: RetentionSweepNotReporting
+          expr: time() - retention_sweep_last_success_timestamp_seconds{class="direct"} > 172800
+          labels: {severity: warning, class: direct}
+          annotations: {summary: "retention sweep has not reported a successful run for class=direct in over 2 intervals"}
+        - alert: RetentionSweepNotReporting
+          expr: time() - retention_sweep_last_success_timestamp_seconds{class="idp_cache"} > 172800
+          labels: {severity: warning, class: idp_cache}
+          annotations: {summary: "retention sweep has not reported a successful run for class=idp_cache in over 2 intervals"}
+        - alert: RetentionSweepNotReporting
+          expr: time() - retention_sweep_last_success_timestamp_seconds{class="idp_cache_orphan"} > 172800
+          labels: {severity: warning, class: idp_cache_orphan}
+          annotations: {summary: "retention sweep has not reported a successful run for class=idp_cache_orphan in over 2 intervals"}
+
+        # Rule 2 — RetentionWindowExceeded, per class. W + 2I. The first
+        # I is legitimate lag (a row becomes eligible just after one
+        # sweep, waits a full interval for the next); the second
+        # absorbs one skipped run. Assumes sweep duration D < I — if D
+        # approaches I, rule 3 is the real signal, per Priya's own note.
+        - alert: RetentionWindowExceeded
+          expr: oldest_surviving_row_age_seconds{class="direct"} > 63244800
+          labels: {severity: warning, class: direct}
+          annotations: {summary: "oldest surviving direct row exceeds its 24-month retention window plus two sweep intervals"}
+        - alert: RetentionWindowExceeded
+          expr: oldest_surviving_row_age_seconds{class="idp_cache"} > 2764800
+          labels: {severity: warning, class: idp_cache}
+          annotations: {summary: "oldest surviving idp_cache row exceeds its 30-day retention window plus two sweep intervals"}
+        - alert: RetentionWindowExceeded
+          expr: oldest_surviving_row_age_seconds{class="idp_cache_orphan"} > 777600
+          labels: {severity: warning, class: idp_cache_orphan}
+          annotations: {summary: "oldest surviving idp_cache_orphan row exceeds its 7-day retention window plus two sweep intervals"}
+
+        # Rule 3 — RetentionSweepSkipRate, low-severity early warning.
+        # Consumes LT-44's skip-visibility signal as evidence in its own
+        # right, never as a suppression term on rules 1/2 (Priya's
+        # explicit ruling: suppressing on a skip signal is the same
+        # error as alerting on the mechanism instead of the property,
+        # and would let a chronically-overrunning sweep silence itself
+        # forever). severity: warning, not info — Alertmanager's route
+        # tree sends severity=info to the null receiver (Amber's
+        # inventory finding); info here would mean this alert can never
+        # actually be delivered.
+        #
+        # Deviation from Priya's literal wording, flagged rather than
+        # silently resolved: her ruling says "over a rolling day," but
+        # at I=86400s (this CronJob's real schedule) a rolling day
+        # contains at most one scheduled run, making a 25% threshold
+        # structurally near-meaningless (0% or 100%, nothing between).
+        # Widened to a rolling 7d window (~7 expected runs at this
+        # cadence) so the threshold has room to mean something —
+        # Priya/Naomi should confirm this widening is the right call
+        # for LT-49's Done criteria, not assumed settled here.
+        - alert: RetentionSweepSkipRate
+          expr: increase(retention_sweep_skipped_total{class="direct"}[7d]) / 7 > 0.25
+          labels: {severity: warning, class: direct}
+          annotations: {summary: "retention sweep for class=direct has been skipped more than ~25% of its scheduled runs over the trailing week"}
+        - alert: RetentionSweepSkipRate
+          expr: increase(retention_sweep_skipped_total{class="idp_cache"}[7d]) / 7 > 0.25
+          labels: {severity: warning, class: idp_cache}
+          annotations: {summary: "retention sweep for class=idp_cache has been skipped more than ~25% of its scheduled runs over the trailing week"}
+        - alert: RetentionSweepSkipRate
+          expr: increase(retention_sweep_skipped_total{class="idp_cache_orphan"}[7d]) / 7 > 0.25
+          labels: {severity: warning, class: idp_cache_orphan}
+          annotations: {summary: "retention sweep for class=idp_cache_orphan has been skipped more than ~25% of its scheduled runs over the trailing week"}
