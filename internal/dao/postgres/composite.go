@@ -104,12 +104,12 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 		for rows.Next() {
 			var id string
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return translateError(err)
 			}
 			ids = append(ids, id)
 		}
-		rows.Close()
+		_ = rows.Close()
 		if err := rows.Err(); err != nil {
 			return translateError(err)
 		}

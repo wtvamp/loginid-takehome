@@ -44,7 +44,7 @@ func (ar authMethodRepo) List(ctx context.Context, activeOnly bool) ([]model.Aut
 	if err != nil {
 		return nil, translateError(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []model.AuthMethod
 	for rows.Next() {

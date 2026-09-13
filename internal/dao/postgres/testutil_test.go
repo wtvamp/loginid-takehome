@@ -48,7 +48,7 @@ func setupDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("opening TEST_POSTGRES_DSN: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	// Cap the pool at one connection BEFORE anything session-scoped
 	// (SET search_path) runs — otherwise the migration or a later test
@@ -61,7 +61,7 @@ func setupDB(t *testing.T) *sql.DB {
 		t.Fatalf("creating test schema: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Exec("DROP SCHEMA " + schemaName + " CASCADE")
+		_, _ = db.Exec("DROP SCHEMA " + schemaName + " CASCADE")
 	})
 	// Include "public" on the path: pg_trgm's CREATE EXTENSION IF NOT
 	// EXISTS in the migration is a no-op after the first test schema

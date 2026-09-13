@@ -193,11 +193,10 @@ func TestIntegration_SearchInvalidQuery(t *testing.T) {
 }
 
 func TestIntegration_CredentialCRUDAndErrorTranslation(t *testing.T) {
-	repo := newTestRepo(t)
 	ctx := context.Background()
 	db := setupDB(t)
 	methodID := seedAuthMethodID(t, db)
-	repo = &repository{db: db, engine: enginePostgres}
+	repo := &repository{db: db, engine: enginePostgres}
 
 	profile := mustCreateProfile(t, ctx, repo, "Cred Owner")
 
