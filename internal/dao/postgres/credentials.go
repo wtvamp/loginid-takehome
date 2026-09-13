@@ -51,6 +51,33 @@ func (cr credentialRepo) ListByUserID(ctx context.Context, userID string) ([]mod
 	return results, rows.Err()
 }
 
+// validateMethod enforces two guarantees a CHECK constraint cannot,
+// because CHECK cannot reference another table (multi-db-strategy.md §6
+// items 10 and 11 — both named as the two weakest enforcement sites in
+// the contract for exactly this reason):
+//   - is_active: a deactivated method must not accept new credentials
+//     (existing credentials against it are unaffected — this only gates
+//     Create/method-reassignment, never invalidates what already exists).
+//   - requires_secret ↔ secret_state: a credential whose method has
+//     requires_secret = false must not carry secret_state = 'set'.
+func validateMethod(ctx context.Context, tx *sql.Tx, methodID, secretState string) error {
+	var requiresSecret, isActive bool
+	err := tx.QueryRowContext(ctx, "SELECT requires_secret, is_active FROM auth_method WHERE id = $1", methodID).Scan(&requiresSecret, &isActive)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dao.ErrInvalidMethod
+		}
+		return translateError(err)
+	}
+	if !isActive {
+		return dao.ErrInvalidMethod
+	}
+	if !requiresSecret && secretState == "set" {
+		return dao.ErrInvalidCredential
+	}
+	return nil
+}
+
 func (cr credentialRepo) Create(ctx context.Context, c *model.UserCredential) (*model.UserCredential, error) {
 	if err := dao.ValidateCreateID(c.ID); err != nil {
 		return nil, err
@@ -61,6 +88,9 @@ func (cr credentialRepo) Create(ctx context.Context, c *model.UserCredential) (*
 
 	var created *model.UserCredential
 	err := cr.r.withRetry(ctx, func(tx *sql.Tx) error {
+		if err := validateMethod(ctx, tx, c.MethodID, c.SecretState); err != nil {
+			return err
+		}
 		row := tx.QueryRowContext(ctx, `
 			INSERT INTO user_credential (user_id, username, method_id, secret, secret_state, hash_algo, hash_cost)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -86,6 +116,9 @@ func (cr credentialRepo) Update(ctx context.Context, c *model.UserCredential) (*
 
 	var updated *model.UserCredential
 	err := cr.r.withRetry(ctx, func(tx *sql.Tx) error {
+		if err := validateMethod(ctx, tx, c.MethodID, c.SecretState); err != nil {
+			return err
+		}
 		row := tx.QueryRowContext(ctx, `
 			UPDATE user_credential
 			SET username = $1, method_id = $2, secret = $3, secret_state = $4,

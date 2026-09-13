@@ -42,6 +42,10 @@ func (r *repository) CreateProfileWithCredential(ctx context.Context, p *model.U
 			return err
 		}
 
+		if err := validateMethod(ctx, tx, c.MethodID, c.SecretState); err != nil {
+			return err
+		}
+
 		crow := tx.QueryRowContext(ctx, `
 			INSERT INTO user_credential (user_id, username, method_id, secret, secret_state, hash_algo, hash_cost)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
