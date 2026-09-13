@@ -158,7 +158,8 @@ func runSweepMode(cfg config.Config) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	results := sweep.Run(ctx, repo, time.Now(), sweep.StdoutMetricEmitter{})
+	metrics := sweep.NewPrometheusMetricEmitter()
+	results := sweep.Run(ctx, repo, time.Now(), metrics)
 
 	failed := false
 	for _, r := range results {
@@ -169,6 +170,20 @@ func runSweepMode(cfg config.Config) {
 		}
 		log.Printf("api-service: sweep: class %q drained, examined %d row(s), deleted %d", r.Class, r.RowsExamined, r.RowsDeleted)
 	}
+
+	// Rendered once, after every class has been attempted, so the real
+	// Prometheus-formatted metric lines land together in the pod's
+	// stdout rather than interleaved with the per-class log lines above
+	// — LT-49's agreed mechanism with Theo Bergman (04): stdout via
+	// real client_golang Gauge objects, not a Pushgateway push (none
+	// runs on this cluster; see PrometheusMetricEmitter's own doc
+	// comment). A failure to render is logged but never turns an
+	// otherwise-successful sweep into a failed Job — the metrics are an
+	// observability nicety this run's own success doesn't depend on.
+	if err := metrics.Render(os.Stdout); err != nil {
+		log.Printf("api-service: sweep: writing metrics: %v", err)
+	}
+
 	if failed {
 		os.Exit(1)
 	}
