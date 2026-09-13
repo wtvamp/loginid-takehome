@@ -43,7 +43,7 @@ func (cr credentialRepo) ListByUserID(ctx context.Context, userID string) ([]mod
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []model.UserCredential
+	results := []model.UserCredential{}
 	for rows.Next() {
 		c, err := scanCredential(rows.Scan)
 		if err != nil {

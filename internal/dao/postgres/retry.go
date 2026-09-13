@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math/rand"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -15,6 +17,32 @@ const sqlstateSerializationFailure = "40001"
 
 const maxRetries = 5
 
+// backoffBase/backoffJitter: a small jittered backoff between CockroachDB
+// retries. Nolan Reyes's review (PR #6/#8) flagged zero backoff as a real
+// production risk — colliding transactions retrying in lockstep on the
+// same tick collide again, a pattern he'd seen firsthand (advisory-lock
+// retries synchronized to the millisecond, fixed only once jitter was
+// added). The jitter, not the base delay, is what matters: it's what
+// keeps two colliding retriers from staying in lockstep.
+const (
+	backoffBase   = 5 * time.Millisecond
+	backoffJitter = 15 * time.Millisecond
+)
+
+// backoffSleep is a package var so unit tests can stub it to a no-op —
+// retryLoop's engine-conditional logic is what those tests exercise, not
+// wall-clock timing. Respects ctx: a cancelled context during backoff
+// returns immediately rather than sleeping out the full jittered delay.
+var backoffSleep = func(ctx context.Context, attempt int) error {
+	d := backoffBase + time.Duration(rand.Int63n(int64(backoffJitter)))
+	select {
+	case <-time.After(d):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // withRetry is the unexported helper inside this package that every write
 // method runs its statement inside (§4, "Where the wrapper sits"). It is
 // NOT in the composite and NOT above the interface boundary — it wraps a
@@ -23,14 +51,14 @@ const maxRetries = 5
 // "postgres" it calls fn exactly once. Search never calls this — it's
 // read-only and never encounters 40001 (§4).
 func withRetry(ctx context.Context, db *sql.DB, e engine, fn func(*sql.Tx) error) error {
-	return retryLoop(e, func() error {
+	return retryLoop(ctx, e, func() error {
 		return runOnce(ctx, db, fn)
 	})
 }
 
-// retryLoop is the pure engine-conditional retry policy, separated from
+// retryLoop is the engine-conditional retry policy, separated from
 // transaction management so it's unit-testable without a live *sql.DB.
-func retryLoop(e engine, attempt func() error) error {
+func retryLoop(ctx context.Context, e engine, attempt func() error) error {
 	attempts := 1
 	if e == engineCockroach {
 		attempts = maxRetries
@@ -45,11 +73,14 @@ func retryLoop(e engine, attempt func() error) error {
 		if e != engineCockroach || !isRetryable(lastErr) {
 			return lastErr
 		}
-		// Retryable on CockroachDB: loop and try again. No backoff sleep
-		// here — a serialization failure is not a load signal the way a
-		// connection error is, and 05's contract does not ask for one;
-		// keeping the retry bounded (maxRetries) is what prevents an
-		// unbounded loop.
+		if i < attempts-1 {
+			if err := backoffSleep(ctx, i); err != nil {
+				// Context cancelled during backoff — return the
+				// retryable error we already had, not the cancellation,
+				// so the caller sees why the write actually failed.
+				return lastErr
+			}
+		}
 	}
 	return lastErr
 }

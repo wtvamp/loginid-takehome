@@ -99,47 +99,37 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 
 	var result dao.SweepResult
 	err := r.withRetry(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx,
-			"SELECT id FROM user_profile WHERE "+extraWhere+" AND "+clockColumn+" < $1 LIMIT $2",
-			olderThan, maxRows)
+		// One statement, not a select-then-loop-delete: the DELETE
+		// re-checks the same predicate the candidate SELECT used, so a
+		// row that stops matching between selection and deletion (e.g.
+		// an IDP re-hydration bumping updated_at mid-sweep) is excluded
+		// rather than deleted anyway — closing the TOCTOU race Oren
+		// flagged in review. It also replaces up to maxRows sequential
+		// round-trips with one, per Nolan's review: retrying this whole
+		// statement on a 40001 redoes one query, not thousands.
+		var examined, deleted int
+		err := tx.QueryRowContext(ctx, `
+			WITH candidates AS (
+				SELECT id FROM user_profile
+				WHERE `+extraWhere+` AND `+clockColumn+` < $1
+				LIMIT $2
+			),
+			removed AS (
+				DELETE FROM user_profile
+				WHERE id IN (SELECT id FROM candidates)
+				  AND `+extraWhere+` AND `+clockColumn+` < $1
+				RETURNING id
+			),
+			logged AS (
+				INSERT INTO deletion_log (profile_id, source, reason, external_ref, job_run_id, deleted_at)
+				SELECT id, $3, 'retention_sweep', NULL, NULL, now() FROM removed
+				RETURNING id
+			)
+			SELECT (SELECT count(*) FROM candidates), (SELECT count(*) FROM removed)`,
+			olderThan, maxRows, string(class),
+		).Scan(&examined, &deleted)
 		if err != nil {
 			return translateError(err)
-		}
-		var ids []string
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return translateError(err)
-			}
-			ids = append(ids, id)
-		}
-		_ = rows.Close()
-		if err := rows.Err(); err != nil {
-			return translateError(err)
-		}
-
-		examined := len(ids)
-		deleted := 0
-		for _, id := range ids {
-			res, err := tx.ExecContext(ctx, "DELETE FROM user_profile WHERE id = $1", id)
-			if err != nil {
-				return translateError(err)
-			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return translateError(err)
-			}
-			if n == 0 {
-				continue
-			}
-			deleted++
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO deletion_log (profile_id, source, reason, external_ref, job_run_id, deleted_at)
-				VALUES ($1, $2, 'retention_sweep', NULL, NULL, now())`,
-				id, string(class)); err != nil {
-				return translateError(err)
-			}
 		}
 
 		// OldestSurvivingAt: the clock-column value of the oldest row
@@ -178,24 +168,17 @@ func (r *repository) DeleteProfile(ctx context.Context, id string, externalRef *
 		return err
 	}
 	return r.withRetry(ctx, func(tx *sql.Tx) error {
+		// DELETE ... RETURNING source in one statement rather than a
+		// preceding SELECT — the prior two-statement form had the same
+		// TOCTOU shape Oren flagged on DeleteExpired, just smaller: the
+		// row's source could change between the read and the delete.
 		var source string
-		if err := tx.QueryRowContext(ctx, "SELECT source FROM user_profile WHERE id = $1", id).Scan(&source); err != nil {
+		err := tx.QueryRowContext(ctx, "DELETE FROM user_profile WHERE id = $1 RETURNING source", id).Scan(&source)
+		if err != nil {
 			if err == sql.ErrNoRows {
 				return dao.ErrNotFound
 			}
 			return translateError(err)
-		}
-
-		res, err := tx.ExecContext(ctx, "DELETE FROM user_profile WHERE id = $1", id)
-		if err != nil {
-			return translateError(err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return translateError(err)
-		}
-		if n == 0 {
-			return dao.ErrNotFound
 		}
 
 		if _, err := tx.ExecContext(ctx, `
