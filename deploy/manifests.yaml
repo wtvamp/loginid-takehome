@@ -71,12 +71,38 @@ spec:
   #   pods: 6 existing + postgres 1 + migrate 1 (transient) = 8, fits under 10
   # Shown here, not discovered as a second FailedCreate, per the standing
   # checklist in containerization-design.md §5a.
+  #
+  # HOTFIX (live incident, deploy 34772376569): postgres's StatefulSet
+  # pod FailedCreate — "exceeded quota, requested: requests.cpu=350m"
+  # against the 1000m hard limit, with 750m already used by
+  # api-service/api-service-issuer's Vault-init-container-inflated
+  # pods. Root cause: the Vault Agent Injector's own DEFAULT per-
+  # container resources (requests 250m cpu/64Mi mem, limits 500m
+  # cpu/128Mi mem) were never accounted for in the math above — every
+  # injected workload silently carried an extra 250m cpu request this
+  # comment never priced in, and the default sidecar mode (since
+  # corrected to pre-populate-only, see each workload's own hotfix
+  # comment) meant that 250m was a PERSISTENT container's request, not
+  # a transient init-only one. With this hotfix's explicit small agent
+  # resources (10m/16Mi request, 100m/64Mi limit per injected
+  # workload) and pre-populate-only everywhere, each injected
+  # workload's own already-larger container requests/limits dominate
+  # Kubernetes' max(init containers, regular containers) calculation
+  # in every dimension — verified by hand for api-service,
+  # api-service-issuer, postgres, and db-migrate — so the four
+  # currently-deployed injected workloads' actual quota consumption is
+  # UNCHANGED from the numbers above once this hotfix lands; nothing
+  # about their addition required a quota bump on its own.
+  # requests.cpu/pods raised anyway on the PM's explicit instruction,
+  # as forward headroom for LT-44's retention-sweep CronJob (#57, not
+  # yet merged) landing alongside these five workloads plus the
+  # migrate Job, not because today's four workloads need it.
   hard:
-    requests.cpu: "1"
+    requests.cpu: "1500m"
     requests.memory: 2Gi
     limits.cpu: "4"
     limits.memory: 3Gi
-    pods: "10"
+    pods: "12"
 ---
 # api-service's Deployment/Service live in deploy/api-service.yaml, not
 # here, and are deliberately applied by the deploy workflow AFTER
@@ -124,10 +150,26 @@ spec:
         # paths, no application config change. Single-line templates
         # (Amber's verified trailing-newline trap); ca-cert, not
         # tls-skip-verify, per her/the PM's recommendation.
+        #
+        # HOTFIX (live incident, deploy 34772376569): Init:CrashLoopBackOff
+        # on this exact Deployment — "Error loading CA File: open
+        # /vault/custom/vault-ca-cert/ca.crt: no such file or directory".
+        # agent-extra-secret mounts a Secret's keys directly at
+        # /vault/custom/, not /vault/custom/<secret-name>/ — path
+        # corrected. pre-populate-only + small explicit agent resources
+        # added for the same reason as api-service (see that Deployment's
+        # own comment in deploy/api-service.yaml): static, non-rotated
+        # values, no sidecar needed, and the injector's 250m/64Mi default
+        # request was what pushed the namespace over its requests.cpu quota.
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "10m"
+        vault.hashicorp.com/agent-limits-cpu: "100m"
+        vault.hashicorp.com/agent-requests-mem: "16Mi"
+        vault.hashicorp.com/agent-limits-mem: "64Mi"
         vault.hashicorp.com/role: "loginid-takehome-api-service-issuer"
         vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
-        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/ca-cert: "/vault/custom/ca.crt"
         vault.hashicorp.com/agent-inject-secret-jwt-key: "secret/data/loginid-takehome/api-service-jwt-signing-key"
         vault.hashicorp.com/secret-volume-path-jwt-key: "/secrets/jwt"
         vault.hashicorp.com/agent-inject-file-jwt-key: "signing-key"
@@ -318,10 +360,29 @@ spec:
         # land at the default /vault/secrets/<name> base, matching
         # exactly what 01-create-roles.sh/02-create-issuer-db.sh and
         # POSTGRES_PASSWORD_FILE below already read.
+        #
+        # HOTFIX (live incident, deploy 34772376569): this StatefulSet's
+        # own Pod is what actually FailedCreate'd —
+        # "exceeded quota loginid-takehome-quota, requested:
+        # requests.cpu=350m" once its Vault init container's default
+        # 250m request stacked on top of api-service/api-service-issuer's
+        # own sidecars already having pushed the namespace to 750m of the
+        # 1000m hard limit. pre-populate-only + small explicit agent
+        # resources, same as the other three workloads — postgres reads
+        # its five passwords once at container start (01-create-roles.sh/
+        # 02-create-issuer-db.sh/POSTGRES_PASSWORD_FILE), never again, so
+        # a persistent sidecar had nothing to renew. ca-cert path
+        # corrected (agent-extra-secret mounts at /vault/custom/ directly,
+        # not /vault/custom/<secret-name>/).
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "10m"
+        vault.hashicorp.com/agent-limits-cpu: "100m"
+        vault.hashicorp.com/agent-requests-mem: "16Mi"
+        vault.hashicorp.com/agent-limits-mem: "64Mi"
         vault.hashicorp.com/role: "loginid-takehome-postgres"
         vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
-        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/ca-cert: "/vault/custom/ca.crt"
         vault.hashicorp.com/agent-inject-secret-postgres-superuser: "secret/data/loginid-takehome/postgres-superuser"
         vault.hashicorp.com/agent-inject-template-postgres-superuser: |
           {{- with secret "secret/data/loginid-takehome/postgres-superuser" -}}{{ .Data.data.password }}{{- end -}}
@@ -459,10 +520,22 @@ spec:
         # dsn keys land at the default /vault/secrets/<name> base,
         # matching exactly what the migrate container's command reads
         # below.
+        #
+        # HOTFIX (live incident, deploy 34772376569): small explicit
+        # agent resources added, same reasoning as the other three
+        # workloads (this Job's own init container was already the
+        # smallest consumer here, but consistency matters for the next
+        # reader trying to audit total quota impact by eye). ca-cert
+        # path corrected (agent-extra-secret mounts at /vault/custom/
+        # directly, not /vault/custom/<secret-name>/).
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-requests-cpu: "10m"
+        vault.hashicorp.com/agent-limits-cpu: "100m"
+        vault.hashicorp.com/agent-requests-mem: "16Mi"
+        vault.hashicorp.com/agent-limits-mem: "64Mi"
         vault.hashicorp.com/role: "loginid-takehome-db-migrate"
         vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
-        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/ca-cert: "/vault/custom/ca.crt"
         vault.hashicorp.com/agent-inject-secret-db-migrator-credential-dsn: "secret/data/loginid-takehome/db-migrator-credential"
         vault.hashicorp.com/agent-inject-template-db-migrator-credential-dsn: |
           {{- with secret "secret/data/loginid-takehome/db-migrator-credential" -}}{{ .Data.data.dsn }}{{- end -}}
