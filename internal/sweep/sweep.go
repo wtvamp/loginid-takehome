@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -122,6 +123,46 @@ type ClassResult struct {
 	Err          error
 }
 
+// RunRecorder persists each class's result to 05's retention_sweep_run
+// table (multi-db-strategy.md §3d, amendment A7) — the seam that lets
+// api-service, the always-up pod, expose these results to Prometheus
+// long after this short-lived sweep process has exited
+// (04-infra-devops/handoff-amber-observability-inventory.md:
+// Prometheus scrapes HTTP endpoints, cannot ingest this process's
+// stdout, and a CronJob pod is typically gone before a scrape interval
+// could reach it anyway). internal/sweepstore.Store satisfies this
+// interface; this package depends only on the narrow seam it actually
+// calls, per decisions/test-double-strategy.md's own convention.
+//
+// StartRun writes the first of §3d's two required writes per run
+// (INSERT with finished_at NULL) and returns the new row's id plus the
+// missedSlots this call computed against interval (0 if interval <= 0,
+// meaning "unknown/not configured" — this package never guesses at a
+// schedule it wasn't told). FinishRun writes the second (UPDATE at
+// completion) — called only when a class actually drains; an error
+// leaves that class's row at finished_at == NULL, correctly recording
+// "started and died" rather than "completed," per §3d's own three-state
+// design. PruneOlderThan is this table's own 30-day self-prune (§3d:
+// operational metadata, not PII, not a RetentionClass, never written to
+// deletion_log), called once per Run, after every class has been
+// attempted.
+//
+// A persistence failure anywhere here is logged and otherwise ignored —
+// this table exists to make sweep results observable to Prometheus, not
+// to gate the sweep's own actual retention work; a database hiccup on
+// this seam must never turn a real, successful deletion into a reported
+// failure.
+type RunRecorder interface {
+	StartRun(ctx context.Context, class dao.RetentionClass, startedAt time.Time, interval time.Duration) (runID string, missedSlots int, err error)
+	FinishRun(ctx context.Context, runID string, finishedAt time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error
+	PruneOlderThan(ctx context.Context, cutoff time.Time) error
+}
+
+// retentionSweepRunRetention is retention_sweep_run's own self-prune
+// window (§3d: 30 days — comfortably covers the widest alert window,
+// 24h, with a month of history left for debugging).
+const retentionSweepRunRetention = 30 * 24 * time.Hour
+
 // Run executes one full sweep: every class in allClasses, looping
 // DeleteExpired per class until Drained, bounded by maxRowsPerBatch per
 // call (the DAO's own already-validated bound, not a new parameter this
@@ -131,27 +172,52 @@ type ClassResult struct {
 // already-cancelled ctx here (verified by this package's own tests, not
 // just the DAO layer's already-covered case) must stop before deleting
 // anything, in every class, not just the first.
-func Run(ctx context.Context, repo ExpirySweeper, now time.Time, emit MetricEmitter) []ClassResult {
+//
+// recorder may be nil (persistence not configured) — every call site
+// below is guarded accordingly, matching emit's own existing nil
+// tolerance. interval is the CronJob's own schedule, passed through to
+// recorder.StartRun for its missedSlots computation; <= 0 means unknown.
+func Run(ctx context.Context, repo ExpirySweeper, now time.Time, emit MetricEmitter, recorder RunRecorder, interval time.Duration) []ClassResult {
 	if emit != nil {
 		emit.MarkRunStarted(now)
 	}
 	results := make([]ClassResult, 0, len(allClasses))
 	for _, class := range allClasses {
-		results = append(results, runClass(ctx, repo, class, now, emit))
+		results = append(results, runClass(ctx, repo, class, now, emit, recorder, interval))
+	}
+	if recorder != nil {
+		if err := recorder.PruneOlderThan(ctx, now.Add(-retentionSweepRunRetention)); err != nil {
+			log.Printf("sweep: pruning retention_sweep_run rows older than %s: %v", retentionSweepRunRetention, err)
+		}
 	}
 	return results
 }
 
-func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass, now time.Time, emit MetricEmitter) ClassResult {
+func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass, now time.Time, emit MetricEmitter, recorder RunRecorder, interval time.Duration) ClassResult {
 	cutoff, ok := cutoffFor(now, class)
 	if !ok {
 		return ClassResult{Class: class, Err: fmt.Errorf("sweep: no cutoff defined for class %q", class)}
+	}
+
+	var runID string
+	if recorder != nil {
+		id, missedSlots, err := recorder.StartRun(ctx, class, now, interval)
+		if err != nil {
+			log.Printf("sweep: recording run start for class %q: %v", class, err)
+		} else {
+			runID = id
+			if missedSlots > 0 {
+				log.Printf("sweep: class %q missed %d scheduled run(s) since its last completion", class, missedSlots)
+			}
+		}
 	}
 
 	result := ClassResult{Class: class}
 	for {
 		if err := ctx.Err(); err != nil {
 			result.Err = err
+			// runID's row is deliberately left at finished_at == NULL —
+			// §3d's "started and died" state, not overwritten here.
 			return result
 		}
 
@@ -172,6 +238,11 @@ func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass,
 			}
 			if emit != nil {
 				emit.EmitClassMetrics(class, result.RowsExamined, result.RowsDeleted, ageSeconds)
+			}
+			if recorder != nil && runID != "" {
+				if err := recorder.FinishRun(ctx, runID, time.Now(), result.RowsExamined, result.RowsDeleted, true, batch.OldestSurvivingAt); err != nil {
+					log.Printf("sweep: recording run finish for class %q: %v", class, err)
+				}
 			}
 			return result
 		}
