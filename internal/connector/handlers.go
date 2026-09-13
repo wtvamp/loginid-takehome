@@ -66,26 +66,29 @@ type Deps struct {
 // identityGateAllow/RecordFailure/RecordSuccess are deps.IdentityLimiter's
 // call sites, tolerant of a nil IdentityLimiter (tests that only care
 // about the caller-level Limiter dimension can omit it — the identity
-// dimension then simply isn't enforced, never a panic).
-func identityGateAllow(ctx context.Context, l *identityRateLimiter, callerSub, attemptedIdentity string) (bool, error) {
+// dimension then simply isn't enforced, never a panic). identityParts is
+// variadic so a multi-field identity (phone AND name) can be hashed as
+// separate components rather than pre-joined with a printable separator
+// — see identitylimiter.go's hashIdentity doc comment.
+func identityGateAllow(ctx context.Context, l *identityRateLimiter, callerSub string, identityParts ...string) (bool, error) {
 	if l == nil {
 		return true, nil
 	}
-	return l.allow(ctx, callerSub, attemptedIdentity)
+	return l.allow(ctx, callerSub, identityParts...)
 }
 
-func identityGateRecordFailure(ctx context.Context, l *identityRateLimiter, callerSub, attemptedIdentity string) {
+func identityGateRecordFailure(ctx context.Context, l *identityRateLimiter, callerSub string, identityParts ...string) {
 	if l == nil {
 		return
 	}
-	l.recordFailure(ctx, callerSub, attemptedIdentity)
+	l.recordFailure(ctx, callerSub, identityParts...)
 }
 
-func identityGateRecordSuccess(ctx context.Context, l *identityRateLimiter, callerSub, attemptedIdentity string) {
+func identityGateRecordSuccess(ctx context.Context, l *identityRateLimiter, callerSub string, identityParts ...string) {
 	if l == nil {
 		return
 	}
-	l.recordSuccess(ctx, callerSub, attemptedIdentity)
+	l.recordSuccess(ctx, callerSub, identityParts...)
 }
 
 func sourceIPFrom(r *http.Request) string {
@@ -266,8 +269,8 @@ func NewIdentityHandler(deps Deps) http.HandlerFunc {
 		// Wrede's cold review of PR #40). Not one of the three
 		// timing-oracle branches (an overt 429, same as the caller-level
 		// gate above) — no floor.
-		attemptedIdentity := body.Phone + "|" + body.Name
-		identityAllowed, err := identityGateAllow(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity)
+		attemptedIdentity := []string{body.Phone, body.Name} // hashed as separate components, never pre-joined (Oren Castellan, PR #40 review)
+		identityAllowed, err := identityGateAllow(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, identityErrorBody{Error: "server_error"})
 			return
@@ -280,7 +283,7 @@ func NewIdentityHandler(deps Deps) http.HandlerFunc {
 		token := strings.TrimSpace(r.Header.Get(vendorAccessTokenHeader))
 		if token == "" {
 			deps.Limiter.RecordFailure(ctx, ac.Sub, sourceIP)
-			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity)
+			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
 			logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditAuthnFailure)
 			waitForFloor(start)
 			writeIdentityFailure(w)
@@ -294,14 +297,14 @@ func NewIdentityHandler(deps Deps) http.HandlerFunc {
 		identity, err := deps.Vendor.FetchIdentity(ctx, token, body.Phone, body.Name)
 		if err != nil {
 			deps.Limiter.RecordFailure(ctx, ac.Sub, sourceIP)
-			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity)
+			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
 			logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditAuthnFailure)
 			waitForFloor(start)
 			writeIdentityFailure(w)
 			return
 		}
 		deps.Limiter.RecordSuccess(ctx, ac.Sub, sourceIP)
-		identityGateRecordSuccess(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity)
+		identityGateRecordSuccess(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
 		logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditSuccess)
 
 		// Success is not part of the timing-oracle concern — no floor.

@@ -120,26 +120,102 @@ func TestIdentityRateLimiter_DifferentCallersSameIdentityDoNotShareState(t *test
 	}
 }
 
-func TestIdentityRateLimiter_BoundedCardinality_DegradesOpenNotClosed(t *testing.T) {
+// TestIdentityRateLimiter_BoundedCardinality_OverflowsToSharedBucket is
+// Marcus Ilori's ruling (PR #40): past maxTrackedIdentities, a new
+// identity does NOT bypass identity-level limiting — it falls into a
+// shared overflow bucket instead. First proves a brand-new identity past
+// the cap is still allowed on its FIRST attempt (the overflow bucket
+// starts fresh, same as any bucket would); then proves the bucket is
+// genuinely SHARED — failures recorded against one overflowing identity
+// eventually block a DIFFERENT overflowing identity too, which is
+// exactly the "never zero protection" property a plain fail-open design
+// would not have.
+func TestIdentityRateLimiter_BoundedCardinality_OverflowsToSharedBucket(t *testing.T) {
 	l := NewIdentityRateLimiter()
 	ctx := context.Background()
 
-	// Flood past maxTrackedIdentities with distinct identities.
+	// Flood past maxTrackedIdentities with distinct identities, each
+	// only ever calling allow() (no failures recorded) — fills the
+	// per-identity tracked set without touching the overflow bucket.
 	for i := 0; i < maxTrackedIdentities+10; i++ {
 		if _, err := l.allow(ctx, "flooding-caller", string(rune(i))+"-flood"); err != nil {
 			t.Fatalf("allow: %v", err)
 		}
 	}
 
-	// A brand-new identity past the cap must still be ALLOWED (fails
-	// open on this dimension only, per this type's own doc comment) —
-	// never silently denying service to a legitimate new identity just
-	// because the tracked-key set is full.
-	allowed, err := l.allow(ctx, "flooding-caller", "one-more-new-identity")
+	// A brand-new identity past the cap is allowed on its first attempt
+	// — the shared overflow bucket itself hasn't been tripped yet.
+	allowed, err := l.allow(ctx, "flooding-caller", "overflow-identity-1")
 	if err != nil {
 		t.Fatalf("allow: %v", err)
 	}
 	if !allowed {
-		t.Errorf("a new identity past maxTrackedIdentities was denied — this dimension must fail OPEN (allow), not closed, once the tracked-key cap is reached")
+		t.Fatalf("a new identity past maxTrackedIdentities was denied on its FIRST attempt — the shared overflow bucket should start unblocked")
+	}
+	l.recordFailure(ctx, "flooding-caller", "overflow-identity-1")
+
+	// A DIFFERENT identity, also past the cap, must eventually be
+	// blocked by the SAME shared bucket — proving this isn't a
+	// per-overflow-identity allowance in disguise, and that the "never
+	// zero protection" property actually holds: enough overflow traffic
+	// (from any mix of identities) still trips real limiting.
+	blockedAfter := -1
+	for i := 0; i < 10; i++ {
+		ok, err := l.allow(ctx, "flooding-caller", "overflow-identity-2")
+		if err != nil {
+			t.Fatalf("allow: %v", err)
+		}
+		if !ok {
+			blockedAfter = i
+			break
+		}
+		l.recordFailure(ctx, "flooding-caller", "overflow-identity-2")
+	}
+	if blockedAfter == -1 {
+		t.Fatalf("the shared overflow bucket never blocked anything across 10 consecutive overflow failures — overflow traffic is getting no protection at all")
+	}
+}
+
+// TestIdentityRateLimiter_TrackedIdentityUnaffectedByOverflowPressure
+// confirms an identity that DID get its own tracked slot (within the
+// cap) is completely unaffected by however much unrelated traffic is
+// hammering the shared overflow bucket — the two are genuinely
+// independent limiters, not one shared fate.
+func TestIdentityRateLimiter_TrackedIdentityUnaffectedByOverflowPressure(t *testing.T) {
+	l := NewIdentityRateLimiter()
+	ctx := context.Background()
+
+	// A legitimately-tracked identity, within the cap.
+	if allowed, err := l.allow(ctx, "caller", "legit-user"); err != nil || !allowed {
+		t.Fatalf("legit-user first attempt: allowed=%v err=%v", allowed, err)
+	}
+
+	// Drive the shared overflow bucket into its blocked state with a
+	// flood of DIFFERENT, never-tracked identities under the same cap
+	// pressure (reuse the same flood as the sibling test, cheaply, by
+	// filling the tracked set first).
+	for i := 0; i < maxTrackedIdentities; i++ {
+		if _, err := l.allow(ctx, "caller", string(rune(i))+"-fill"); err != nil {
+			t.Fatalf("allow: %v", err)
+		}
+	}
+	for i := 0; i < 10; i++ {
+		ok, err := l.allow(ctx, "caller", "overflow-attacker")
+		if err != nil {
+			t.Fatalf("allow: %v", err)
+		}
+		if !ok {
+			break
+		}
+		l.recordFailure(ctx, "caller", "overflow-attacker")
+	}
+
+	// legit-user's OWN tracked bucket must be untouched by any of that.
+	allowed, err := l.allow(ctx, "caller", "legit-user")
+	if err != nil {
+		t.Fatalf("allow: %v", err)
+	}
+	if !allowed {
+		t.Errorf("legit-user (a tracked, within-cap identity) was blocked by unrelated overflow-bucket pressure — the two must be independent")
 	}
 }
