@@ -72,9 +72,36 @@ type Config struct {
 	// match whatever client_id the runbook seeds, not the other way
 	// around.
 
-	ConnectorJWTAudience  string
+	ConnectorJWTAudience string
+
+	// ConnectorClientID/ConnectorClientSecret are api-service's own
+	// client-credentials for obtaining a connector:identity-lookup
+	// token from the issuer (LT-33, handoff-04-secrets.md row 10).
+	// Resolved the same *_FILE-takes-precedence way DBDSN is
+	// (CONNECTOR_CLIENT_ID_FILE/CONNECTOR_CLIENT_SECRET_FILE win over
+	// the plain env vars when set) so this package stays indifferent to
+	// whether the value is delivered as a mounted Kubernetes Secret or
+	// (per Warren's approval, LT-46) a Vault Agent Injector-rendered
+	// file — the delivery mechanism is 04's concern, not this one's.
 	ConnectorClientID     string
 	ConnectorClientSecret string
+
+	// IssuerTokenURL is where api-service itself calls POST /auth/token
+	// to obtain its own connector-scoped token (LT-33) — the issuer
+	// Deployment's in-cluster ClusterIP Service, e.g.
+	// "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/auth/token".
+	// Not an auth-enforcement env var in RequiredAuthEnvVars's sense
+	// (there's no "must be set for tokens to verify" incident this
+	// guards against); internal/onboarding.NewTokenSource validates its
+	// presence directly, the same as the connector client credential
+	// above.
+	IssuerTokenURL string
+
+	// IDPConnectorBaseURL is where api-service calls idp-connector's own
+	// /auth and /identity (LT-33) — the connector Deployment's in-cluster
+	// ClusterIP Service, e.g.
+	// "http://idp-connector.loginid-takehome.svc.cluster.local:443".
+	IDPConnectorBaseURL string
 
 	IDPABCBaseURL      string
 	IDPABCClientID     string
@@ -111,6 +138,23 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	// CONNECTOR_CLIENT_ID/SECRET follow the same *_FILE-takes-precedence
+	// pattern as DB_DSN/ISSUER_DB_DSN above (handoff-04-secrets.md row
+	// 10) — Warren's approval to move to Vault Agent Injector delivery
+	// (LT-46, Theo's story) means this code must stay indifferent to
+	// whether the value arrives via a plain Kubernetes Secret or a Vault
+	// Agent-rendered file; reusing resolveDSNFrom's existing
+	// file-or-env-var resolution is what makes that true without this
+	// package caring which mechanism actually wrote the file.
+	connectorClientID, err := resolveDSNFrom("CONNECTOR_CLIENT_ID_FILE", "CONNECTOR_CLIENT_ID")
+	if err != nil {
+		return Config{}, err
+	}
+	connectorClientSecret, err := resolveDSNFrom("CONNECTOR_CLIENT_SECRET_FILE", "CONNECTOR_CLIENT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
 	appMode := os.Getenv("APP_MODE")
 	if appMode == "" {
 		appMode = "verifier"
@@ -142,8 +186,11 @@ func Load() (Config, error) {
 		AuthzQAAllowedProfileID: os.Getenv("AUTHZ_QA_ALLOWED_PROFILE_ID"),
 
 		ConnectorJWTAudience:  os.Getenv("CONNECTOR_JWT_AUDIENCE"),
-		ConnectorClientID:     os.Getenv("CONNECTOR_CLIENT_ID"),
-		ConnectorClientSecret: os.Getenv("CONNECTOR_CLIENT_SECRET"),
+		ConnectorClientID:     connectorClientID,
+		ConnectorClientSecret: connectorClientSecret,
+
+		IssuerTokenURL:      os.Getenv("ISSUER_TOKEN_URL"),
+		IDPConnectorBaseURL: os.Getenv("IDP_CONNECTOR_BASE_URL"),
 
 		IDPABCBaseURL:      os.Getenv("IDP_ABC_BASE_URL"),
 		IDPABCClientID:     os.Getenv("IDP_ABC_CLIENT_ID"),
@@ -334,9 +381,23 @@ var OptionalEnvVars = map[string]string{
 	"ISSUER_DB_DSN_FILE":          "issuer database DSN source; no auth-enforcement concern",
 	"AUTHZ_QA_SUB":                "QA stopgap-authorizer seed, intentionally optional — empty means deny-by-default, per StopgapAuthorizer's own doc comment",
 	"AUTHZ_QA_ALLOWED_PROFILE_ID": "QA stopgap-authorizer seed, intentionally optional — empty means deny-by-default, per StopgapAuthorizer's own doc comment",
-	"CONNECTOR_CLIENT_ID":         "consumed by LT-33's outbound connector client (in progress) — add to RequiredAuthEnvVars and remove this entry when LT-33 lands",
-	"CONNECTOR_CLIENT_SECRET":     "consumed by LT-33's outbound connector client (in progress) — add to RequiredAuthEnvVars and remove this entry when LT-33 lands",
-	"IDP_ABC_BASE_URL":            "optional real-vendor base URL; unset selects the stub vendor client by design (LT-41 non-goal: no real vendor exists for this take-home)",
-	"IDP_ABC_CLIENT_ID":           "vendor's own credential surface, not this project's own auth surface",
-	"IDP_ABC_CLIENT_SECRET":       "vendor's own credential surface, not this project's own auth surface",
+	// CONNECTOR_CLIENT_ID/SECRET (LT-33) are NOT folded into
+	// RequiredAuthEnvVars: that function's model is "is this literal
+	// env var name non-empty," which doesn't fit the *_FILE-takes-
+	// precedence resolution these two go through (a Vault Agent
+	// Injector delivery, per LT-46, may set only the _FILE variant and
+	// leave the plain var genuinely empty on purpose). Presence is
+	// instead validated where the resolved value is actually consumed:
+	// internal/onboarding.NewTokenSource returns an error if
+	// cfg.ConnectorClientID/ConnectorClientSecret are empty after
+	// Load's own file-or-env resolution already ran.
+	"CONNECTOR_CLIENT_ID":          "resolved via *_FILE precedence into Config.ConnectorClientID; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
+	"CONNECTOR_CLIENT_ID_FILE":     "optional alternative delivery path for CONNECTOR_CLIENT_ID — see that entry",
+	"CONNECTOR_CLIENT_SECRET":      "resolved via *_FILE precedence into Config.ConnectorClientSecret; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
+	"CONNECTOR_CLIENT_SECRET_FILE": "optional alternative delivery path for CONNECTOR_CLIENT_SECRET — see that entry",
+	"IDP_ABC_BASE_URL":             "optional real-vendor base URL; unset selects the stub vendor client by design (LT-41 non-goal: no real vendor exists for this take-home)",
+	"IDP_ABC_CLIENT_ID":            "vendor's own credential surface, not this project's own auth surface",
+	"IDP_ABC_CLIENT_SECRET":        "vendor's own credential surface, not this project's own auth surface",
+	"ISSUER_TOKEN_URL":             "where api-service calls the issuer for its own connector-scoped token; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
+	"IDP_CONNECTOR_BASE_URL":       "where api-service calls idp-connector's /auth and /identity; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
 }
