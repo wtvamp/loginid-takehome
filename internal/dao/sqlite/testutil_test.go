@@ -31,16 +31,16 @@ func migrationSQL(t *testing.T, path string) string {
 // package, so every test here runs for real, always.
 func setupDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+	// Go through the same DSN pragma New() uses, not a manual PRAGMA exec —
+	// so a regression in New()'s configuration shows up here too, instead
+	// of this harness silently proving a guarantee production doesn't
+	// actually have (05's amendment A3).
+	db, err := sql.Open("sqlite", withForeignKeysOn(":memory:"))
 	if err != nil {
 		t.Fatalf("opening in-memory sqlite: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		t.Fatalf("enabling foreign_keys: %v", err)
-	}
 
 	repoRoot := repoRootFromThisFile(t)
 	sqliteMigration := migrationSQL(t, filepath.Join(repoRoot, "migrations", "sqlite", "00001_initial_schema.sql"))

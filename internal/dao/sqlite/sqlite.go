@@ -10,6 +10,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 
@@ -26,17 +27,32 @@ type repository struct {
 // retryable-serialization error class, so a no-op would be ceremony
 // implying a shared abstraction that does not exist (contract §4).
 func New(dsn string) (dao.Repository, error) {
+	// foreign_keys is per-CONNECTION, not a property of the database file
+	// — a bare `PRAGMA foreign_keys = ON` exec after opening only covers
+	// the one connection that happened to run it, and silently stops
+	// covering anything the moment the pool acquires a second connection
+	// (a raised MaxOpenConns, a reconnect after an error, ...). Requesting
+	// it via the DSN's `_foreign_keys` query param makes modernc.org/sqlite
+	// apply it to every connection it opens, by construction (05's
+	// amendment A3, surfaced during PR #8 review). SetMaxOpenConns(1)
+	// below is kept for its own, separate reason (SQLite's single-writer
+	// model) — it must not be the only thing keeping this guarantee true.
+	dsn = withForeignKeysOn(dsn)
+
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: opening connection: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, fmt.Errorf("sqlite: enabling foreign_keys: %w", err)
-	}
-	// SQLite allows only one writer at a time; a single connection avoids
-	// SQLITE_BUSY from this package's own concurrent use within a process.
 	db.SetMaxOpenConns(1)
 	return &repository{db: db}, nil
+}
+
+func withForeignKeysOn(dsn string) string {
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "_foreign_keys=on"
 }
 
 func (r *repository) Profiles() dao.ProfileRepository       { return profileRepo{r} }
