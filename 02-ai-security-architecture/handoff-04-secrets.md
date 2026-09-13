@@ -64,6 +64,8 @@ Names marked pending in 03's boundary: `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` a
 
 ## Never-log list (applies to every component, every environment, every log level, including error paths and stack traces)
 
+**This list is load-bearing for 05's log-retention ruling (LT-20, ≥90-day incident-review floor), not only a security control — a future edit here should know what else it moves.** Priya's reasoning: if PII ever entered the log stream, that would impose a storage-limitation *maximum* retention window on top of the incident-review *minimum* the 90-day floor sets — two constraints that can conflict with no correct configuration (a PII-bearing stream can't simultaneously satisfy "keep long enough for incident review" and "don't retain PII longer than governance allows"). The eleven items below are what keeps that conflict from existing at all; narrowing this list isn't just a security regression, it's removing the thing that makes 05's retention ruling even satisfiable.
+
 1. End-user vendor password (#9).
 2. Vendor `access_token` (#6) — and any `Authorization` header value, inbound or outbound, in full.
 3. PII field values from `user_profile` or from `/identity` responses: name, phone, `street_address`, `locality`, `region`, `postal_code`, `country`. Log the *fact* of access — caller `sub`, scope used, opaque record id, timestamp, status — never the values.
