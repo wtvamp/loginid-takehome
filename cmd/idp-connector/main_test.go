@@ -21,6 +21,7 @@ func TestValidateAuthConfig(t *testing.T) {
 	cases := []struct {
 		name          string
 		unset         string
+		garbage       string
 		wantErr       bool
 		wantErrSubstr string
 	}{
@@ -28,12 +29,19 @@ func TestValidateAuthConfig(t *testing.T) {
 		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
 		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
 		{name: "connector audience missing", unset: "CONNECTOR_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "CONNECTOR_JWT_AUDIENCE"},
+		// Ingrid Solano's PR #53 review + Marcus Ilori's (02) ruling:
+		// a non-empty but non-URL value must fail too.
+		{name: "jwks url garbage value", garbage: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
+		{name: "issuer garbage value", garbage: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			allSet(t)
 			if c.unset != "" {
 				t.Setenv(c.unset, "")
+			}
+			if c.garbage != "" {
+				t.Setenv(c.garbage, "not-a-url")
 			}
 			err := validateAuthConfig()
 			if c.wantErr && err == nil {

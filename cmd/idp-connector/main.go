@@ -37,8 +37,12 @@ func validateAuthConfig() error {
 		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for idp-connector")
 	}
 	for _, name := range required {
-		if os.Getenv(name) == "" {
+		value := os.Getenv(name)
+		if value == "" {
 			return fmt.Errorf("%s must be set", name)
+		}
+		if err := config.ValidateEnvVarValue(name, value); err != nil {
+			return err
 		}
 	}
 	return nil
