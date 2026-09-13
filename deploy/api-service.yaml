@@ -28,6 +28,14 @@ spec:
             - {name: DB_DRIVER, value: postgres}
             - {name: DB_DSN_FILE, value: /secrets/db/dsn}
             - {name: AUTH_JWKS_URL, value: http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json}
+            # Literal per PLANNING.md's Service boundaries config surface
+            # (handoff-03-auth.md) — not secrets. Missing on both api-service
+            # and api-service-issuer was why a minted token verified as
+            # having no iss and an empty audience, failing jwtmiddleware's
+            # explicit audience check (found live: a real token minted, but
+            # every protected route still 401'd).
+            - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
+            - {name: AUTH_JWT_AUDIENCE, value: "loginid-api-service"}
             # StopgapAuthorizer's hard-coded (sub -> allowed record id)
             # seed: sub is the "qa-review-read-own" QA client's client_id
             # (the issuer mints Subject: clientID — LT-51), matched to
