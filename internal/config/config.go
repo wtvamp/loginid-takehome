@@ -107,14 +107,16 @@ type Config struct {
 	IDPABCClientID     string
 	IDPABCClientSecret string
 
-	// SweepIntervalSeconds is purely descriptive: the CronJob's own
-	// schedule interval, in seconds, echoed in APP_MODE=sweep's startup
-	// log line so an operator reading pod logs doesn't have to
-	// cross-reference the CronJob manifest separately to know how often
-	// this is supposed to run. Never read by internal/sweep itself —
-	// the sweep's own retention-window/batching logic has no dependency
-	// on its own schedule. Empty when unset; the startup log line says
-	// "unset" rather than a misleading default.
+	// SweepIntervalSeconds is the CronJob's own schedule interval, in
+	// seconds: echoed in APP_MODE=sweep's startup log line so an operator
+	// reading pod logs doesn't have to cross-reference the CronJob
+	// manifest separately, and passed into internal/sweep.Run so each
+	// class's retention_sweep_run row can compute missed_slots against
+	// the schedule it's supposed to be running on (05-data-ops/
+	// multi-db-strategy.md §3d). The sweep's own retention-window/
+	// batching logic still has no dependency on it. Empty when unset;
+	// the startup log line says "unset" rather than a misleading
+	// default, and missed_slots is left at 0.
 	SweepIntervalSeconds string
 }
 
@@ -422,5 +424,5 @@ var OptionalEnvVars = map[string]string{
 	"IDP_ABC_CLIENT_SECRET":        "vendor's own credential surface, not this project's own auth surface",
 	"ISSUER_TOKEN_URL":             "where api-service calls the issuer for its own connector-scoped token; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
 	"IDP_CONNECTOR_BASE_URL":       "where api-service calls idp-connector's /auth and /identity; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
-	"SWEEP_INTERVAL_SECONDS":       "purely descriptive — echoed in APP_MODE=sweep's startup log line, never read by internal/sweep's own retention/batching logic",
+	"SWEEP_INTERVAL_SECONDS":       "echoed in APP_MODE=sweep's startup log line and passed to internal/sweep.Run to compute retention_sweep_run.missed_slots against the CronJob's own schedule; the sweep's retention/batching logic itself still has no dependency on it",
 }
