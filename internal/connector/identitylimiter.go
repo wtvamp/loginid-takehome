@@ -22,6 +22,26 @@ const (
 	identityLimiterAlertThreshold = 10
 )
 
+// identityOverflowBaseBackoff/MaxBackoff/AlertThreshold govern the
+// SHARED overflow bucket (below) — deliberately more aggressive than
+// the per-identity constants above: this bucket protects against every
+// identity that couldn't get its own slot at once, so it should trip
+// faster and stay tripped longer than any single identity's own bucket
+// would (Marcus Ilori's ruling, PR #40: "fail-toward-stricter under
+// pressure, not fail-open... a shared, aggressive rate limit instead of
+// no limit at all").
+const (
+	identityOverflowBaseBackoff    = 5 * time.Second
+	identityOverflowMaxBackoff     = 10 * time.Minute
+	identityOverflowAlertThreshold = 3
+)
+
+// identityOverflowKey is the shared bucket's single, fixed key — used
+// via the overflow limiter's own clientID/sourceIP slots exactly like
+// any per-identity key is, but always this one fixed value, never a
+// hash of a real identity.
+const identityOverflowKey = "identity-limiter-overflow"
+
 // maxTrackedIdentities bounds this limiter's own tracked-key set
 // independently of api.GrantLimiter's time-based sweep — the same
 // "bounded distinct-key cardinality" pattern LT-40's JWKSCache already
@@ -32,6 +52,14 @@ const (
 // small number would fail open on ordinary traffic almost immediately.
 // This is this component's own engineering default (flagged for 02's
 // review), not a ruled number.
+//
+// Past this cap, a genuinely new identity does NOT bypass identity-level
+// limiting entirely — Marcus Ilori's ruling rejected that as
+// "degrading to the exact original weakness Tomasz found," since a cap
+// an attacker can cheaply fill (no valid vendor credential needed) would
+// just delay, not close, the stolen-identities scenario. Instead it
+// falls into the shared overflow bucket below: coarser (many identities
+// share one bucket once the table is full), but never zero protection.
 const maxTrackedIdentities = 10000
 
 // identityTrackedKeyTTL/identitySweepInterval bound how long a tracked
@@ -58,21 +86,34 @@ func mustRandomBytes(n int) []byte {
 	return b
 }
 
-// hashIdentity derives this limiter's map key from (callerSub,
-// attemptedIdentity) — HMAC-SHA256, never the raw attempted identity
-// (a vendor username, or a phone/name pair) held as a map key or ever
-// logged (Tomasz Wrede's review, PR #40: "a salted/hashed submitted
-// identity, never the raw username/phone/whatever's being tried against
-// the vendor"). Composite over BOTH callerSub and attemptedIdentity —
+// hashIdentity derives this limiter's map key from callerSub plus one
+// or more identity components (a single vendor username for /auth; a
+// phone AND name passed as two SEPARATE components for /identity,
+// rather than pre-joined with a printable separator) — HMAC-SHA256,
+// never the raw attempted identity held as a map key or ever logged
+// (Tomasz Wrede's review, PR #40: "a salted/hashed submitted identity,
+// never the raw username/phone/whatever's being tried against the
+// vendor"). Composite over BOTH callerSub and the identity components —
 // per Marcus Ilori's ruling — so two different internal callers
-// submitting the same identity string never share one bucket, even
-// though this project's actual topology has only one internal caller
-// today.
-func hashIdentity(callerSub, attemptedIdentity string) string {
+// submitting the same identity never share one bucket, even though this
+// project's actual topology has only one internal caller today.
+//
+// Each component is written with its own null-byte separator rather
+// than concatenated by the caller first: passing body.Phone and
+// body.Name as two separate arguments here (instead of joining them
+// with a printable delimiter like "|" before calling this function)
+// avoids a delimiter collision with a printable character that's
+// actually plausible in real phone/name input, narrowing (not fully
+// eliminating — a null byte could theoretically still appear in an
+// input) the same class of concatenation ambiguity a naive join would
+// have (Oren Castellan, PR #40 review).
+func hashIdentity(callerSub string, identityParts ...string) string {
 	mac := hmac.New(sha256.New, identityHMACKey)
 	mac.Write([]byte(callerSub))
-	mac.Write([]byte{0}) // separator: prevents ("ab","c") colliding with ("a","bc")
-	mac.Write([]byte(attemptedIdentity))
+	for _, part := range identityParts {
+		mac.Write([]byte{0})
+		mac.Write([]byte(part))
+	}
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -98,8 +139,13 @@ func hashIdentity(callerSub, attemptedIdentity string) string {
 // bookkeeping for one entity) with an explicit, bounded tracked-key set
 // so an attacker submitting unbounded distinct garbage identities can't
 // grow memory without limit between GrantLimiter's own periodic sweeps.
+// A second, separate GrantLimiter instance backs the shared overflow
+// bucket past maxTrackedIdentities — its own key space is exactly one
+// fixed value (identityOverflowKey), so it's bounded by construction
+// regardless of how many distinct identities overflow into it.
 type identityRateLimiter struct {
-	underlying *api.InProcessGrantLimiter
+	underlying *api.InProcessGrantLimiter // per-identity buckets, for tracked keys
+	overflow   *api.InProcessGrantLimiter // one shared bucket for everything past the cap
 
 	mu        sync.Mutex
 	trackedAt map[string]time.Time
@@ -111,47 +157,87 @@ func NewIdentityRateLimiter() *identityRateLimiter {
 		underlying: api.NewInProcessGrantLimiter(
 			identityLimiterBaseBackoff, identityLimiterMaxBackoff, identityLimiterAlertThreshold, nil,
 		),
+		overflow: api.NewInProcessGrantLimiter(
+			identityOverflowBaseBackoff, identityOverflowMaxBackoff, identityOverflowAlertThreshold, nil,
+		),
 		trackedAt: make(map[string]time.Time),
 	}
 }
 
-// allow reports whether an attempt against attemptedIdentity by
-// callerSub may proceed. Once maxTrackedIdentities distinct keys are
-// already tracked, a genuinely NEW identity is allowed through this
-// limiter (fails open on THIS dimension only) rather than blocking
-// every new identity outright — the caller-level GrantLimiter still
-// provides a base rate limit regardless, so this degrades to
-// caller-level-only protection under a tracked-key flood rather than
-// denying service to legitimate new identities (same reasoning as
-// JWKSCache's own bounded unknown-kid cap).
-func (l *identityRateLimiter) allow(ctx context.Context, callerSub, attemptedIdentity string) (bool, error) {
-	key := hashIdentity(callerSub, attemptedIdentity)
-
+// trackOrCheck is the ONE place that decides whether key is "tracked" —
+// called from allow (where a not-yet-tracked key is admitted if there's
+// room under maxTrackedIdentities) and from recordFailure/recordSuccess
+// (where a not-tracked key is never admitted; record* never adds a new
+// entry on its own). This single choke point is what actually enforces
+// the memory bound: recordFailure/recordSuccess used to skip this check
+// entirely and call straight into the wrapped api.GrantLimiter, so an
+// attacker flooding past the cap with fresh failing identities grew that
+// limiter's own byClientID/bySourceIP maps without limit even though
+// allow() itself correctly degraded open — the cap was checked in the
+// one place that doesn't retain state and skipped in the two places
+// that do (Nolan Reyes, PR #40 review). Now every one of the three entry
+// points agrees on the same tracked/not-tracked answer for a given key
+// at a given moment, and only a tracked key ever reaches the wrapped
+// limiter at all.
+func (l *identityRateLimiter) trackOrCheck(key string, admitIfRoom bool) bool {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	now := time.Now()
 	l.sweepLocked(now)
-	if _, tracked := l.trackedAt[key]; !tracked {
-		if len(l.trackedAt) >= maxTrackedIdentities {
-			l.mu.Unlock()
-			return true, nil
-		}
-		l.trackedAt[key] = now
-	} else {
-		l.trackedAt[key] = now
+
+	if _, tracked := l.trackedAt[key]; tracked {
+		l.trackedAt[key] = now // refresh: this is activity, extend the TTL
+		return true
 	}
-	l.mu.Unlock()
-
-	return l.underlying.Allow(ctx, key, key)
+	if !admitIfRoom || len(l.trackedAt) >= maxTrackedIdentities {
+		return false
+	}
+	l.trackedAt[key] = now
+	return true
 }
 
-func (l *identityRateLimiter) recordFailure(ctx context.Context, callerSub, attemptedIdentity string) {
-	key := hashIdentity(callerSub, attemptedIdentity)
-	l.underlying.RecordFailure(ctx, key, key)
+// allow reports whether an attempt against attemptedIdentity by
+// callerSub may proceed. Once maxTrackedIdentities distinct keys are
+// already tracked, a genuinely NEW identity does NOT bypass
+// identity-level limiting — it falls into the shared overflow bucket
+// instead (Marcus Ilori's ruling: fail toward stricter under pressure,
+// not open, matching this project's own pattern elsewhere — JWKS fails
+// toward rejection past its staleness bound, the distinct-record
+// counter hard-denies rather than merely alerting). Existing tracked
+// identities keep their own individual buckets, unaffected.
+func (l *identityRateLimiter) allow(ctx context.Context, callerSub string, identityParts ...string) (bool, error) {
+	key := hashIdentity(callerSub, identityParts...)
+	if l.trackOrCheck(key, true) {
+		return l.underlying.Allow(ctx, key, key)
+	}
+	return l.overflow.Allow(ctx, identityOverflowKey, identityOverflowKey)
 }
 
-func (l *identityRateLimiter) recordSuccess(ctx context.Context, callerSub, attemptedIdentity string) {
-	key := hashIdentity(callerSub, attemptedIdentity)
-	l.underlying.RecordSuccess(ctx, key, key)
+// recordFailure/recordSuccess never admit a new key into the per-identity
+// tracked set on their own — only allow() (called first, on every
+// request, per handlers.go's wiring) decides whether a key gets its own
+// slot. A key that allow() routed to the overflow bucket is recorded
+// there too, keeping the per-identity limiter's own maps bounded by
+// maxTrackedIdentities regardless of how many distinct identities an
+// attacker generates, while the shared overflow bucket still
+// accumulates failures across all of them (bounded by construction: its
+// key space is exactly one fixed value).
+func (l *identityRateLimiter) recordFailure(ctx context.Context, callerSub string, identityParts ...string) {
+	key := hashIdentity(callerSub, identityParts...)
+	if l.trackOrCheck(key, false) {
+		l.underlying.RecordFailure(ctx, key, key)
+		return
+	}
+	l.overflow.RecordFailure(ctx, identityOverflowKey, identityOverflowKey)
+}
+
+func (l *identityRateLimiter) recordSuccess(ctx context.Context, callerSub string, identityParts ...string) {
+	key := hashIdentity(callerSub, identityParts...)
+	if l.trackOrCheck(key, false) {
+		l.underlying.RecordSuccess(ctx, key, key)
+		return
+	}
+	l.overflow.RecordSuccess(ctx, identityOverflowKey, identityOverflowKey)
 }
 
 func (l *identityRateLimiter) sweepLocked(now time.Time) {
