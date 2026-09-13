@@ -47,10 +47,37 @@ spec:
         # ca-cert, not tls-skip-verify: real TLS verification against
         # the CA Amber staged in this namespace (vault-ca-cert),
         # preferred per her/the PM's explicit recommendation.
+        #
+        # HOTFIX (live incident, deploy 34772376569): two bugs found on
+        # the real deploy, not caught by dry-run since ResourceQuota
+        # and the injector's own runtime mount behavior aren't exercised
+        # by `kubectl apply --dry-run=server` against a Deployment/
+        # StatefulSet spec (quota is enforced at Pod creation, several
+        # layers downstream of what a dry-run of the owning object
+        # checks). (1) agent-extra-secret mounts a Secret's keys
+        # directly at /vault/custom/, not /vault/custom/<secret-name>/
+        # — ca-cert path corrected. (2) agent-pre-populate-only added:
+        # these are static, non-rotated KV v2 values (copies of existing
+        # Kubernetes Secrets, no dynamic Vault lease to renew), so the
+        # default sidecar mode's persistent extra container was pure
+        # unnecessary resource cost, not a real requirement — it alone
+        # (250m/64Mi default request) pushed requests.cpu over the
+        # namespace's 1000m hard quota once postgres tried to schedule.
+        # Explicit small agent-requests/limits below replace the
+        # injector's own defaults (250m/64Mi request, 500m/128Mi limit)
+        # with values small enough that this pod's own already-larger
+        # container requests/limits dominate the effective max()
+        # Kubernetes computes for quota purposes — verified by hand for
+        # every injected workload in this hotfix's PR body, not assumed.
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "10m"
+        vault.hashicorp.com/agent-limits-cpu: "100m"
+        vault.hashicorp.com/agent-requests-mem: "16Mi"
+        vault.hashicorp.com/agent-limits-mem: "64Mi"
         vault.hashicorp.com/role: "loginid-takehome-api-service"
         vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
-        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/ca-cert: "/vault/custom/ca.crt"
         vault.hashicorp.com/secret-volume-path: "/secrets/db"
         vault.hashicorp.com/agent-inject-secret-dsn: "secret/data/loginid-takehome/db-runtime-credential"
         vault.hashicorp.com/agent-inject-file-dsn: "dsn"
