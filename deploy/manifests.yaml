@@ -936,16 +936,23 @@ spec:
       path: /metrics
       interval: 30s
 ---
-# LT-49: retention-sweep alert rules, per Priya's (05) three-rule
-# ruling in refinement/LT-49.md — none suppressing another. Same
-# release: prometheus adoption mechanism as the ServiceMonitor above.
-# I (sweep_interval_seconds) = 86400 (schedule "17 3 * * *"); W per
-# class from pii-governance.md (direct: 24mo/730d, idp_cache: 30d,
-# idp_cache_orphan: 7d). If the CronJob's schedule ever changes, I
-# here must change with it — Priya's own note: "If I changes, rules 1
-# and 2 both change," which is why these are written as literal
-# second values derived from I/W rather than hand-simplified, so the
-# arithmetic stays checkable against her table.
+# LT-49: retention-sweep alert rules, per Priya's (05) four-rule
+# ruling (refinement/LT-49.md, plus her follow-up adding rule 4 after
+# reviewing this PR's rolling-7I skip-rate widening) — none suppressing
+# another. Same release: prometheus adoption mechanism as the
+# ServiceMonitor above. I (sweep_interval_seconds) = 86400 (schedule
+# "17 3 * * *"); W per class from pii-governance.md (direct: 24mo/
+# 730d, idp_cache: 30d, idp_cache_orphan: 7d). If the CronJob's
+# schedule ever changes, I here must change with it — Priya's own
+# note: "If I changes, rules 1 and 2 both change," which is why every
+# threshold below is written as literal seconds with the I/W
+# derivation stated in a comment next to it (per her point that a
+# PrometheusRule can't express the arithmetic itself), not
+# hand-simplified, so it stays checkable against her table:
+#   Rule 1 (NotReporting):        2I        = 172800
+#   Rule 2 (WindowExceeded):      W + 2I     (per-class, see each rule)
+#   Rule 3 (SkipCount):           7I window, >= 2 skipped runs
+#   Rule 4 (DurationApproaching): 0.5I       = 43200, over a 7I window
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -994,35 +1001,62 @@ spec:
           labels: {severity: warning, class: idp_cache_orphan}
           annotations: {summary: "oldest surviving idp_cache_orphan row exceeds its 7-day retention window plus two sweep intervals"}
 
-        # Rule 3 — RetentionSweepSkipRate, low-severity early warning.
-        # Consumes LT-44's skip-visibility signal as evidence in its own
-        # right, never as a suppression term on rules 1/2 (Priya's
-        # explicit ruling: suppressing on a skip signal is the same
-        # error as alerting on the mechanism instead of the property,
-        # and would let a chronically-overrunning sweep silence itself
-        # forever). severity: warning, not info — Alertmanager's route
-        # tree sends severity=info to the null receiver (Amber's
-        # inventory finding); info here would mean this alert can never
-        # actually be delivered.
+        # Rule 3 — RetentionSweepSkipping (renamed from my earlier
+        # RetentionSweepSkipRate — Priya's ruling on the widened window
+        # confirmed the rolling-7I approach, but as a plain COUNT (>=2
+        # skipped runs), not a percentage; the earlier 25%-of-expected-
+        # runs framing is dropped). Consumes LT-44's skip-visibility
+        # signal as evidence in its own right, never as a suppression
+        # term on rules 1/2 (Priya's explicit ruling: suppressing on a
+        # skip signal is the same error as alerting on the mechanism
+        # instead of the property, and would let a chronically-
+        # overrunning sweep silence itself forever). Kept as the
+        # backstop for skips with non-duration causes (e.g. a stuck
+        # Vault auth, a NetworkPolicy gap like the one Naomi found
+        # live) — rule 4 below is the earlier, duration-based warning
+        # for the common case (a sweep that's merely running slow).
+        # severity: warning, not info — Alertmanager's route tree sends
+        # severity=info to the null receiver (Amber's inventory
+        # finding); info here would mean this alert can never actually
+        # be delivered.
         #
-        # Deviation from Priya's literal wording, flagged rather than
-        # silently resolved: her ruling says "over a rolling day," but
-        # at I=86400s (this CronJob's real schedule) a rolling day
-        # contains at most one scheduled run, making a 25% threshold
-        # structurally near-meaningless (0% or 100%, nothing between).
-        # Widened to a rolling 7d window (~7 expected runs at this
-        # cadence) so the threshold has room to mean something —
-        # Priya/Naomi should confirm this widening is the right call
-        # for LT-49's Done criteria, not assumed settled here.
-        - alert: RetentionSweepSkipRate
-          expr: increase(retention_sweep_skipped_total{class="direct"}[7d]) / 7 > 0.25
+        # 7I = 7 * 86400 = 604800 (7d). >= 2 per Priya's ruling.
+        - alert: RetentionSweepSkipping
+          expr: increase(retention_sweep_skipped_total{class="direct"}[7d]) >= 2
           labels: {severity: warning, class: direct}
-          annotations: {summary: "retention sweep for class=direct has been skipped more than ~25% of its scheduled runs over the trailing week"}
-        - alert: RetentionSweepSkipRate
-          expr: increase(retention_sweep_skipped_total{class="idp_cache"}[7d]) / 7 > 0.25
+          annotations: {summary: "retention sweep for class=direct has skipped 2 or more runs over the trailing 7 intervals"}
+        - alert: RetentionSweepSkipping
+          expr: increase(retention_sweep_skipped_total{class="idp_cache"}[7d]) >= 2
           labels: {severity: warning, class: idp_cache}
-          annotations: {summary: "retention sweep for class=idp_cache has been skipped more than ~25% of its scheduled runs over the trailing week"}
-        - alert: RetentionSweepSkipRate
-          expr: increase(retention_sweep_skipped_total{class="idp_cache_orphan"}[7d]) / 7 > 0.25
+          annotations: {summary: "retention sweep for class=idp_cache has skipped 2 or more runs over the trailing 7 intervals"}
+        - alert: RetentionSweepSkipping
+          expr: increase(retention_sweep_skipped_total{class="idp_cache_orphan"}[7d]) >= 2
           labels: {severity: warning, class: idp_cache_orphan}
-          annotations: {summary: "retention sweep for class=idp_cache_orphan has been skipped more than ~25% of its scheduled runs over the trailing week"}
+          annotations: {summary: "retention sweep for class=idp_cache_orphan has skipped 2 or more runs over the trailing 7 intervals"}
+
+        # Rule 4 — RetentionSweepDurationApproachingInterval, per
+        # Priya's follow-up ruling: the actual early warning, since a
+        # skip-COUNT rule (rule 3) can't fire before rule 2 (window
+        # exceeded) would at I=24h — by the time 2 runs have been
+        # skipped, the retention window itself is already at risk. This
+        # rule catches a sweep that's merely running slow, before it
+        # ever skips a run at all. Fires when any run in the trailing
+        # 7I took longer than half an interval — 0.5I = 0.5 * 86400 =
+        # 43200s. Metric name agreed with Renata (03):
+        # retention_sweep_last_run_duration_seconds{class}, sourced
+        # from Priya's A7 persistence contract
+        # (05-data-ops/multi-db-strategy.md §3d — retention_sweep_run
+        # row's started_at/finished_at, one row per attempt including
+        # skips recorded by the next run as missed_slots).
+        - alert: RetentionSweepDurationApproachingInterval
+          expr: max_over_time(retention_sweep_last_run_duration_seconds{class="direct"}[7d]) > 43200
+          labels: {severity: warning, class: direct}
+          annotations: {summary: "retention sweep for class=direct took longer than half a sweep interval on a recent run"}
+        - alert: RetentionSweepDurationApproachingInterval
+          expr: max_over_time(retention_sweep_last_run_duration_seconds{class="idp_cache"}[7d]) > 43200
+          labels: {severity: warning, class: idp_cache}
+          annotations: {summary: "retention sweep for class=idp_cache took longer than half a sweep interval on a recent run"}
+        - alert: RetentionSweepDurationApproachingInterval
+          expr: max_over_time(retention_sweep_last_run_duration_seconds{class="idp_cache_orphan"}[7d]) > 43200
+          labels: {severity: warning, class: idp_cache_orphan}
+          annotations: {summary: "retention sweep for class=idp_cache_orphan took longer than half a sweep interval on a recent run"}
