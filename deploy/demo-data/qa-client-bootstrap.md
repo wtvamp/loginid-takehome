@@ -25,13 +25,15 @@ MIGRATOR_DSN=$(kubectl -n loginid-takehome get secret \
 
 psql "$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -c "
   INSERT INTO oauth_client (client_id, name, client_secret_hash, secret_state, granted_scopes, audience, status)
-  VALUES ('qa-review-client', 'PO review script', '$HASH', 'set', ARRAY['profile:read:own'], 'api-service', 'active');
+  VALUES ('qa-review-client', 'PO review script', '$HASH', 'set', ARRAY['profile:read:own'], 'loginid-api-service', 'active');
 "
 
 unset MIGRATOR_DSN CLIENT_SECRET HASH
 ```
 
 `granted_scopes` is a single-element array (`profile:read:own`) — the schema's own `ck_oauth_client_granted_scopes_single` CHECK requires exactly one, matching this project's one-credential-per-scope provisioning model (`decisions/search-authz-scoping.md`). Adjust the scope value if the review script needs a different one; do not add a second element, the CHECK will reject it.
+
+**`audience` must be the literal `AUTH_JWT_AUDIENCE` value api-service actually verifies against — `loginid-api-service`, per `PLANNING.md`'s config surface — not the Kubernetes Service name `api-service`.** An earlier run of this runbook seeded rows with `audience='api-service'`; those tokens minted fine but every protected route 401'd, since the verifier's audience check compares against the config literal, not the Service name. If migrating existing rows: `UPDATE oauth_client SET audience='loginid-api-service' WHERE audience='api-service';` via the migrator DSN.
 
 ## 3. Confirm it without re-exposing the secret
 
