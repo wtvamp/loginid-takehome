@@ -76,6 +76,13 @@ spec:
 # halving the limiter's effective threshold before it engages — a real
 # security regression, not a cosmetic one. This POC issuer has no HA
 # requirement that would justify accepting that.
+#
+# strategy: Recreate, not the RollingUpdate default — same reasoning as
+# api-service's Deployment (deploy/api-service.yaml): the default
+# maxSurge briefly runs two pods during a rollout, reopening the
+# cross-replica limiter gap once per deploy. Recreate accepts a brief
+# availability gap instead, consistent with treating the in-process
+# limiters here as security controls that assume one pod.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -83,6 +90,7 @@ metadata:
   namespace: loginid-takehome
 spec:
   replicas: 1
+  strategy: {type: Recreate}
   selector: {matchLabels: {app: api-service-issuer}}
   template:
     metadata: {labels: {app: api-service-issuer}}
