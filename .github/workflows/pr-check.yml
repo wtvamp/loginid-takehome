@@ -56,6 +56,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  manifest-secret-guard:
+    name: Guard against the JWT signing-key Secret leaking into another manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deploy/manifests.yaml
+        run: |
+          # There is no admission controller (no Gatekeeper/Kyverno/OPA,
+          # no Pod Security label) on the target cluster restricting which
+          # Secret a Deployment spec can reference, per 01's LT-32 review —
+          # the physical-absence guarantee for api-service's pod spec (it
+          # must never mount api-service-jwt-signing-key) is otherwise
+          # enforced only by code review. This is the CI-side backstop:
+          # fail the build if that Secret name appears in any manifest
+          # document other than the api-service-issuer Deployment's own.
+          python3 - <<'PYEOF'
+          import sys
+          docs = open("deploy/manifests.yaml").read().split("\n---\n")
+          fail = False
+          for doc in docs:
+              if "api-service-jwt-signing-key" in doc and "name: api-service-issuer" not in doc:
+                  print("::error file=deploy/manifests.yaml::A manifest document references api-service-jwt-signing-key outside the api-service-issuer Deployment:")
+                  print(doc)
+                  fail = True
+          sys.exit(1 if fail else 0)
+          PYEOF
+
   build-images:
     name: Build images (no push)
     runs-on: ubuntu-latest
