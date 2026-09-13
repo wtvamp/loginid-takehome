@@ -62,11 +62,48 @@ func (cr credentialRepo) ListByUserID(ctx context.Context, userID string) ([]mod
 	return results, rows.Err()
 }
 
+// validateMethod enforces two guarantees a CHECK constraint cannot,
+// because CHECK cannot reference another table (multi-db-strategy.md §6
+// items 10 and 11 — both named as the two weakest enforcement sites in
+// the contract for exactly this reason):
+//   - is_active: a deactivated method must not accept new credentials
+//     (existing credentials against it are unaffected — this only gates
+//     Create/method-reassignment, never invalidates what already exists).
+//   - requires_secret ↔ secret_state: a credential whose method has
+//     requires_secret = false must not carry secret_state = 'set'.
+func validateMethod(ctx context.Context, db execQueryRower, methodID, secretState string) error {
+	var requiresSecret, isActive bool
+	err := db.QueryRowContext(ctx, "SELECT requires_secret, is_active FROM auth_method WHERE id = ?", methodID).Scan(&requiresSecret, &isActive)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dao.ErrInvalidMethod
+		}
+		return translateError(err)
+	}
+	if !isActive {
+		return dao.ErrInvalidMethod
+	}
+	if !requiresSecret && secretState == "set" {
+		return dao.ErrInvalidCredential
+	}
+	return nil
+}
+
+// execQueryRower is satisfied by both *sql.DB and *sql.Tx — validateMethod
+// runs identically whether called outside a transaction (Create, Update)
+// or inside one (composite.go's CreateProfileWithCredential).
+type execQueryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 func (cr credentialRepo) Create(ctx context.Context, c *model.UserCredential) (*model.UserCredential, error) {
 	if err := dao.ValidateCreateID(c.ID); err != nil {
 		return nil, err
 	}
 	if err := dao.ValidateCredentialPointers(c); err != nil {
+		return nil, err
+	}
+	if err := validateMethod(ctx, cr.r.db, c.MethodID, c.SecretState); err != nil {
 		return nil, err
 	}
 
@@ -85,6 +122,9 @@ func (cr credentialRepo) Create(ctx context.Context, c *model.UserCredential) (*
 
 func (cr credentialRepo) Update(ctx context.Context, c *model.UserCredential) (*model.UserCredential, error) {
 	if err := dao.ValidateCredentialPointers(c); err != nil {
+		return nil, err
+	}
+	if err := validateMethod(ctx, cr.r.db, c.MethodID, c.SecretState); err != nil {
 		return nil, err
 	}
 

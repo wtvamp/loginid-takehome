@@ -44,6 +44,10 @@ func (r *repository) CreateProfileWithCredential(ctx context.Context, p *model.U
 		return nil, nil, translateError(err)
 	}
 
+	if err := validateMethod(ctx, tx, c.MethodID, c.SecretState); err != nil {
+		return nil, nil, err
+	}
+
 	credentialID := uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO user_credential (id, user_id, username, method_id, secret, secret_state, hash_algo, hash_cost, created_at, updated_at)
