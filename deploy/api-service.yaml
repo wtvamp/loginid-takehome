@@ -134,9 +134,18 @@ spec:
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
 ---
+# LT-49 hotfix: a ServiceMonitor's selector matches the Service
+# OBJECT's own labels, not the pod-selector it carries — this Service
+# had `selector: {app: api-service}` (which pods it routes to) but no
+# `labels:` of its own, so Prometheus's service-discovery found zero
+# Service objects matching `loginid-takehome-api-service`'s
+# `selector: {matchLabels: {app: api-service}}`, even though ports and
+# Endpoints were all correct. Confirmed live: `/api/v1/targets` had
+# zero targets for this namespace despite metrics:9101 being present
+# in the real Endpoints object.
 apiVersion: v1
 kind: Service
-metadata: {name: api-service, namespace: loginid-takehome}
+metadata: {name: api-service, namespace: loginid-takehome, labels: {app: api-service}}
 spec:
   selector: {app: api-service}
   ports:
