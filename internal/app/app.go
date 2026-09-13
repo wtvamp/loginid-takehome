@@ -6,9 +6,12 @@
 package app
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 )
 
 // healthResponse is the JSON body every health probe returns. Field set is
@@ -17,10 +20,56 @@ import (
 // an opaque build identifier (commit SHA) — never a version string, build
 // timestamp, connection detail, or anything else. Do not add fields here
 // without checking that ruling first; see refinement/LT-34.md.
+//
+// DB is the one addition LT-52 criterion 5 allows: a boolean/enum-only
+// DB-connectivity signal ("ok"/"down"), never a DSN, host, port, or raw
+// driver error string. omitempty so idp-connector and issuer-mode
+// api-service — neither of which has a DB dependency — keep the original
+// three-field shape unchanged.
 type healthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
 	Build   string `json:"build"`
+	DB      string `json:"db,omitempty"`
+}
+
+// dbPingTimeout bounds the /healthz DB check so a wedged connection pool
+// can never make the health probe itself hang past a kubelet liveness
+// deadline — a health check has to be faster than what it's checking.
+const dbPingTimeout = 1 * time.Second
+
+// healthHandlerWithDB is /healthz for api-service's verifier Deployment
+// only (LT-52 criterion 5) — pingDB is a lightweight *sql.DB opened
+// purely for this bounded connectivity probe, separate from the
+// dao.Repository used for actual queries (see NewVerifierRouter's own
+// doc comment on why it's a second handle rather than reaching through
+// the Repository interface, which 05's contract doesn't expose a Ping
+// through). pingDB may be nil (DB never configured, or dao.New failed at
+// startup) — reported as "down", same as a ping that errors out; the
+// distinction between "never configured" and "configured but
+// unreachable" is not exposed here, since both mean the same thing to a
+// caller of this endpoint (the two DB-backed routes will 503) and
+// either detail would be exactly the kind of internal-state leak this
+// criterion exists to prevent.
+func healthHandlerWithDB(service string, pingDB *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		dbStatus := "down"
+		if pingDB != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), dbPingTimeout)
+			defer cancel()
+			if err := pingDB.PingContext(ctx); err == nil {
+				dbStatus = "ok"
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(healthResponse{
+			Status:  "ok",
+			Service: service,
+			Build:   Commit,
+			DB:      dbStatus,
+		})
+	}
 }
 
 // Mode is api-service's run mode (LT-32). A defined type rather than a
