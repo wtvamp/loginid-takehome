@@ -48,9 +48,44 @@ A sweep that runs but never drains (hitting `maxRows` every batch) emits no vali
 
 **Batched sweeps: only a drained result feeds the metric.** 05's `DeleteExpired` is batched (a bounded `maxRows` per call, `SweepResult.Drained` marking the last batch of a sweep) — `OldestSurvivingAt` is meaningful only on a `Drained == true` result, since mid-sweep the oldest deletable row is still present by construction and would read as stale on every batch but the last. The sweep job emits `oldest_surviving_row_age_seconds` only from drained results, never from an intermediate batch; the alert rule above already only ever sees what's published, so this is a constraint on what the job emits, not an extra filter the alert needs to apply. Getting this wrong means the alert fires on every sweep and gets muted, which is worse than not having it.
 
-## Log-sink retention: the deletion-gap enforcement site
+## Log-sink retention: the deletion-gap, and the ILM request (LT-20, corrected)
 
-Application logs, metrics, and traces have no `source` column, no clock tied to a `user_profile` row, and no key a subject-deletion request could reach by cascade — a deleted profile's data can still exist in a log line indefinitely. 05's never-log list (`handoff-04-secrets.md`) and this document's enforcement mechanism (above) are the upstream control — if PII never enters a log, there's nothing in a log to expire — but that only holds for the fields on the list. What's left (chiefly the audit trail: `sub`, scope, opaque record id, timestamp — permitted by design, pseudonymous rather than PII-free) still needs a retention window: `pii-governance.md` § "Retention windows (S5)", the "Audit-log stream" row (clock: the entry's own timestamp; window: proposed, pending a legal ruling; disposal: **expiry at the sink**) names this document's log-sink retention policy as its enforcement site — the citation resolves in both directions. Not a deletion job 04 writes — a retention setting on infrastructure 04 already operates.
+Application logs, metrics, and traces have no `source` column, no clock tied to a `user_profile` row, and no key a subject-deletion request could reach by cascade — a deleted profile's data can still exist in a log line indefinitely. 05's never-log list (`handoff-04-secrets.md`) and this document's enforcement mechanism (above) are the upstream control — if PII never enters a log, there's nothing in a log to expire — but that only holds for the fields on the list. What's left (chiefly the audit trail: `sub`, scope, opaque record id, timestamp — permitted by design, pseudonymous rather than PII-free) still needs a retention window.
+
+**Corrected (LT-20, per `refinement/LT-20.md`): this is not a retention setting 04 configures.** The audit trail lands in Filebeat's shared `filebeat-9.4.4` Elasticsearch data stream (Amber's observability inventory) — infrastructure `logging`'s operators own, not this track, and not a Kubernetes object any RBAC grant in this namespace reaches. This section states the requirement and names the owner; it is not applied configuration, and this story does not close by proxy the moment a mechanism that happens to touch the same stream (LT-49's dedicated-audit-stream option, if ever adopted) exists — each is independently confirmed.
+
+**The ruled number (Priya, 05 — `pii-governance.md`): ≥ 90 days, a floor, not a ceiling.** Read that distinction literally, not as a caveat: every other number in `pii-governance.md` is a *maximum* driven by minimization (delete PII no longer than necessary); this one is a *minimum* driven by incident review (keep audit evidence no less than necessary). The audit stream carries no PII payload under the never-log discipline, and its subject identifiers (profile UUIDs, client_ids) stop being linkable to a person once the profile they name is deleted — so nothing pushes this number down; the only question was how far up. It's short (90 days, not a year) specifically because the durable proof-of-deletion lives in the `deletion_log` **table**, not this stream — the stream is corroborating detail for the ordinary incident-review horizon, not primary evidence. Had the table not existed, the floor would be materially longer.
+
+**The ILM policy object, as a request, not an applied change** — this is the exact document to hand to whoever administers the shared Elastic stack (`logging` namespace; Warren today, on this cluster):
+
+```json
+{
+  "policy": {
+    "phases": {
+      "hot": {
+        "min_age": "0ms",
+        "actions": { "rollover": { "max_age": "1d" } }
+      },
+      "delete": {
+        "min_age": "90d",
+        "actions": { "delete": {} }
+      }
+    }
+  }
+}
+```
+
+**Why `min_age: "90d"` on the `delete` phase, not a `max_age`/rollover trim:** this is the one line the whole request lives or dies on. `min_age` on `delete` means Elasticsearch *may not* move a document into deletion before 90 days have passed since rollover — a **floor**. A `max_age`-based trim (or a `delete` phase with a *shorter* `min_age`) reads similarly in English but is the *opposite* mechanism — a ceiling that would remove audit evidence this ruling exists specifically to preserve. Get this line wrong and the fix looks identical to the request until the first incident review comes up short.
+
+**Stream-level minimum, not a project-specific one — stated as a hard platform fact, not a preference.** The audit events share `filebeat-9.4.4` with every other tenant's logs, and the ES license is **Basic** — document-level security (which would let a policy scope by `kubernetes.namespace: loginid-takehome`) is a Platinum/Enterprise feature (confirmed for read-role scoping in Amber's inventory; extrapolated, not separately confirmed, for ILM — flagged as the first thing to verify with the stream's owner, not assumed). The request above is therefore necessarily on the **whole stream's** minimum: it may retain longer for other tenants' own reasons, it must not retain less than 90 days for anyone, ours included. If a future architecture (LT-49's Option A — a dedicated `loginid-takehome-audit-*` stream written by `api-service` itself) ever lands, this same policy object would apply narrowly to that stream by name instead — but that's a *separate* request to the same owner, confirmed independently, not something this story inherits automatically the moment that stream exists (Tobias's objection, `refinement/LT-20.md`).
+
+**Owner: whoever administers the shared Elastic stack in `logging` — Warren, on this cluster, today.** This section is the artifact handed to that owner; applying it, or ruling that the stream's existing policy (if any) already satisfies the floor, is their decision to make and record, not a config value this track can set or verify was set.
+
+**Three revisit triggers (Priya's ruling), each stated with what it means operationally:**
+
+1. **`deletion_log`'s own window is ever ruled shorter than 90 days.** The 90-day floor here depends on that table being the durable record; if the table becomes more perishable than this stream, the stream becomes primary evidence and this floor must rise to cover what the table no longer does.
+2. **Any contractual or regulatory retention commitment appears** (a PCI-style one-year obligation, a customer contract). The floor stops being an engineering judgment call and becomes a minimum someone is legally accountable for — revisit the number, not just the mechanism.
+3. **The never-log discipline breaks** — the dangerous one. If PII ever reaches this stream, it acquires a *minimum* from incident review and a *maximum* from storage/data-minimization law at the same time — two constraints that can conflict with no correct configuration available. This is why the never-log list (above) is load-bearing for this ruling, not merely good hygiene elsewhere in this document: it's the thing keeping this a one-sided constraint at all.
 
 **Not the same object as the `deletion_log` table.** 05's `deletion_log` (rows written transactionally by `DeleteExpired`/`DeleteProfile`) is a separate thing from the audit-log stream above — it's PII-free by construction, carries no `RetentionClass`, and isn't in 05's retention table at all; nothing here applies to it, and no metric from a `SweepResult` does either. If a retention window is ever wanted for that table, it's a DAO contract change (05's to make), not a sink-retention config value (04's).
 
