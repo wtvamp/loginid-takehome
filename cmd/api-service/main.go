@@ -36,9 +36,19 @@ func main() {
 		// database (LT-39's search/retrieve handlers) — the issuer
 		// Deployment (below) never needs a Repository at all, since it
 		// only mints tokens.
+		//
+		// A failure here does NOT Fatal: on a cluster where the database
+		// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
+		// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
+		// misconfigured, this process must still come up and serve
+		// /healthz rather than crash-loop the whole verifying Deployment
+		// over a dependency only two of its routes need. repo stays nil;
+		// NewVerifierRouter fails those two routes closed with 503
+		// instead of panicking on a nil Repository.
 		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
 		if err != nil {
-			log.Fatalf("api-service: opening DAO repository: %v", err)
+			log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+			repo = nil
 		}
 		handler = app.NewVerifierRouter(cfg, repo)
 	default:

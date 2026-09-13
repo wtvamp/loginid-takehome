@@ -155,3 +155,31 @@ func TestGrantLimiter_AlertOnlyNamesClientID_NotSourceIP(t *testing.T) {
 		t.Error("alertFn should be keyed on a single client_id's consecutive failures, not fired for varying client_ids sharing a source IP")
 	}
 }
+
+// TestGrantLimiter_SweepEvictsStaleEntries covers the unbounded map
+// growth Nolan Reyes flagged (PR #30 review): a distributed brute force
+// against one client_id from many source IPs must not leave a permanent
+// entry for every attacking IP once its backoff window is long past.
+func TestGrantLimiter_SweepEvictsStaleEntries(t *testing.T) {
+	l := NewInProcessGrantLimiter(time.Second, time.Second, 100, nil)
+	fakeNow := time.Now()
+	l.now = func() time.Time { return fakeNow }
+	ctx := context.Background()
+
+	l.RecordFailure(ctx, "client-a", "1.2.3.4")
+	if _, ok := l.bySourceIP["1.2.3.4"]; !ok {
+		t.Fatal("expected an entry for the source IP before any sweep")
+	}
+
+	fakeNow = fakeNow.Add(grantSweepInterval + grantEntryTTL + time.Second)
+	// Any Allow call triggers the opportunistic sweep.
+	if _, err := l.Allow(ctx, "client-z", "9.9.9.9"); err != nil {
+		t.Fatalf("Allow: %v", err)
+	}
+	if _, ok := l.bySourceIP["1.2.3.4"]; ok {
+		t.Error("a stale entry (well past grantEntryTTL) should have been swept")
+	}
+	if _, ok := l.byClientID["client-a"]; ok {
+		t.Error("a stale client_id entry should have been swept too")
+	}
+}

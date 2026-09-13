@@ -57,6 +57,16 @@ type grantBackoffState struct {
 // RateLimiter/TouchCounter's in-process implementations, a shared store
 // is the multi-instance replacement behind the same interface — the
 // mechanism is this track's call, per handoff-03-auth.md v3.
+//
+// Both maps are swept periodically (see sweepLocked) rather than left to
+// grow forever: this component's own doc comment names "a distributed
+// brute force (many IPs, one client_id)" as a defended attack shape, and
+// that is exactly the traffic pattern that would otherwise grow
+// bySourceIP without bound — every distinct attacking IP earns a
+// permanent entry that only a matching RecordSuccess would remove, which
+// an attacking IP by definition never triggers (Nolan Reyes, PR #30
+// review — the same unbounded-growth shape an earlier PR's TouchCounter
+// review already found and fixed once).
 type InProcessGrantLimiter struct {
 	mu             sync.Mutex
 	byClientID     map[string]*grantBackoffState
@@ -66,7 +76,19 @@ type InProcessGrantLimiter struct {
 	alertThreshold int
 	alertFn        func(clientID string, consecutiveFailures int)
 	now            func() time.Time
+	lastSweep      time.Time
 }
+
+// grantSweepInterval and grantEntryTTL bound how long a key's state
+// survives with no further failures against it. A blocked key is never
+// swept before its own backoff has elapsed (sweeping mid-block would
+// silently un-block it early); grantEntryTTL is generous past any
+// realistic maxBackoff so a legitimately still-escalating attacker isn't
+// reset early either.
+const (
+	grantSweepInterval = time.Minute
+	grantEntryTTL      = time.Hour
+)
 
 // NewInProcessGrantLimiter constructs a limiter with exponential backoff
 // starting at baseBackoff (doubling per consecutive failure, capped at
@@ -89,7 +111,29 @@ func (l *InProcessGrantLimiter) Allow(_ context.Context, clientID, sourceIP stri
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
+	l.sweepLocked(now)
 	return !isBlocked(l.byClientID[clientID], now) && !isBlocked(l.bySourceIP[sourceIP], now), nil
+}
+
+// sweepLocked drops any entry whose blockedUntil is at least
+// grantEntryTTL in the past — called with l.mu already held, at most
+// once per grantSweepInterval, so it adds no per-call cost beyond a
+// single time comparison on every other call.
+func (l *InProcessGrantLimiter) sweepLocked(now time.Time) {
+	if now.Sub(l.lastSweep) < grantSweepInterval {
+		return
+	}
+	l.lastSweep = now
+	sweepMap(l.byClientID, now)
+	sweepMap(l.bySourceIP, now)
+}
+
+func sweepMap(m map[string]*grantBackoffState, now time.Time) {
+	for key, s := range m {
+		if now.Sub(s.blockedUntil) >= grantEntryTTL {
+			delete(m, key)
+		}
+	}
 }
 
 func isBlocked(s *grantBackoffState, now time.Time) bool {

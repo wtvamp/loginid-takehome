@@ -8,11 +8,14 @@
 package api
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"sync"
@@ -81,10 +84,41 @@ func rsaPublicKeyFromJWK(k jwk) (*rsa.PublicKey, error) {
 
 // KeySource resolves a kid to the RSA public key that should verify a
 // token carrying it. JWKSCache is the real implementation; tests use a
-// map-backed fake.
+// map-backed fake. ctx carries the calling request's own deadline —
+// KeyForKid's real implementation must bound its network I/O by it, not
+// by some separate, undocumented timeout (Nolan Reyes, PR #30 review: a
+// hung fetch that ignores the caller's context defeats the deadline
+// middleware's whole guarantee).
 type KeySource interface {
-	KeyForKid(kid string) (*rsa.PublicKey, error)
+	KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error)
 }
+
+// ErrJWKSStale is returned by JWKSCache.KeyForKid when the cached key set
+// has exceeded its max-staleness bound and could not be refreshed — the
+// verifier must fail closed rather than trust keys this old (Tomasz
+// Wrede, 02 cold review; PM ruling). Exported so NewJWTMiddleware can log
+// a distinct audit event (AuditJWKSUnavailable) for this specific
+// failure mode, rather than folding it into an ordinary auth failure.
+var ErrJWKSStale = errors.New("api: JWKS cache exceeded max staleness and could not be refreshed")
+
+// jwksMaxStalenessMultiple and jwksUnknownKidRefetchInterval are the
+// concrete numbers the PM ruled on for Tomasz Wrede's two findings:
+//   - a signing key can be revoked BECAUSE it's compromised; if the JWKS
+//     endpoint is also unreachable during that same incident, a
+//     stale-cache-forever fallback would keep verifying tokens signed by
+//     the revoked key for as long as fetches keep failing. Bounding
+//     staleness at a multiple of the normal refresh interval (ttl) turns
+//     "fail open forever" into "fail open for a bounded window, then
+//     fail closed" — resilient to a brief blip, not to an extended one.
+//   - an unknown kid could be a key the issuer rotated in since the last
+//     TTL-driven refresh; without an out-of-band refetch, a freshly
+//     rotated key would be rejected for up to a full TTL. Rate-limited
+//     so an unknown-kid flood can't be used to hammer the issuer's JWKS
+//     endpoint.
+const (
+	jwksMaxStalenessMultiple      = 3
+	jwksUnknownKidRefetchInterval = 30 * time.Second
+)
 
 // JWKSCache fetches a JWKS document from url and caches the parsed key
 // set for ttl, refetching only after it expires — "to avoid a JWKS fetch
@@ -94,58 +128,164 @@ type KeySource interface {
 // just the most recent key, so an old and a new key both verify
 // successfully for as long as the issuer's own JWKS response lists both.
 type JWKSCache struct {
-	url        string
-	ttl        time.Duration
-	httpClient *http.Client
+	url          string
+	ttl          time.Duration
+	maxStaleness time.Duration
+	httpClient   *http.Client
+	now          func() time.Time
 
-	mu        sync.Mutex
-	keys      map[string]*rsa.PublicKey
-	fetchedAt time.Time
+	mu                  sync.Mutex
+	keys                map[string]*rsa.PublicKey
+	fetchedAt           time.Time // last SUCCESSFUL fetch
+	consecutiveFailures int
+	staleAlerted        bool
+	lastUnknownKidRetry time.Time
 }
+
+// defaultJWKSClientTimeout backstops a hung fetch (a connection that
+// accepts but never responds — not a hard refusal, which fails fast on
+// its own) when no context deadline is shorter. Distinct from and
+// independent of a per-request context deadline: this fires even for a
+// call that somehow reaches fetch() with no deadline on its context at
+// all, which the http.Client.Timeout field guards against regardless of
+// context (Nolan Reyes, PR #30 review — the shipped wiring passed nil
+// for httpClient, resolving to http.DefaultClient, whose zero-value
+// Timeout means "none").
+const defaultJWKSClientTimeout = 10 * time.Second
 
 // NewJWKSCache constructs a cache fetching from url, refetching at most
-// once per ttl. A nil httpClient uses http.DefaultClient.
+// once per ttl (and, for an unrecognized kid specifically, at most once
+// per jwksUnknownKidRefetchInterval outside the normal TTL cycle). A nil
+// httpClient constructs one with defaultJWKSClientTimeout — never
+// http.DefaultClient, whose Timeout is unset (no bound at all) by
+// default. maxStaleness is jwksMaxStalenessMultiple * ttl.
 func NewJWKSCache(url string, ttl time.Duration, httpClient *http.Client) *JWKSCache {
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: defaultJWKSClientTimeout}
 	}
-	return &JWKSCache{url: url, ttl: ttl, httpClient: httpClient}
+	return &JWKSCache{
+		url:          url,
+		ttl:          ttl,
+		maxStaleness: jwksMaxStalenessMultiple * ttl,
+		httpClient:   httpClient,
+		now:          time.Now,
+	}
 }
 
-func (c *JWKSCache) KeyForKid(kid string) (*rsa.PublicKey, error) {
+// KeyForKid never holds c.mu across a network fetch (Nolan Reyes, PR #30
+// review, finding #2): the prior shape held the lock for the whole
+// function body, so one hung fetch stalled every other concurrent
+// request through this same cache instance — i.e. every authenticated
+// request the verifying Deployment was serving, not just the one that
+// triggered the refresh. Concurrent callers that both decide a refresh
+// is due may both fetch; that's cheap, occasional duplicate work, and far
+// preferable to serializing the whole authenticated surface behind one
+// goroutine's network call.
+func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	needsRefresh := c.keys == nil || c.now().Sub(c.fetchedAt) >= c.ttl
+	c.mu.Unlock()
 
-	if c.keys == nil || time.Since(c.fetchedAt) >= c.ttl {
-		keys, err := c.fetch()
-		if err != nil {
-			// A stale-but-present cache is preferable to a hard failure
-			// on every request the moment one refresh fails (a
-			// transient network blip to the issuer's in-cluster
-			// Service) — verification with a stale key set still
-			// correctly rejects a token signed by a kid that's been
-			// fully retired and removed from the real set, it just
-			// risks accepting a very recently rotated-in key slightly
-			// late, which is not a security regression (the overlap
-			// window already tolerates both old and new keys).
-			if c.keys == nil {
-				return nil, err
-			}
-		} else {
-			c.keys = keys
-			c.fetchedAt = time.Now()
+	if needsRefresh {
+		if err := c.refresh(ctx); err != nil {
+			return nil, err
 		}
 	}
 
-	key, ok := c.keys[kid]
-	if !ok {
-		return nil, fmt.Errorf("api: no key found for kid %q", kid)
+	if key, ok := c.lookupKey(kid); ok {
+		return key, nil
 	}
-	return key, nil
+
+	// Unknown kid: might be a key the issuer rotated in since the last
+	// TTL-driven refresh. One rate-limited out-of-band refetch before
+	// giving up, so a freshly-rotated key isn't rejected for up to a
+	// full TTL (Tomasz Wrede, 02 cold review). Best-effort: its error is
+	// deliberately ignored here — the outcome that matters is whether
+	// the retry populated the kid we're actually looking for, and a
+	// refresh() failure here has already been handled (logged / staleness
+	// tracked) inside refresh() itself.
+	if c.reserveUnknownKidRetry() {
+		_ = c.refresh(ctx)
+		if key, ok := c.lookupKey(kid); ok {
+			return key, nil
+		}
+	}
+
+	return nil, fmt.Errorf("api: no key found for kid %q", kid)
 }
 
-func (c *JWKSCache) fetch() (map[string]*rsa.PublicKey, error) {
-	resp, err := c.httpClient.Get(c.url)
+func (c *JWKSCache) lookupKey(kid string) (*rsa.PublicKey, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	k, ok := c.keys[kid]
+	return k, ok
+}
+
+// reserveUnknownKidRetry reports whether an unknown-kid-triggered refetch
+// may proceed now, and if so atomically marks one as just having started
+// — a caller enumerating unknown kids can trigger at most one extra
+// fetch per jwksUnknownKidRefetchInterval, not one per request.
+func (c *JWKSCache) reserveUnknownKidRetry() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.now().Sub(c.lastUnknownKidRetry) < jwksUnknownKidRefetchInterval {
+		return false
+	}
+	c.lastUnknownKidRetry = c.now()
+	return true
+}
+
+// refresh performs the network fetch (no lock held during it) and
+// updates cache state. Returns an error only when the caller must fail
+// the whole verification: no cache exists yet (cold start against an
+// unreachable issuer), or the existing cache has exceeded maxStaleness —
+// wrapped in ErrJWKSStale in the latter case specifically, so the
+// middleware can log AuditJWKSUnavailable rather than an ordinary auth
+// failure. A transient failure within the staleness bound returns nil:
+// the stale cache is still good enough to use, per the resilience this
+// mechanism exists for.
+func (c *JWKSCache) refresh(ctx context.Context) error {
+	fresh, err := c.fetch(ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err == nil {
+		c.keys = fresh
+		c.fetchedAt = c.now()
+		c.consecutiveFailures = 0
+		c.staleAlerted = false
+		return nil
+	}
+
+	c.consecutiveFailures++
+
+	if c.keys == nil {
+		return err
+	}
+
+	staleSince := c.now().Sub(c.fetchedAt)
+	if staleSince > c.maxStaleness {
+		if !c.staleAlerted {
+			c.staleAlerted = true
+			// Log line for 04's alerting pipeline on a prolonged
+			// fetch-failure run — not a policy decision (AuditLogger is
+			// for those), an operational signal that this process's own
+			// key infrastructure is degraded.
+			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed: %v",
+				staleSince, c.consecutiveFailures, c.maxStaleness, err)
+		}
+		return fmt.Errorf("%w: stale for %s across %d consecutive failures: %v", ErrJWKSStale, staleSince, c.consecutiveFailures, err)
+	}
+	return nil
+}
+
+func (c *JWKSCache) fetch(ctx context.Context) (map[string]*rsa.PublicKey, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("api: building JWKS request for %s: %w", c.url, err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("api: fetching JWKS from %s: %w", c.url, err)
 	}

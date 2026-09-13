@@ -57,14 +57,14 @@ type jwtVerifier struct {
 // function beyond "verification failed," which is what makes
 // writeUnauthorized's single, undifferentiated 401 body correct here
 // without an extra translation step.
-func (v *jwtVerifier) verify(tokenString string) (AuthContext, error) {
+func (v *jwtVerifier) verify(ctx context.Context, tokenString string) (AuthContext, error) {
 	var c claims
 	token, err := jwt.ParseWithClaims(tokenString, &c, func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		if kid == "" {
 			return nil, errors.New("token header has no kid")
 		}
-		return v.keys.KeyForKid(kid)
+		return v.keys.KeyForKid(ctx, kid)
 	}, jwt.WithValidMethods([]string{jwtAlgorithm}), jwt.WithIssuer(v.issuer))
 	if err != nil {
 		return AuthContext{}, err
@@ -78,7 +78,7 @@ func (v *jwtVerifier) verify(tokenString string) (AuthContext, error) {
 	// inconsistently across versions in a way we don't want to depend
 	// on — asserting it here directly means this check's behavior is
 	// this file's own to guarantee, not the library's default to trust.
-	if !hasAudience(c.RegisteredClaims.Audience, v.audience) {
+	if !hasAudience(c.Audience, v.audience) {
 		return AuthContext{}, errors.New("token audience mismatch")
 	}
 
@@ -104,8 +104,8 @@ func hasAudience(aud jwt.ClaimStrings, want string) bool {
 }
 
 // singleScope requires the token's scope claim to name exactly one
-// recognized scope. handoff-03-auth.md v3 describes the claim as
-// "space-delimited, values below" without describing how a handler
+// distinct recognized scope. handoff-03-auth.md v3 describes the claim
+// as "space-delimited, values below" without describing how a handler
 // disambiguates a multi-scope token per request, and AuthContext (LT-39)
 // carries exactly one Scope by design ("handoff-03-auth.md v3 doesn't
 // describe multi-scope tokens being disambiguated per-request, so one
@@ -113,25 +113,34 @@ func hasAudience(aud jwt.ClaimStrings, want string) bool {
 // several granted scopes a request is "really" using — silently picking
 // one is exactly the kind of authorization ambiguity this project's
 // contracts have consistently ruled against — a token naming zero or
-// more than one recognized scope is rejected outright. This matches the
-// provisioning model in decisions/search-authz-scoping.md: a client is
-// provisioned for the one use case its credential exists for.
+// more than one DISTINCT recognized scope is rejected outright. This
+// matches the provisioning model in decisions/search-authz-scoping.md: a
+// client is provisioned for the one use case its credential exists for.
+//
+// Deduplicated by distinct value, not by occurrence count: a malformed
+// but unambiguous claim like "profile:search profile:search" names one
+// scope repeated, not two different ones to disambiguate between, and
+// rejecting it as "more than one" would contradict this function's own
+// reasoning above (Oren Castellan, PR #30 review).
 func singleScope(raw string) (Scope, error) {
 	fields := strings.Fields(raw)
-	var found []Scope
+	found := make(map[Scope]bool, len(fields))
 	for _, f := range fields {
 		switch Scope(f) {
 		case ScopeReadOwn, ScopeReadAny, ScopeSearch:
-			found = append(found, Scope(f))
+			found[Scope(f)] = true
 		}
 	}
 	switch len(found) {
 	case 0:
 		return "", errors.New("token scope claim names no recognized scope")
 	case 1:
-		return found[0], nil
+		for s := range found {
+			return s, nil
+		}
+		panic("unreachable")
 	default:
-		return "", errors.New("token scope claim names more than one recognized scope, which this verifier does not disambiguate per request")
+		return "", errors.New("token scope claim names more than one distinct recognized scope, which this verifier does not disambiguate per request")
 	}
 }
 
@@ -144,34 +153,59 @@ func singleScope(raw string) (Scope, error) {
 // KeySource backed by the issuer's full published key set, not a single
 // cached key), and issuer/audience checks. Verification failure returns
 // 401 via writeUnauthorized — the same path LT-39's handlers already use
-// for a missing AuthContext, not a new response shape.
-func NewJWTMiddleware(keys KeySource, issuer, audience string) func(http.Handler) http.Handler {
+// for a missing AuthContext, not a new response shape — with one
+// exception: a KeySource failing closed on exceeded JWKS staleness
+// (ErrJWKSStale) logs AuditJWKSUnavailable first, since that's a
+// token-infrastructure degradation, not an ordinary bad-credential
+// attempt, and worth distinguishing in the audit trail (Tomasz Wrede, 02
+// cold review). audit may be nil (tests that don't care about audit
+// output); production wiring always passes a real AuditLogger.
+func NewJWTMiddleware(keys KeySource, issuer, audience string, audit AuditLogger) func(http.Handler) http.Handler {
 	v := &jwtVerifier{keys: keys, issuer: issuer, audience: audience}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
 			tokenString, ok := bearerToken(r)
 			if !ok {
+				logAuthnFailure(ctx, audit, nil)
 				writeUnauthorized(w)
 				return
 			}
-			ac, err := v.verify(tokenString)
+			ac, err := v.verify(ctx, tokenString)
 			if err != nil {
+				logAuthnFailure(ctx, audit, err)
 				writeUnauthorized(w)
 				return
 			}
-			r = r.WithContext(WithAuthContext(r.Context(), ac))
+			r = r.WithContext(WithAuthContext(ctx, ac))
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
+func logAuthnFailure(ctx context.Context, audit AuditLogger, err error) {
+	if audit == nil {
+		return
+	}
+	kind := AuditAuthnFailure
+	if errors.Is(err, ErrJWKSStale) {
+		kind = AuditJWKSUnavailable
+	}
+	audit.Log(ctx, AuditEvent{Kind: kind, Timestamp: time.Now().UTC()})
+}
+
+// bearerToken's scheme match is case-insensitive ("Bearer", "bearer",
+// "BEARER" all accepted) per RFC 7235 §2.1, which defines the
+// auth-scheme token as case-insensitive — a prior case-sensitive match
+// would 401 a structurally valid request from any client that happened
+// to send a lowercase scheme (Oren Castellan, PR #30 review).
 func bearerToken(r *http.Request) (string, bool) {
 	h := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if !strings.HasPrefix(h, prefix) {
+	const prefixLen = len("Bearer ")
+	if len(h) <= prefixLen || !strings.EqualFold(h[:prefixLen], "Bearer ") {
 		return "", false
 	}
-	tok := strings.TrimSpace(strings.TrimPrefix(h, prefix))
+	tok := strings.TrimSpace(h[prefixLen:])
 	if tok == "" {
 		return "", false
 	}

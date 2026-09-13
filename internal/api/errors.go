@@ -114,3 +114,15 @@ func writeInternalError(w http.ResponseWriter, err error) {
 	}
 	writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 }
+
+// WriteServiceUnavailable is exported for internal/app's router wiring:
+// when the DAO repository couldn't be constructed at startup (e.g. no
+// DB_DRIVER/DB_DSN configured yet), the verifying Deployment must still
+// start and serve /healthz — it must not crash-loop the whole process
+// over a dependency LT-39's handlers need but nothing else does. Callers
+// that have no working Repository at all route the protected endpoints
+// to this instead of constructing a Deps with a nil Repo (which would
+// panic the first time a handler called d.Repo.Profiles()).
+func WriteServiceUnavailable(w http.ResponseWriter) {
+	writeError(w, http.StatusServiceUnavailable, "service_unavailable", "service temporarily unavailable")
+}

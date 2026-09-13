@@ -23,28 +23,24 @@ const jwksCacheTTL = 15 * time.Minute
 // plain NewRouter above, since it has no need for any of this — it never
 // verifies inbound tokens, only issues them.
 //
-// repo may be nil (e.g. DB_DRIVER unset in a minimal smoke-test
-// environment); the search/retrieve routes still register in that case,
-// they'll simply fail at the DAO call with whatever error a nil
-// Repository produces — this function's job is wiring, not validating
-// that a database is reachable, which is /healthz's own job (LT-52).
+// repo may be nil — cmd/api-service/main.go passes nil rather than
+// crash-looping the whole process when the DAO repository couldn't be
+// constructed at startup (no DB_DRIVER/DB_DSN yet, e.g. before the
+// database exists in this environment). /healthz must stay reachable
+// regardless (LT-34's live-URL story; LT-52 is what teaches /healthz to
+// actually report DB status, not this function); the two protected
+// routes fail closed with 503 instead of panicking on a nil Repository
+// or silently pretending to work. This is a startup-shape decision, not
+// an ongoing health check — a repo that stops answering after a
+// successful open is /healthz's job to surface (LT-52), not this
+// router's.
 func NewVerifierRouter(cfg config.Config, repo dao.Repository) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler("api-service"))
 
-	deps := api.Deps{
-		Repo:        repo,
-		RateLimiter: api.NewInProcessRateLimiter(),
-		TouchCounter: api.NewInProcessTouchCounter(
-			api.TouchCapPerWindow, api.TouchCapWindow),
-		AuditLog: api.StdoutAuditLogger{},
-		Authz: &api.StopgapAuthorizer{
-			ReadOwnAllow: stopgapReadOwnAllow(cfg),
-		},
-	}
-
+	auditLog := api.StdoutAuditLogger{}
 	keys := api.NewJWKSCache(cfg.AuthJWKSURL, jwksCacheTTL, nil)
-	authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.AuthJWTAudience)
+	authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.AuthJWTAudience, auditLog)
 
 	// api.NewDeadlineMiddleware outermost: the deadline budget must cover
 	// JWT verification (including a JWKS cache-miss fetch) as well as
@@ -55,8 +51,27 @@ func NewVerifierRouter(cfg config.Config, repo dao.Repository) http.Handler {
 		return api.NewDeadlineMiddleware(authMiddleware(h))
 	}
 
-	mux.Handle("POST /profiles/search", protect(api.NewSearchHandler(deps)))
-	mux.Handle("GET /profiles/{id}", protect(api.NewGetProfileHandler(deps)))
+	var searchHandler, getHandler http.Handler
+	if repo == nil {
+		searchHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.WriteServiceUnavailable(w) })
+		getHandler = searchHandler
+	} else {
+		deps := api.Deps{
+			Repo:        repo,
+			RateLimiter: api.NewInProcessRateLimiter(),
+			TouchCounter: api.NewInProcessTouchCounter(
+				api.TouchCapPerWindow, api.TouchCapWindow),
+			AuditLog: auditLog,
+			Authz: &api.StopgapAuthorizer{
+				ReadOwnAllow: stopgapReadOwnAllow(cfg),
+			},
+		}
+		searchHandler = api.NewSearchHandler(deps)
+		getHandler = api.NewGetProfileHandler(deps)
+	}
+
+	mux.Handle("POST /profiles/search", protect(searchHandler))
+	mux.Handle("GET /profiles/{id}", protect(getHandler))
 
 	return mux
 }
