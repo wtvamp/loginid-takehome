@@ -36,6 +36,13 @@ import (
 // actual migration runner is what "verification exercises the sequence
 // the live system executes" (05-data-ops's own principle) means in
 // practice, not just a stated intention.
+//
+// Do not add t.Parallel() to this file's tests without first addressing
+// that goose.SetDialect/SetTableName below are package-level, global
+// mutable state (goose's own API design, not a choice made here) — two
+// tests running this setup concurrently would race on it (Nolan Reyes,
+// PR #39 review). Safe today only because nothing in this file runs in
+// parallel.
 func setupIssuerDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")

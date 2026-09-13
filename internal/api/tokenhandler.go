@@ -185,6 +185,15 @@ func NewTokenHandler(store ClientStore, limiter GrantLimiter, key *SigningKey, i
 		// without a live-credential migration. Best-effort: a failure
 		// here does not fail the grant already earned by a correct
 		// secret; it's logged and the next successful auth tries again.
+		// Bounded even under concurrent grants against the same
+		// still-drifted client: UpdateSecretHash's WHERE clause targets
+		// one row by primary key, serialized by Postgres's own row lock
+		// and capped by clientStoreQueryTimeout — a burst of redundant
+		// UPDATEs before the row migrates, not a table lock or a
+		// cascading write (Nolan Reyes, PR #39 review). This design
+		// assumes a cost-profile bump (and therefore a burst of drifted
+		// rows all rehashing near-simultaneously) is a rare, infrequent
+		// event, not something load-tested at scale.
 		if needsRehash(rec.ClientSecretHash) {
 			if newHash, err := hashSecret(clientSecret); err != nil {
 				log.Printf("api: opportunistic rehash for client_id=%s: hashing failed: %v", clientID, err)
