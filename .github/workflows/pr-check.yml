@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # gitleaks needs full history, not a shallow clone
+          fetch-depth: 0 # gitleaks needs full history available locally to diff against origin/<base_ref> below
 
       - uses: actions/setup-go@v5
         with:
@@ -95,10 +95,33 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install gitleaks
+        # Pinned to the same version .github/workflows/gitleaks-full-history.yml
+        # uses, so a PR and the scheduled full-history scan never disagree
+        # about what counts as a finding. Verified locally before pinning:
+        # 8.21.2 does not flag internal/api/tokenhandler.go's
+        # "RecordFailure/RecordSuccess" doc-comment fragment as a
+        # generic-api-key match; a newer local install (8.30.1) does —
+        # confirming this version is what's kept CI green so far, not an
+        # allowlist that happens to exist somewhere.
+        run: |
+          GITLEAKS_VERSION=8.21.2
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+      - name: gitleaks (this PR's own commits only)
+        # Scoped with --log-opts to origin/<base_ref>..HEAD (backlog Story
+        # 9): a full-history scan here meant a leaked-pattern match in ANY
+        # commit already on main would fail every subsequent PR forever,
+        # not just the PR that introduced it. The full-history safety net
+        # moves to gitleaks-full-history.yml (scheduled + on push to
+        # main), which still scans everything — this job just stops being
+        # a per-PR gate that history it didn't introduce can break.
+        run: |
+          git fetch origin "${{ github.base_ref }}" --no-tags
+          gitleaks detect --source . --no-banner \
+            --log-opts="origin/${{ github.base_ref }}..HEAD"
 
   manifest-secret-guard:
     name: Guard against the JWT signing-key Secret leaking into another manifest
