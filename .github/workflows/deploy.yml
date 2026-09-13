@@ -18,8 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     # Safe to cancel a stale build/push in favor of a newer commit's — an
     # in-progress image build has no external effect worth preserving.
+    # Group MUST include matrix.service: without it, every matrix leg
+    # (api-service, idp-connector) shares one concurrency slot and starts
+    # cancelling EACH OTHER, not just older runs — this is what actually
+    # happened in runs 34736676470/34736893015 (api-service kept losing to
+    # "a higher priority waiting request" that was its own sibling leg, on
+    # every single run, so main HEAD never fully built).
     concurrency:
-      group: deploy-build-${{ github.ref }}
+      group: deploy-build-${{ github.ref }}-${{ matrix.service }}
       cancel-in-progress: true
     strategy:
       matrix:
