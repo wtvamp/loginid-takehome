@@ -178,6 +178,15 @@ spec:
     - from: [{podSelector: {matchLabels: {app: api-service}}}]
 ```
 
+## 5a. Standing checklist: adding any new component to `loginid-takehome`
+
+Per Tobias's (01) flagged pattern — this got caught by hand twice (F13's signing-key RBAC gap in LT-32, then the JWKS/`/auth/token` NetworkPolicy conflict this same track found itself) before it became a rule rather than a one-off review catch. Every new Deployment/StatefulSet/Service added to this namespace answers, explicitly, before it ships:
+
+1. **NetworkPolicy scope** — the namespace default is allow, not deny (per `decisions/deploy-path.md`'s "shared production, isolate aggressively" framing). Name exactly which pods/namespaces may reach this component's ingress; if the answer is "namespace default," say so on purpose, don't leave it unstated.
+2. **Secret access, if any** — is a Secret mounted into this component? If so, is CI's RBAC (`deploy/rbac.yaml`) capable of reading it (it shouldn't be, for anything sensitive), and is there a CI-side guard (like `manifest-secret-guard`) preventing that Secret's name from appearing in any other component's manifest?
+3. **ResourceQuota headroom** — does the namespace quota (`deploy/manifests.yaml`'s `ResourceQuota`) actually have room for this component's `resources.limits`? Check before shipping, not after a `FailedCreate`.
+4. **Public exposure** — does this component get an `Ingress` route, or is it in-cluster only? State which, and if in-cluster only, confirm no route was added for it by accident.
+
 ## 6. What's deliberately not here
 
 No service mesh, no Istio/Linkerd sidecar, no HorizontalPodAutoscaler, no PodDisruptionBudget. This is a two-service take-home submission, not a platform. If any of these earn their place later, they're additive to this design, not a rewrite of it.
