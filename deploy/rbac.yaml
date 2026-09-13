@@ -17,17 +17,26 @@ kind: Role
 metadata: {name: loginid-takehome-deployer, namespace: loginid-takehome}
 rules:
   - apiGroups: ["apps"]
-    resources: [deployments]
+    resources: [deployments, statefulsets]
     verbs: [get, list, watch, create, update, patch]
   - apiGroups: [""]
-    resources: [services, resourcequotas, serviceaccounts]
+    resources: [services, resourcequotas, serviceaccounts, configmaps]
     verbs: [get, list, watch, create, update, patch]
   - apiGroups: ["networking.k8s.io"]
     resources: [networkpolicies, ingresses]
     verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["cert-manager.io"]
+    resources: [issuers, certificates]
+    # Not secrets: the Certificate resource here only requests that
+    # cert-manager mint one; the resulting TLS Secret is managed by
+    # cert-manager's own controller, not read/written by this identity.
+    verbs: [get, list, watch, create, update, patch]
   - apiGroups: ["batch"]
     resources: [jobs]
-    verbs: [get, list, watch, create]
+    # `delete` is needed because a Job's pod template is immutable — the
+    # deploy workflow deletes the previous db-migrate Job before
+    # re-applying one with a new image tag on every deploy (LT-52).
+    verbs: [get, list, watch, create, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
