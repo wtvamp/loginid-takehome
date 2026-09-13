@@ -28,7 +28,8 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.6 # built against Go >= 1.27; keep in step with go-version above
+          version: latest
+          install-mode: goinstall # compiles against the job's Go 1.27 toolchain instead of a prebuilt (go1.24) release
 
       - name: Test (race)
         run: go test ./... -race -v
