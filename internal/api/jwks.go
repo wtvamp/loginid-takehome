@@ -18,6 +18,8 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -100,6 +102,21 @@ type KeySource interface {
 // a distinct audit event (AuditJWKSUnavailable) for this specific
 // failure mode, rather than folding it into an ordinary auth failure.
 var ErrJWKSStale = errors.New("api: JWKS cache exceeded max staleness and could not be refreshed")
+
+// ErrJWKSUnreachable is returned by JWKSCache.KeyForKid when no cached
+// key set exists yet at all and a fetch attempt failed — the cold-start
+// case (e.g. a pod that hasn't completed its first successful fetch
+// yet, including a sustained outage from process start), distinct from
+// ErrJWKSStale (a cache DOES exist but has aged past max staleness).
+// Both represent the same operator-facing signal — "verification is
+// unavailable," not "this specific token is invalid" — a live finding
+// during the joint LT-40/LT-51 review confirmed the middleware
+// previously miscategorized this cold-start case as an ordinary
+// AuditAuthnFailure, indistinguishable from a genuinely bad token, with
+// no log line anywhere naming the actual cause (a JWKS Service port
+// mismatch, in that incident). logAuthnFailure now checks both
+// sentinels for AuditJWKSUnavailable.
+var ErrJWKSUnreachable = errors.New("api: JWKS cache not yet populated and fetch failed")
 
 // jwksMaxStalenessMultiple and jwksUnknownKidRefetchInterval are the
 // concrete numbers the PM ruled on for Tomasz Wrede's two findings:
@@ -322,12 +339,22 @@ func (c *JWKSCache) reserveUnknownKidRetry(kid string) bool {
 // refresh performs the network fetch (no lock held during it) and
 // updates cache state. Returns an error only when the caller must fail
 // the whole verification: no cache exists yet (cold start against an
-// unreachable issuer), or the existing cache has exceeded maxStaleness —
-// wrapped in ErrJWKSStale in the latter case specifically, so the
+// unreachable issuer — wrapped in ErrJWKSUnreachable), or the existing
+// cache has exceeded maxStaleness (wrapped in ErrJWKSStale) — so the
 // middleware can log AuditJWKSUnavailable rather than an ordinary auth
-// failure. A transient failure within the staleness bound returns nil:
-// the stale cache is still good enough to use, per the resilience this
-// mechanism exists for.
+// failure in either case. A transient failure within the staleness
+// bound returns nil: the stale cache is still good enough to use, per
+// the resilience this mechanism exists for.
+//
+// Every failure is logged, rate-limited to once per failure STREAK
+// (on the transition into failure and the transition back out of it),
+// never once per request — a sustained outage would otherwise log at
+// whatever rate verification requests arrive, which is exactly the log
+// volume this mechanism's own request-rate independence (jwksMinRefreshRetryInterval)
+// already exists to avoid on the network side; the log line shouldn't
+// reintroduce that problem on the logging side. No token material is
+// ever in scope for these lines — the JWKS fetch has no token at all,
+// only the verifier's own outbound request to the issuer.
 func (c *JWKSCache) refresh(ctx context.Context) error {
 	c.mu.Lock()
 	c.lastAttempt = c.now()
@@ -337,21 +364,67 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 
 	c.mu.Lock()
 	if err == nil {
+		priorFailures := c.consecutiveFailures
 		c.keys = fresh
 		c.fetchedAt = c.now()
 		c.consecutiveFailures = 0
 		c.staleAlerted = false
 		c.mu.Unlock()
+		if priorFailures > 0 {
+			log.Printf("api: JWKS fetch recovered (host=%s) after %d consecutive failures", jwksURLHost(c.url), priorFailures)
+		}
 		return nil
 	}
 	c.consecutiveFailures++
+	streakStart := c.consecutiveFailures == 1
 	noCache := c.keys == nil
 	c.mu.Unlock()
 
+	if streakStart {
+		log.Printf("api: JWKS fetch failed (host=%s, class=%s): %v", jwksURLHost(c.url), classifyJWKSFetchError(err), err)
+	}
+
 	if noCache {
-		return err
+		return fmt.Errorf("%w: %w", ErrJWKSUnreachable, err)
 	}
 	return c.enforceStaleness()
+}
+
+// jwksURLHost extracts just the host from c.url for logging — the PM's
+// own ruling on this finding named "the URL host," not the full URL, as
+// what belongs in an operational log line; url.Parse failing (c.url
+// itself malformed) falls back to the raw string rather than losing the
+// log line entirely.
+func jwksURLHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return rawURL
+	}
+	return u.Host
+}
+
+// classifyJWKSFetchError buckets a fetch() error into a coarse class for
+// the log line — enough for an operator to tell "the issuer refused the
+// connection" from "the issuer responded but with a bad status" from
+// "the response body didn't parse" at a glance, without needing to read
+// the full error text (which is still logged alongside this, so nothing
+// is lost — this is a categorization aid, not a replacement for detail).
+func classifyJWKSFetchError(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "building JWKS request"):
+		return "request_build_error"
+	case strings.Contains(msg, "status "):
+		return "http_status_error"
+	case strings.Contains(msg, "reading JWKS response"):
+		return "response_read_error"
+	case strings.Contains(msg, "parsing JWKS"):
+		return "response_parse_error"
+	case strings.Contains(msg, "fetching JWKS from"):
+		return "network_error"
+	default:
+		return "unknown"
+	}
 }
 
 // enforceStaleness checks the existing cache against maxStaleness and
@@ -375,8 +448,8 @@ func (c *JWKSCache) enforceStaleness() error {
 			// fetch-failure run — not a policy decision (AuditLogger is
 			// for those), an operational signal that this process's own
 			// key infrastructure is degraded.
-			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed",
-				staleSince, c.consecutiveFailures, c.maxStaleness)
+			log.Printf("api: JWKS unrefreshable (host=%s) for %s across %d consecutive failures (exceeds max staleness %s) — failing closed",
+				jwksURLHost(c.url), staleSince, c.consecutiveFailures, c.maxStaleness)
 		}
 		return fmt.Errorf("%w: stale for %s across %d consecutive failures", ErrJWKSStale, staleSince, c.consecutiveFailures)
 	}
