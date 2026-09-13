@@ -97,13 +97,26 @@ func splitSQLStatements(sqlText string) []string {
 // newPostgresFamilyFixture is shared by the "postgres" and "cockroachdb"
 // backends — same migration, same setup, different env var and driver
 // string. Reads this package's own throwaway per-run database (see
-// TestMain in testmain_test.go) rather than the env var directly — skips
-// if that backend's DSN was never set at all: this suite asserts
-// behavior, it doesn't stand up infrastructure.
+// TestMain in testmain_test.go — dsnVarForDriver, not the env var
+// directly), skipping the test if that backend's DSN was never set at
+// all LOCALLY (CI unset), but FAILING it (not skipping) if CI is set and
+// the DSN is still absent — GitHub Actions sets CI=true unconditionally,
+// so this is a reliable signal this test is running in the gate, not on
+// a developer's machine. Naomi Voss's joint-review finding: this
+// fixture's plain t.Skipf made every Postgres/CockroachDB conformance
+// test (including TestConformance_CockroachDB_RealSerializationRetry)
+// look green in CI while never actually running against a real
+// database — pr-check never set these DSNs, so "passing" meant
+// "skipped," indistinguishable from a real pass in the CI summary. A
+// skipped assertion that reads as a pass is worse than a red build
+// (05's own §7 principle).
 func newPostgresFamilyFixture(t *testing.T, driver, dsnEnvVar string) fixture {
 	t.Helper()
 	dsnVar := dsnVarForDriver(driver)
 	if dsnVar == nil || *dsnVar == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatalf("%s not set in CI — the %s conformance gate is not running", dsnEnvVar, driver)
+		}
 		t.Skipf("%s not set — skipping %s conformance run", dsnEnvVar, driver)
 	}
 	dsn := *dsnVar
