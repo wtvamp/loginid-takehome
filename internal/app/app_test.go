@@ -92,3 +92,23 @@ func TestNewRouter_VerifierModeHasNoTokenRoute(t *testing.T) {
 		t.Errorf("status = %d, want %d (verifier router must not expose the issuance route)", resp.StatusCode, http.StatusNotFound)
 	}
 }
+
+// TestNewRouter_UnrecognizedModeFallsBackToVerifier asserts NewRouter
+// doesn't rely solely on config.Load's validation never being bypassed
+// (Oren Castellan, PR #18 review): an unrecognized Mode value must still
+// produce the safer of the two route sets (no issuance route) rather than
+// silently matching ModeIssuer's behavior by accident of comparison.
+func TestNewRouter_UnrecognizedModeFallsBackToVerifier(t *testing.T) {
+	srv := httptest.NewServer(NewRouter("api-service", Mode("bogus")))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/auth/token", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /auth/token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (unrecognized mode must not expose the issuance route)", resp.StatusCode, http.StatusNotFound)
+	}
+}

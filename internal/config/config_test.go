@@ -98,6 +98,39 @@ func TestLoad_IssuerModeRequiresSigningKeyFileToBeReadable(t *testing.T) {
 	}
 }
 
+// TestLoad_IssuerModeRejectsDirectory is Oren Castellan's PR #18 finding:
+// os.Open succeeds on a directory as readily as a regular file, so
+// JWT_SIGNING_KEY_FILE pointed at a mount directory instead of the file
+// inside it (an easy Kubernetes subPath-vs-mount-root mistake) must be
+// rejected here rather than deferred to whenever S7's signing code first
+// tries to read it.
+func TestLoad_IssuerModeRejectsDirectory(t *testing.T) {
+	t.Setenv("APP_MODE", "issuer")
+	t.Setenv("JWT_SIGNING_KEY_FILE", t.TempDir())
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load should reject APP_MODE=issuer with JWT_SIGNING_KEY_FILE pointing at a directory, got nil error")
+	}
+}
+
+// TestLoad_IssuerModeRejectsEmptyFile covers a mounted-but-never-populated
+// Secret: the file exists and opens without error but has no content,
+// which a bare open-then-close check would not catch.
+func TestLoad_IssuerModeRejectsEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "empty.key")
+	if err := os.WriteFile(keyPath, nil, 0o600); err != nil {
+		t.Fatalf("writing empty file: %v", err)
+	}
+
+	t.Setenv("APP_MODE", "issuer")
+	t.Setenv("JWT_SIGNING_KEY_FILE", keyPath)
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load should reject APP_MODE=issuer with an empty JWT_SIGNING_KEY_FILE, got nil error")
+	}
+}
+
 // TestLoad_IssuerModeWithSigningKeyFileSucceeds is the positive case: a
 // real issuer Deployment, with the Secret actually mounted, must start
 // cleanly and report the path back on Config.
