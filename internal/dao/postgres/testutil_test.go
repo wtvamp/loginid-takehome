@@ -1,0 +1,107 @@
+package postgres
+
+import (
+	"database/sql"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// migrationSQL reads a goose-format migration file and returns just the Up
+// section's SQL — the real deliverable in migrations/{shared,postgres}/,
+// not a duplicated copy of the schema. Applying the actual migration files
+// in tests is what keeps this test harness honest: if the migrations
+// drift from what the Go code expects, the integration tests fail, not
+// just a hand-maintained fixture.
+func migrationSQL(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading migration %s: %v", path, err)
+	}
+	content := string(b)
+	upStart := strings.Index(content, "-- +goose Up")
+	downStart := strings.Index(content, "-- +goose Down")
+	if upStart == -1 || downStart == -1 {
+		t.Fatalf("migration %s missing +goose Up/Down markers", path)
+	}
+	return content[upStart+len("-- +goose Up") : downStart]
+}
+
+// setupDB connects to TEST_POSTGRES_DSN (skipping the test if unset — real
+// Postgres/CockroachDB verification is this package's own responsibility;
+// LT-38's cross-backend suite proves behavior matches SQLite, not that
+// this package can reach a database at all), applies the real migration
+// files into a fresh, uniquely-named schema, and tears the schema down on
+// test cleanup so tests never collide with each other.
+func setupDB(t *testing.T) *sql.DB {
+	t.Helper()
+	dsn := os.Getenv("TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("TEST_POSTGRES_DSN not set — skipping Postgres integration test (see refinement/LT-36-LT-37.md: real-backend verification is this package's responsibility, run manually or in CI once wired)")
+	}
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("opening TEST_POSTGRES_DSN: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// Cap the pool at one connection BEFORE anything session-scoped
+	// (SET search_path) runs — otherwise the migration or a later test
+	// query can land on a different pooled connection that never saw the
+	// SET, and silently falls back to the default search_path.
+	db.SetMaxOpenConns(1)
+
+	schemaName := fmt.Sprintf("test_%d", rand.Int63())
+	if _, err := db.Exec("CREATE SCHEMA " + schemaName); err != nil {
+		t.Fatalf("creating test schema: %v", err)
+	}
+	t.Cleanup(func() {
+		db.Exec("DROP SCHEMA " + schemaName + " CASCADE")
+	})
+	// Include "public" on the path: pg_trgm's CREATE EXTENSION IF NOT
+	// EXISTS in the migration is a no-op after the first test schema
+	// creates it, and an extension's objects (gin_trgm_ops) live in
+	// whichever schema was current at creation time — later test schemas
+	// need "public" on their path to see it, not just their own name.
+	if _, err := db.Exec("SET search_path TO " + schemaName + ", public"); err != nil {
+		t.Fatalf("setting search_path: %v", err)
+	}
+
+	repoRoot := repoRootFromThisFile(t)
+	postgresMigration := migrationSQL(t, filepath.Join(repoRoot, "migrations", "postgres", "00001_initial_schema.sql"))
+	if _, err := db.Exec(postgresMigration); err != nil {
+		t.Fatalf("applying postgres migration: %v", err)
+	}
+	sharedSeed := migrationSQL(t, filepath.Join(repoRoot, "migrations", "shared", "00001_seed_auth_method.sql"))
+	if _, err := db.Exec(sharedSeed); err != nil {
+		t.Fatalf("applying shared seed migration: %v", err)
+	}
+
+	return db
+}
+
+func repoRootFromThisFile(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	// this package: <repoRoot>/internal/dao/postgres
+	return filepath.Join(wd, "..", "..", "..")
+}
+
+// seedAuthMethodID returns the id of the 'password' method seeded by the
+// shared migration, for tests that need a valid method_id FK target.
+func seedAuthMethodID(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	var id string
+	if err := db.QueryRow("SELECT id FROM auth_method WHERE name = 'password'").Scan(&id); err != nil {
+		t.Fatalf("looking up seeded auth_method: %v", err)
+	}
+	return id
+}
