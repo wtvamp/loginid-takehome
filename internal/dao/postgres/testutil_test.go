@@ -63,20 +63,30 @@ func splitSQLStatements(sqlText string) []string {
 
 // setupDB connects to this package's throwaway per-run database (see
 // TestMain in testmain_test.go — testDBDSN, not TEST_POSTGRES_DSN
-// directly, skipping the test if no database is configured at all: real
-// Postgres/CockroachDB verification is this package's own
-// responsibility; LT-38's cross-backend suite proves behavior matches
-// SQLite, not that this package can reach a database at all), applies
-// the real migration files into a fresh, uniquely-named schema, and
-// tears the schema down on test cleanup so tests never collide with
-// each other WITHIN this package (cross-package collisions are what
-// TestMain's throwaway database prevents).
+// directly), skipping the test if no database is configured at all
+// LOCALLY (CI unset), but FAILING it (not skipping) if CI is set and
+// testDBDSN is still empty anyway — GitHub Actions sets CI=true
+// unconditionally, so this is a reliable signal this test is running in
+// the gate, not on a developer's machine. Naomi Voss's joint-review
+// finding: this fixture's plain t.Skip made every Postgres/CockroachDB
+// conformance and integration test look green in CI while never
+// actually running against a real database at all — pr-check never set
+// these DSNs, so "passing" meant "skipped," indistinguishable from a
+// real pass in the CI summary. A skipped assertion that reads as a pass
+// is worse than a red build (05's own §7 principle). Applies the real
+// migration files into a fresh, uniquely-named schema, and tears the
+// schema down on test cleanup so tests never collide with each other
+// WITHIN this package (cross-package collisions are what TestMain's
+// throwaway database prevents).
 func setupDB(t *testing.T) *sql.DB {
 	t.Helper()
-	if testDBDSN == "" {
+	dsn := testDBDSN
+	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatalf("TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running")
+		}
 		t.Skip("TEST_POSTGRES_DSN not set — skipping Postgres integration test (see refinement/LT-36-LT-37.md: real-backend verification is this package's responsibility, run manually or in CI once wired)")
 	}
-	dsn := testDBDSN
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
