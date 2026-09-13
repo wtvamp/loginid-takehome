@@ -33,19 +33,32 @@ spec:
   strategy: {type: Recreate}
   selector: {matchLabels: {app: api-service}}
   template:
-    metadata: {labels: {app: api-service}}
+    metadata:
+      labels: {app: api-service}
+      annotations:
+        # LT-46: Vault Agent Injector, per Amber's provisioning
+        # (04-infra-devops/handoff-amber-vault-provisioning.md).
+        # secret-volume-path + agent-inject-file renders to exactly
+        # /secrets/db/dsn — DB_DSN_FILE below is UNCHANGED, so this is
+        # a pure delivery-mechanism swap, no application config change.
+        # Single-line template form (Amber's verified trap): the
+        # obvious multi-line {{ with ... }} form renders a trailing
+        # newline into the file, corrupting the DSN by one byte.
+        # ca-cert, not tls-skip-verify: real TLS verification against
+        # the CA Amber staged in this namespace (vault-ca-cert),
+        # preferred per her/the PM's explicit recommendation.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "loginid-takehome-api-service"
+        vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
+        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/secret-volume-path: "/secrets/db"
+        vault.hashicorp.com/agent-inject-secret-dsn: "secret/data/loginid-takehome/db-runtime-credential"
+        vault.hashicorp.com/agent-inject-file-dsn: "dsn"
+        vault.hashicorp.com/agent-inject-template-dsn: |
+          {{- with secret "secret/data/loginid-takehome/db-runtime-credential" -}}{{ .Data.data.dsn }}{{- end -}}
     spec:
       serviceAccountName: api-service
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
-      # LT-46 DRAFT (Vault re-scope), NOT YET LIVE — see
-      # api-service-issuer's own TODO comment in deploy/manifests.yaml
-      # for the full explanation. DB_DSN_FILE below is UNCHANGED
-      # (still /secrets/db/dsn); only the Kubernetes-Secret-backed
-      # volume that used to fill it is removed.
-      # TODO(LT-46, blocked on Amber): add vault.hashicorp.com/agent-inject
-      # (+ role, + path/template annotations rendering to
-      # /secrets/db/dsn) once real KV paths and the api-service Vault
-      # role exist.
       containers:
         - name: api-service
           image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
