@@ -19,6 +19,7 @@ func (r *repository) CreateProfileWithCredential(ctx context.Context, p *model.U
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 	if err := dao.ValidateCreateID(c.ID); err != nil {
 		return nil, nil, err
 	}
@@ -173,6 +174,9 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 // DeleteProfile is the subject-deletion path. reason is asserted
 // internally as "subject_request", never caller-supplied (§3c).
 func (r *repository) DeleteProfile(ctx context.Context, id string, externalRef *string) error {
+	if err := dao.ValidateID(id); err != nil {
+		return err
+	}
 	return r.withRetry(ctx, func(tx *sql.Tx) error {
 		var source string
 		if err := tx.QueryRowContext(ctx, "SELECT source FROM user_profile WHERE id = $1", id).Scan(&source); err != nil {

@@ -34,6 +34,9 @@ func (cr credentialRepo) GetByUsername(ctx context.Context, username string) (*m
 }
 
 func (cr credentialRepo) ListByUserID(ctx context.Context, userID string) ([]model.UserCredential, error) {
+	if err := dao.ValidateID(userID); err != nil {
+		return nil, err
+	}
 	rows, err := cr.r.db.QueryContext(ctx, "SELECT "+credentialColumns+" FROM user_credential WHERE user_id = $1", userID)
 	if err != nil {
 		return nil, translateError(err)
@@ -110,6 +113,9 @@ func (cr credentialRepo) Create(ctx context.Context, c *model.UserCredential) (*
 }
 
 func (cr credentialRepo) Update(ctx context.Context, c *model.UserCredential) (*model.UserCredential, error) {
+	if err := dao.ValidateID(c.ID); err != nil {
+		return nil, err
+	}
 	if err := dao.ValidateCredentialPointers(c); err != nil {
 		return nil, err
 	}
@@ -140,6 +146,9 @@ func (cr credentialRepo) Update(ctx context.Context, c *model.UserCredential) (*
 }
 
 func (cr credentialRepo) Delete(ctx context.Context, id string) error {
+	if err := dao.ValidateID(id); err != nil {
+		return err
+	}
 	return cr.r.withRetry(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "DELETE FROM user_credential WHERE id = $1", id)
 		if err != nil {

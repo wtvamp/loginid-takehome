@@ -26,6 +26,9 @@ func scanAuthMethod(scan func(dest ...any) error) (*model.AuthMethod, error) {
 }
 
 func (ar authMethodRepo) Get(ctx context.Context, id string) (*model.AuthMethod, error) {
+	if err := dao.ValidateID(id); err != nil {
+		return nil, err
+	}
 	row := ar.r.db.QueryRowContext(ctx, "SELECT "+authMethodColumns+" FROM auth_method WHERE id = $1", id)
 	return scanAuthMethod(row.Scan)
 }
