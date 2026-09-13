@@ -382,3 +382,10 @@ spec:
         paths:
           - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
           - {path: /auth/token, pathType: Exact, backend: {service: {name: api-service-issuer, port: {number: 443}}}}
+          # POST /profiles/search, GET /profiles/{id} (internal/app/verifier_router.go)
+          # — LT-39's protected routes were wired into the binary at
+          # b857b40 but never added here, so they 404'd from
+          # ingress-nginx's default backend, not from the app's own auth
+          # middleware. JWKS (/.well-known/jwks.json) deliberately has NO
+          # rule here — in-cluster only, per handoff-03-auth v6.
+          - {path: /profiles, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}
