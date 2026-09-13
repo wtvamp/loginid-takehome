@@ -64,6 +64,36 @@ func migrationSQL(t *testing.T, path string) string {
 	return content[upStart+len("-- +goose Up") : downStart]
 }
 
+// splitSQLStatements splits a migration's Up section into individual
+// statements on ";" — used for migrations that must not run as one
+// multi-statement transaction (see the 00002 phone-CHECK migration's own
+// comment: CockroachDB rejects an ADD CONSTRAINT reusing a name a DROP
+// CONSTRAINT removed earlier in the same implicit transaction). "--"
+// comment lines are stripped first: this file's own prose comments use
+// ordinary English semicolons, which a naive split-on-";" would otherwise
+// cut mid-sentence and misidentify as a statement boundary. None of the
+// actual SQL statements' string literals contain a ";", so splitting the
+// comment-free text is safe — this is not a general-purpose SQL parser.
+func splitSQLStatements(sqlText string) []string {
+	var codeOnly strings.Builder
+	for _, line := range strings.Split(sqlText, "\n") {
+		if idx := strings.Index(line, "--"); idx != -1 {
+			line = line[:idx]
+		}
+		codeOnly.WriteString(line)
+		codeOnly.WriteString("\n")
+	}
+
+	var out []string
+	for _, stmt := range strings.Split(codeOnly.String(), ";") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		out = append(out, stmt)
+	}
+	return out
+}
+
 // newPostgresFamilyFixture is shared by the "postgres" and "cockroachdb"
 // backends — same migration, same setup, different env var and driver
 // string. Skips if the corresponding DSN env var isn't set: this suite
@@ -98,6 +128,18 @@ func newPostgresFamilyFixture(t *testing.T, driver, dsnEnvVar string) fixture {
 	// is identical between the two engines.
 	if _, err := admin.Exec(migrationSQL(t, filepath.Join(root, "migrations", driver, "00001_initial_schema.sql"))); err != nil {
 		t.Fatalf("applying %s migration: %v", driver, err)
+	}
+	// 00002: contract amendment A6's phone CHECK narrowing — applied in
+	// sequence like the real pipeline would, not folded back into 00001
+	// (which would be a no-op against an already-migrated database).
+	// Statement-by-statement, not one multi-statement Exec: CockroachDB
+	// rejects an ADD CONSTRAINT reusing a name a DROP CONSTRAINT removed
+	// earlier in the same implicit transaction.
+	phoneNarrowing := migrationSQL(t, filepath.Join(root, "migrations", driver, "00002_phone_e164_narrow_range.sql"))
+	for _, stmt := range splitSQLStatements(phoneNarrowing) {
+		if _, err := admin.Exec(stmt); err != nil {
+			t.Fatalf("applying %s migration 00002 statement %q: %v", driver, stmt, err)
+		}
 	}
 	if _, err := admin.Exec(migrationSQL(t, filepath.Join(root, "migrations", "shared", "00001_seed_auth_method.sql"))); err != nil {
 		t.Fatalf("applying shared seed migration: %v", err)

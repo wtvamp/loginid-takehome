@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,8 +38,13 @@ func scanCredential(scan func(dest ...any) error) (*model.UserCredential, error)
 	return &c, nil
 }
 
+// GetByUsername case-folds entirely in SQL — LOWER(username) = LOWER(?)
+// is the same expression that builds uq_user_credential_username's index,
+// so index and lookup agree by construction within this backend (contract
+// amendment A6 — folding in Go first as well gave the same guarantee two
+// different ways that could disagree, not one).
 func (cr credentialRepo) GetByUsername(ctx context.Context, username string) (*model.UserCredential, error) {
-	row := cr.r.db.QueryRowContext(ctx, "SELECT "+credentialColumns+" FROM user_credential WHERE LOWER(username) = LOWER(?)", strings.ToLower(username))
+	row := cr.r.db.QueryRowContext(ctx, "SELECT "+credentialColumns+" FROM user_credential WHERE LOWER(username) = LOWER(?)", username)
 	return scanCredential(row.Scan)
 }
 
