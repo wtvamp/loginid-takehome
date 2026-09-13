@@ -27,6 +27,27 @@ apiVersion: v1
 kind: ServiceAccount
 metadata: {name: api-service-issuer, namespace: loginid-takehome}
 ---
+# postgres/db-migrate/idp-connector ServiceAccounts (LT-46): Amber's Vault
+# provisioning found all three workloads declared no serviceAccountName
+# at all and ran as `default` — a hard blocker, not a style gap, since
+# binding a Vault Kubernetes-auth role to `default` would let ANY pod on
+# that SA assume it (idp-connector could have authenticated as
+# loginid-takehome-postgres and read postgres-superuser). Amber created
+# these three SAs directly rather than bind to default; declared here so
+# they're part of the same CI-applied, reviewable manifest set as every
+# other ServiceAccount in this namespace, not a hand-applied one-off.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: postgres, namespace: loginid-takehome}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: db-migrate, namespace: loginid-takehome}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: idp-connector, namespace: loginid-takehome}
+---
 apiVersion: v1
 kind: ResourceQuota
 metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
@@ -93,7 +114,34 @@ spec:
   strategy: {type: Recreate}
   selector: {matchLabels: {app: api-service-issuer}}
   template:
-    metadata: {labels: {app: api-service-issuer}}
+    metadata:
+      labels: {app: api-service-issuer}
+      annotations:
+        # LT-46: Vault Agent Injector, per Amber's provisioning
+        # (04-infra-devops/handoff-amber-vault-provisioning.md).
+        # JWT_SIGNING_KEY_FILE/ISSUER_DB_DSN_FILE below are UNCHANGED —
+        # per-secret secret-volume-path overrides render to those exact
+        # paths, no application config change. Single-line templates
+        # (Amber's verified trailing-newline trap); ca-cert, not
+        # tls-skip-verify, per her/the PM's recommendation.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "loginid-takehome-api-service-issuer"
+        vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
+        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/agent-inject-secret-jwt-key: "secret/data/loginid-takehome/api-service-jwt-signing-key"
+        vault.hashicorp.com/secret-volume-path-jwt-key: "/secrets/jwt"
+        vault.hashicorp.com/agent-inject-file-jwt-key: "signing-key"
+        # index, not dot-notation, for the "signing-key" map key: Go
+        # templates parse a bare `.Data.data.signing-key` as subtraction
+        # (`.Data.data.signing` MINUS `key`), not a hyphenated field
+        # access — caught before deploy, not after a CrashLoopBackOff.
+        vault.hashicorp.com/agent-inject-template-jwt-key: |
+          {{- with secret "secret/data/loginid-takehome/api-service-jwt-signing-key" -}}{{ index .Data.data "signing-key" }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-issuer-dsn: "secret/data/loginid-takehome/issuer-db-runtime-credential"
+        vault.hashicorp.com/secret-volume-path-issuer-dsn: "/secrets/issuer-db"
+        vault.hashicorp.com/agent-inject-file-issuer-dsn: "dsn"
+        vault.hashicorp.com/agent-inject-template-issuer-dsn: |
+          {{- with secret "secret/data/loginid-takehome/issuer-db-runtime-credential" -}}{{ .Data.data.dsn }}{{- end -}}
     spec:
       serviceAccountName: api-service-issuer
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
@@ -111,16 +159,8 @@ spec:
             - {name: ISSUER_DB_DSN_FILE, value: /secrets/issuer-db/dsn}
             - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
             - {name: AUTH_JWT_AUDIENCE, value: "loginid-api-service"}
-          volumeMounts:
-            - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
-            - {name: issuer-db-runtime-credential, mountPath: /secrets/issuer-db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
-      volumes:
-        - name: issuer-db-runtime-credential
-          secret: {secretName: issuer-db-runtime-credential}
-        - name: jwt-signing-key
-          secret: {secretName: api-service-jwt-signing-key}
 ---
 apiVersion: v1
 kind: Service
@@ -155,6 +195,16 @@ data:
   01-create-roles.sh: |
     #!/bin/bash
     set -euo pipefail
+    # LT-46: MIGRATOR_PASSWORD/RUNTIME_PASSWORD are no longer container
+    # env vars (postgres's own env block only sets POSTGRES_PASSWORD_FILE
+    # now — see deploy/manifests.yaml's postgres StatefulSet) — read
+    # directly from the files Vault Agent renders them to instead. Read
+    # once into a shell var rather than inline `$(cat ...)` inside the
+    # heredoc so a read failure (file missing/empty) trips `set -e`
+    # immediately, before any SQL runs, rather than embedding an empty
+    # string into a CREATE ROLE statement silently.
+    MIGRATOR_PASSWORD="$(cat /vault/secrets/db-migrator-credential)"
+    RUNTIME_PASSWORD="$(cat /vault/secrets/db-runtime-credential)"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
       CREATE ROLE migrator WITH LOGIN PASSWORD '$MIGRATOR_PASSWORD' CREATEDB;
       GRANT ALL PRIVILEGES ON DATABASE $POSTGRES_DB TO migrator;
@@ -208,6 +258,9 @@ data:
     # for the roles (roles are cluster-wide, not per-database), then a
     # third reconnecting to `issuer` for the database-and-schema-scoped
     # grants.
+    # LT-46: same file-not-env-var change as 01-create-roles.sh.
+    ISSUER_MIGRATOR_PASSWORD="$(cat /vault/secrets/issuer-db-migrator-credential)"
+    ISSUER_RUNTIME_PASSWORD="$(cat /vault/secrets/issuer-db-runtime-credential)"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "CREATE DATABASE issuer;"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
       CREATE ROLE issuer_migrator WITH LOGIN PASSWORD '$ISSUER_MIGRATOR_PASSWORD' CREATEDB;
@@ -257,8 +310,35 @@ spec:
   replicas: 1
   selector: {matchLabels: {app: postgres}}
   template:
-    metadata: {labels: {app: postgres}}
+    metadata:
+      labels: {app: postgres}
+      annotations:
+        # LT-46: Vault Agent Injector, per Amber's provisioning. Widest
+        # role of the five (loginid-takehome-postgres) — all five files
+        # land at the default /vault/secrets/<name> base, matching
+        # exactly what 01-create-roles.sh/02-create-issuer-db.sh and
+        # POSTGRES_PASSWORD_FILE below already read.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "loginid-takehome-postgres"
+        vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
+        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/agent-inject-secret-postgres-superuser: "secret/data/loginid-takehome/postgres-superuser"
+        vault.hashicorp.com/agent-inject-template-postgres-superuser: |
+          {{- with secret "secret/data/loginid-takehome/postgres-superuser" -}}{{ .Data.data.password }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-db-migrator-credential: "secret/data/loginid-takehome/db-migrator-credential"
+        vault.hashicorp.com/agent-inject-template-db-migrator-credential: |
+          {{- with secret "secret/data/loginid-takehome/db-migrator-credential" -}}{{ .Data.data.password }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-db-runtime-credential: "secret/data/loginid-takehome/db-runtime-credential"
+        vault.hashicorp.com/agent-inject-template-db-runtime-credential: |
+          {{- with secret "secret/data/loginid-takehome/db-runtime-credential" -}}{{ .Data.data.password }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-issuer-db-migrator-credential: "secret/data/loginid-takehome/issuer-db-migrator-credential"
+        vault.hashicorp.com/agent-inject-template-issuer-db-migrator-credential: |
+          {{- with secret "secret/data/loginid-takehome/issuer-db-migrator-credential" -}}{{ .Data.data.password }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-issuer-db-runtime-credential: "secret/data/loginid-takehome/issuer-db-runtime-credential"
+        vault.hashicorp.com/agent-inject-template-issuer-db-runtime-credential: |
+          {{- with secret "secret/data/loginid-takehome/issuer-db-runtime-credential" -}}{{ .Data.data.password }}{{- end -}}
     spec:
+      serviceAccountName: postgres
       # postgres:16-alpine's image defaults to root (its entrypoint drops
       # to the postgres user internally via gosu when started as root) —
       # runAsNonRoot alone fails with "container has runAsNonRoot and
@@ -286,19 +366,19 @@ spec:
           resources:
             requests: {cpu: "100m", memory: "256Mi"}
             limits: {cpu: "500m", memory: "512Mi"}
+          # LT-46: postgres-superuser also moved to Vault (per the PM's
+          # ruling) — the earlier bootstrap-ordering exception no longer
+          # holds, since Vault runs before Postgres ever starts on this
+          # cluster. POSTGRES_PASSWORD_FILE below (Docker Official
+          # postgres image's own documented alternative to
+          # POSTGRES_PASSWORD) and the four role passwords
+          # 01-create-roles.sh/02-create-issuer-db.sh read from files
+          # are both delivered by this pod's Vault Agent Injector
+          # annotations above.
           env:
             - {name: POSTGRES_USER, value: postgres}
             - {name: POSTGRES_DB, value: loginid}
-            - name: POSTGRES_PASSWORD
-              valueFrom: {secretKeyRef: {name: postgres-superuser, key: password}}
-            - name: MIGRATOR_PASSWORD
-              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: password}}
-            - name: RUNTIME_PASSWORD
-              valueFrom: {secretKeyRef: {name: db-runtime-credential, key: password}}
-            - name: ISSUER_MIGRATOR_PASSWORD
-              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: password}}
-            - name: ISSUER_RUNTIME_PASSWORD
-              valueFrom: {secretKeyRef: {name: issuer-db-runtime-credential, key: password}}
+            - {name: POSTGRES_PASSWORD_FILE, value: /vault/secrets/postgres-superuser}
             - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
           ports: [{containerPort: 5432}]
           volumeMounts:
@@ -361,8 +441,36 @@ metadata: {name: db-migrate, namespace: loginid-takehome}
 spec:
   backoffLimit: 2
   template:
-    metadata: {labels: {app: db-migrate}}
+    # agent-pre-populate-only (LT-46 prep): this pod runs to completion
+    # and exits, unlike api-service/api-service-issuer/postgres — a
+    # long-lived Vault Agent sidecar here would never be reaped (Jobs
+    # don't get one killed off automatically the way a Deployment's
+    # rollout would), so the init-container-only delivery mode is the
+    # correct one, not the default sidecar mode. Inert until the real
+    # vault.hashicorp.com/agent-inject + role + path annotations land
+    # (Amber's provisioning) — pre-populate-only has no effect unless
+    # agent-inject is also enabled. Added now since it needs no
+    # project-specific name to state correctly.
+    metadata:
+      labels: {app: db-migrate}
+      annotations:
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        # LT-46: Vault Agent Injector, per Amber's provisioning. Both
+        # dsn keys land at the default /vault/secrets/<name> base,
+        # matching exactly what the migrate container's command reads
+        # below.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "loginid-takehome-db-migrate"
+        vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
+        vault.hashicorp.com/ca-cert: "/vault/custom/vault-ca-cert/ca.crt"
+        vault.hashicorp.com/agent-inject-secret-db-migrator-credential-dsn: "secret/data/loginid-takehome/db-migrator-credential"
+        vault.hashicorp.com/agent-inject-template-db-migrator-credential-dsn: |
+          {{- with secret "secret/data/loginid-takehome/db-migrator-credential" -}}{{ .Data.data.dsn }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-issuer-db-migrator-credential-dsn: "secret/data/loginid-takehome/issuer-db-migrator-credential"
+        vault.hashicorp.com/agent-inject-template-issuer-db-migrator-credential-dsn: |
+          {{- with secret "secret/data/loginid-takehome/issuer-db-migrator-credential" -}}{{ .Data.data.dsn }}{{- end -}}
     spec:
+      serviceAccountName: db-migrate
       restartPolicy: Never
       # Story 8 (backlog.md): the first real deploy's migrate attempt
       # hit "lookup postgres.loginid-takehome.svc ... no such host" —
@@ -396,27 +504,23 @@ spec:
           resources:
             requests: {cpu: "50m", memory: "64Mi"}
             limits: {cpu: "200m", memory: "128Mi"}
+          # LT-46: goose reads its DSN from an env var deliberately (not
+          # argv, to keep it out of `ps`), but Vault Agent Injector
+          # writes secret material to FILES — read each rendered file's
+          # content into a shell var right before the goose invocation
+          # that needs it, same pattern as
+          # 01-create-roles.sh/02-create-issuer-db.sh.
           env:
-            # GOOSE_DBSTRING, not an argv/positional argument: goose's own
-            # env-var support means the DSN (which contains a password)
-            # never appears in `ps` output inside this pod's PID
-            # namespace — per review, api-service already does the
-            # stronger file-based equivalent (DB_DSN_FILE) and this
-            # should match that discipline, not fall back to argv.
             - name: GOOSE_DRIVER
               value: postgres
-            - name: GOOSE_DBSTRING
-              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: dsn}}
-            - name: ISSUER_GOOSE_DBSTRING
-              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: dsn}}
           command:
             - sh
             - -c
             - |
               set -e
-              GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
-              GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
-              GOOSE_DBSTRING="$ISSUER_GOOSE_DBSTRING" GOOSE_MIGRATION_DIR=/migrations/issuer goose -table goose_db_version_issuer up
+              GOOSE_DBSTRING="$(cat /vault/secrets/db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
+              GOOSE_DBSTRING="$(cat /vault/secrets/db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
+              GOOSE_DBSTRING="$(cat /vault/secrets/issuer-db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/issuer goose -table goose_db_version_issuer up
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -429,6 +533,14 @@ spec:
   template:
     metadata: {labels: {app: idp-connector}}
     spec:
+      # serviceAccountName (LT-46): Amber created a dedicated SA rather
+      # than let this Deployment run as `default` — its Vault role
+      # (loginid-takehome-idp-connector) currently grants nothing (no
+      # agent-inject annotations here yet), existing only so a future
+      # LT-33 need (connector-client-credential, currently unpopulated —
+      # Vault returns 404, not 403, for it) has a role to attach to
+      # without a second provisioning round-trip.
+      serviceAccountName: idp-connector
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
       containers:
         - name: idp-connector
