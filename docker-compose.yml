@@ -1,41 +1,47 @@
 # Local dev-loop (LT-48). Committed counterpart to 04-infra-devops/local-dev-loop.md's
-# sketch, with two deviations from that sketch found while actually implementing it
-# against the real code, not assumed from the design doc — see the idp-connector
-# section below and this file's own PR for why.
+# sketch, with deviations from that sketch found while actually implementing it
+# against the real code and actually running it, not assumed from the design doc.
 #
 # Quick start:
-#   ./scripts/dev-secrets-init.sh          # once, writes placeholder dev credentials
-#   docker compose --profile sqlite up     # zero-dependency path, fastest inner loop
-#   docker compose --profile postgres up   # exercises the shared postgres-package code path
+#   ./scripts/dev-secrets-init.sh          # once, writes placeholder dev credentials + a dev JWT signing key
+#   docker compose --profile sqlite up     # DAO on SQLite; issuer/verifier/connector still run the real auth code path
+#   docker compose --profile postgres up   # DAO on Postgres, exercises the shared postgres-package code path
 #   docker compose --profile dev up        # hot-reload (air) against SQLite, rebuilds on save
+#   ./scripts/dev-migrate-and-seed.sh       # once postgres is up: runs migrations, seeds a dev OAuth client, prints a mint-a-token curl
 #
 # DB_DRIVER values this file actually wires: sqlite (default) or postgres — the same
 # two values 03's own config surface accepts pass-through, no external doc required.
-# Shared api-service config, factored out as a YAML anchor rather than
-# compose's own `extends` — found live, not assumed: `extends` MERGES
-# list-type fields (including `profiles`) instead of overriding them, so
-# `api-service-pg: {extends: {service: api-service}, profiles: [postgres]}`
-# actually resolves to `profiles: [sqlite, postgres]` (`docker compose
-# config` proves it), which then makes `--profile sqlite` alone try to
-# start api-service-pg too, and fail validating its `depends_on: postgres`
-# since postgres isn't active in that profile set. A YAML anchor/merge
-# key (`<<: *api-service-common`) is a plain top-level-key override
-# instead — verified this actually produces two disjoint profile sets
-# via `docker compose --profile sqlite config` / `--profile postgres
-# config` before trusting it.
+#
+# Naomi's (01) live LT-48 review: both profiles crash-looped on
+# "AUTH_JWT_ISSUER must be set" — the first version of this file ran
+# api-service/idp-connector with real JWT verification code but no
+# issuer to mint tokens or serve a JWKS. The fix is a fourth service
+# (api-service-issuer, APP_MODE=issuer, below) running the SAME real
+# code path the cluster runs — no dev-only auth bypass, no mode that
+# skips verification, per the PM's explicit ruling on this finding.
 x-api-service-common: &api-service-common
   build: {context: ., dockerfile: cmd/api-service/Dockerfile}
   ports: ["8080:8080"]
   secrets: [db_dsn]
 
+# JWT_ISSUER/AUDIENCE literals shared by every service in the local
+# auth chain — same values the real cluster manifests use
+# (deploy/manifests.yaml, deploy/api-service.yaml), so the compose loop
+# runs the identical code path, not a dev-only stand-in.
+x-jwt-common: &jwt-common
+  AUTH_JWT_ISSUER: "https://auth.loginid-takehome.internal"
+  AUTH_JWKS_URL: "http://api-service-issuer:8082/.well-known/jwks.json"
+
 services:
   api-service:
     <<: *api-service-common
     environment:
+      <<: *jwt-common
       APP_MODE: verifier
       DB_DRIVER: sqlite
       DB_DSN_FILE: /run/secrets/db_dsn
       HTTP_ADDR: ":8080"
+      AUTH_JWT_AUDIENCE: "loginid-api-service"
     # Bind mount, not a named volume — found by reading
     # cmd/api-service/Dockerfile directly, not assumed: the production
     # image (gcr.io/distroless/static-debian12:nonroot) never creates a
@@ -48,19 +54,32 @@ services:
     # which UID the container runs as, and world-writable is a
     # non-concern for throwaway local dev data.
     volumes: ["./.dev-data:/data"]
+    depends_on:
+      api-service-issuer: {condition: service_started}
     profiles: ["sqlite"]
 
   api-service-pg:
     <<: *api-service-common
     environment:
+      <<: *jwt-common
       APP_MODE: verifier
       DB_DRIVER: postgres
       DB_DSN_FILE: /run/secrets/db_dsn
       HTTP_ADDR: ":8080"
+      AUTH_JWT_AUDIENCE: "loginid-api-service"
     depends_on:
       postgres: {condition: service_healthy}
+      api-service-issuer: {condition: service_started}
     profiles: ["postgres"]
 
+  # The issuer database is unconditionally PostgreSQL — verified
+  # directly in cmd/api-service/main.go (`sql.Open("pgx",
+  # cfg.IssuerDBDSN)`), no SQLite alternative exists in the code at
+  # all — so `postgres` now runs under BOTH profiles, not just
+  # "postgres". docker-entrypoint-initdb.d/01-create-issuer-db.sh
+  # (bind-mounted below) creates the second database on first init,
+  # same pattern the real cluster's own postgres-initdb ConfigMap uses.
+  #
   # Non-default host port (55432, not 5432): a developer with their own local
   # Postgres already running on 5432 shouldn't lose an afternoon to a silent
   # port collision (LT-48's own AC6 — the same *category* of "worked in
@@ -82,8 +101,38 @@ services:
     # Named volume, not anonymous — Tobias's (01) LT-48 review note: an
     # anonymous/no volume means `docker compose down` silently drops dev
     # data. Low-severity, but free to fix while writing this file for real.
-    volumes: ["postgres-data:/var/lib/postgresql/data"]
-    profiles: ["postgres"]
+    volumes:
+      - "postgres-data:/var/lib/postgresql/data"
+      - "./scripts/dev-postgres-initdb:/docker-entrypoint-initdb.d:ro"
+    # "dev" included too, same reason as api-service-issuer's own
+    # profiles list below — its depends_on chain reaches here.
+    profiles: ["sqlite", "postgres", "dev"]
+
+  # The token issuer, per Naomi's live-review ruling: runs api-service's
+  # own real APP_MODE=issuer code path (the same mode the cluster's
+  # api-service-issuer Deployment runs) — no dev-only shortcut, no auth
+  # bypass. Always up under both DAO profiles, since the issuer's own
+  # database is unconditionally Postgres regardless of which driver the
+  # DAO itself uses.
+  api-service-issuer:
+    build: {context: ., dockerfile: cmd/api-service/Dockerfile}
+    environment:
+      <<: *jwt-common
+      APP_MODE: issuer
+      HTTP_ADDR: ":8082"
+      JWT_SIGNING_KEY_FILE: /run/secrets/jwt_signing_key
+      ISSUER_DB_DSN_FILE: /run/secrets/issuer_db_dsn
+    ports: ["8082:8082"]
+    secrets: [jwt_signing_key, issuer_db_dsn]
+    depends_on:
+      postgres: {condition: service_healthy}
+    # "dev" included too: api-service-dev (hot-reload) depends_on this
+    # service, and compose validates depends_on targets against the
+    # active profile set regardless of condition type — found the same
+    # way as the extends/profiles gotcha earlier: `docker compose
+    # --profile dev config` failed until this and postgres's own
+    # profiles list both included "dev".
+    profiles: ["sqlite", "postgres", "dev"]
 
   # Hot-reload, dev-profile only, zero production-image impact (LT-48's
   # explicit criterion). air runs as its own separate compose service from
@@ -100,12 +149,26 @@ services:
       - ".:/app"
       - "./.dev-data:/data"
     environment:
+      <<: *jwt-common
       APP_MODE: verifier
       DB_DRIVER: ${DB_DRIVER:-sqlite}
       DB_DSN_FILE: /run/secrets/db_dsn
       HTTP_ADDR: ":8080"
+      AUTH_JWT_AUDIENCE: "loginid-api-service"
+      # Found live, not assumed: cosmtrek/air:latest bundles go1.27.0,
+      # older than go.mod's `go 1.27.1` requirement — `go build` fails
+      # with "go.mod requires go >= 1.27.1 (running go 1.27.0;
+      # GOTOOLCHAIN=local)" and air then tries to run a binary that was
+      # never produced. GOTOOLCHAIN=auto (Go's own standard toolchain-
+      # switching mechanism since 1.21, not a modification to the
+      # image) lets `go build` download and use the exact 1.27.1
+      # toolchain go.mod asks for. Confirmed this actually fixes it by
+      # running the dev profile for real, not just reasoning about it.
+      GOTOOLCHAIN: auto
     ports: ["8080:8080"]
     secrets: [db_dsn]
+    depends_on:
+      api-service-issuer: {condition: service_started}
     profiles: ["dev"]
 
   # Deviation from local-dev-loop.md's sketch, found implementing it against
@@ -130,14 +193,31 @@ services:
   idp-connector:
     build: {context: ., dockerfile: cmd/idp-connector/Dockerfile}
     environment:
+      <<: *jwt-common
       HTTP_ADDR: ":8081"
       CONNECTOR_JWT_AUDIENCE: idp-connector-service
     ports: ["8081:8081"]
+    depends_on:
+      api-service-issuer: {condition: service_started}
     profiles: ["sqlite", "postgres"]
+
+  # One-shot migration/seed tool, never started by a bare `up` —
+  # `profiles: [tools]` isn't passed to any `--profile` flag in this
+  # file's own quick-start, so it only ever runs via `docker compose
+  # run --rm migrate ...` (scripts/dev-migrate-and-seed.sh). Verified
+  # `docker compose run` bypasses profile filtering entirely (unlike
+  # `up`) before relying on that. Same image the real cluster's
+  # migration Job uses (deploy/migrate/Dockerfile) — one goose binary,
+  # not a second migration mechanism invented for local dev.
+  migrate:
+    build: {context: ., dockerfile: deploy/migrate/Dockerfile}
+    profiles: ["tools"]
 
 secrets:
   db_dsn: {file: ./.dev-secrets/db_dsn}
   postgres_password: {file: ./.dev-secrets/postgres_password}
+  jwt_signing_key: {file: ./.dev-secrets/jwt_signing_key}
+  issuer_db_dsn: {file: ./.dev-secrets/issuer_db_dsn}
 
 volumes:
   postgres-data:

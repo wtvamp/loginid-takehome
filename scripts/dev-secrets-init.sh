@@ -43,7 +43,32 @@ write_if_absent() {
 # design sketch's own comment, which used "file:/data/dev.db" — that
 # form isn't what this driver actually parses.
 write_if_absent "$dir/db_dsn" "/data/dev.db"
-write_if_absent "$dir/postgres_password" "dev-only-not-a-real-secret"
+dev_pg_password="dev-only-not-a-real-secret"
+write_if_absent "$dir/postgres_password" "$dev_pg_password"
+
+# LT-48 (Naomi's live review): the issuer's own database — same "dev"
+# role/password as the main database (docker-postgres-initdb's
+# 01-create-issuer-db.sh creates the second database, not a second
+# role) — no migrator/runtime split locally, per local-dev-loop.md's
+# own non-goal. sslmode=disable: TLS is a real-cluster concern
+# (secrets-delivery.md), not this loop's.
+write_if_absent "$dir/issuer_db_dsn" "postgres://dev:${dev_pg_password}@postgres:5432/loginid_dev_issuer?sslmode=disable"
+
+# JWT signing key (internal/api/signingkey.go's LoadSigningKey accepts
+# PKCS#1 or PKCS#8 PEM — openssl genrsa produces PKCS#1 directly,
+# confirmed by reading parseRSAPrivateKey). Local-only key, generated
+# fresh per developer machine, never the real cluster's signing key
+# (deploy/issuer-secret-bootstrap.yaml's out-of-band mechanism) — this
+# one only ever signs tokens api-service-issuer's own dev instance
+# mints and api-service's own dev instance verifies, on one machine.
+if [ -f "$dir/jwt_signing_key" ]; then
+  echo "skip (exists): $dir/jwt_signing_key"
+else
+  openssl genrsa -out "$dir/jwt_signing_key" 2048 2>/dev/null
+  chmod 600 "$dir/jwt_signing_key"
+  echo "wrote: $dir/jwt_signing_key"
+fi
 
 echo
 echo "Done. docker compose --profile sqlite up   (or --profile postgres, or --profile dev)"
+echo "Then: ./scripts/dev-migrate-and-seed.sh    (once postgres is healthy — runs migrations, seeds a dev OAuth client)"
