@@ -7,11 +7,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -130,6 +132,39 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
 	return &onboarding.Service{Tokens: tokens, Connector: connectorClient}, nil
 }
 
+// sweepDBConnectTimeout bounds the very first database round-trip this
+// process attempts, per Naomi Voss's (PO) live-run finding: a sweep pod
+// sat Running for minutes with one socket in SYN_SENT to Postgres (a
+// NetworkPolicy omission, Theo's own fix) and never logged anything —
+// dao.New/sql.Open never dial (they only validate the driver/DSN), so
+// nothing bounded the first real connection attempt inside
+// sweep.Run's own DeleteExpired call, and nothing logged before that
+// point either. 20s sits in the middle of the 10-30s range this
+// finding asked for; coordinate with Theo (04) if his CronJob's
+// activeDeadlineSeconds (the outer bound) is ever set below this plus
+// sweep's own expected run time — this is the inner bound, and must
+// stay comfortably below the outer one.
+const sweepDBConnectTimeout = 20 * time.Second
+
+// classifySweepDBConnectError names the failure class in the one
+// structured log line runSweepMode emits on a connect failure — a
+// human triaging a failed CronJob run needs "timeout" vs "refused" vs
+// "unknown" at a glance, without parsing a raw driver error string.
+func classifySweepDBConnectError(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "connect_timeout"
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "connection refused"):
+		return "connection_refused"
+	case strings.Contains(msg, "no such host"):
+		return "dns_error"
+	default:
+		return "unknown"
+	}
+}
+
 // runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
 // sweep exactly once against the real database and exit — never starts
 // an HTTP server, never builds a router. ctx is derived from
@@ -149,11 +184,41 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
 // a real error) — a non-zero exit is what makes a failed sweep show up
 // as a failed Kubernetes Job, not a silently-succeeding one.
 func runSweepMode(cfg config.Config) {
+	interval := cfg.SweepIntervalSeconds
+	if interval == "" {
+		interval = "unset"
+	}
+	log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", interval)
+
 	repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
 	if err != nil {
 		log.Fatalf("api-service: sweep: opening DAO repository: %v", err)
 	}
 	defer func() { _ = repo.Close() }()
+
+	// A bounded connectivity check BEFORE anything else touches the
+	// database — sql.Open above never dials, so without this,
+	// sweep.Run's own first DeleteExpired call would be the actual
+	// first connection attempt, made with the signal-derived context
+	// below (SIGTERM/SIGINT only, no deadline of its own) and no
+	// timeout of its own either — exactly the hang this fixes. A
+	// separate *sql.DB, not repo itself: dao.Repository exposes no
+	// Ping (05's contract doesn't have one), mirroring the same
+	// pattern the verifier's /healthz probe already uses.
+	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+		pingDB, err := sql.Open(driverName, cfg.DBDSN)
+		if err != nil {
+			log.Fatalf("api-service: sweep: opening DB ping handle: %v", err)
+		}
+		pingCtx, cancel := context.WithTimeout(context.Background(), sweepDBConnectTimeout)
+		pingErr := pingDB.PingContext(pingCtx)
+		cancel()
+		_ = pingDB.Close()
+		if pingErr != nil {
+			log.Printf("api-service: sweep: database unreachable (class=%s) after %s: %v", classifySweepDBConnectError(pingErr), sweepDBConnectTimeout, pingErr)
+			os.Exit(1)
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
