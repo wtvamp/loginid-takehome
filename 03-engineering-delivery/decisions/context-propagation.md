@@ -19,12 +19,12 @@ Agreed with the direction but pushed on three failure modes from production expe
 All three accepted; no decline.
 
 1. Any `Repository` method that writes to more than one table (e.g., a profile+credential save) runs inside a single `Tx`. Context cancellation during that transaction triggers `Tx.Rollback`, never a partial commit — this is a stated requirement on the `Repository` implementation contract, not left to each backend's discretion.
-2. Deadline propagation is a budget-allocation decision, stated explicitly in S3's middleware design: the HTTP-boundary timeout must be sized to cover realistic p99 DAO latency *plus* any upstream work (e.g., no DAO call should ever be handed a near-zero remaining deadline as a matter of routine operation). This gets a concrete number attached when S3's middleware design is written, not left as "some deadline."
+2. Deadline propagation is a budget-allocation decision, stated explicitly in the auth middleware's design (S7, LT-40 — this ruling predates the current S-numbering and originally cited "S3," which now names the Postgres/CockroachDB DAO story, LT-36, not the middleware): the HTTP-boundary timeout must be sized to cover realistic p99 DAO latency *plus* any upstream work (e.g., no DAO call should ever be handed a near-zero remaining deadline as a matter of routine operation). This gets a concrete number attached when S7's middleware design is written, not left as "some deadline."
 3. Credential writes are named explicitly as the path that needs a detach point for durability, distinct from profile reads and other cancel-safe paths, which propagate the inbound context unmodified. This distinction is documented at the point each such method is implemented, not left implicit.
 
 ## Status
 
-Ruled. Carries into S2 (Repository implementation contract: transaction scoping, detach points) and S3 (middleware deadline budget).
+Ruled. Carries into S2 (Repository implementation contract: transaction scoping, detach points) and S7/LT-40 (middleware deadline budget — see the note on item 2 above about the stale "S3" citation this superseded).
 
 ## Resolved against 05's contract (2026-09-12)
 
