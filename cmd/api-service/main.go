@@ -15,6 +15,7 @@ import (
 	"loginid-takehome/internal/app"
 	"loginid-takehome/internal/config"
 	"loginid-takehome/internal/dao"
+	"loginid-takehome/internal/onboarding"
 
 	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
 	// registers the "pgx" database/sql driver this file uses directly
@@ -89,6 +90,41 @@ func validateAuthConfig(mode app.Mode) error {
 	return nil
 }
 
+// newOnboardingService wires LT-33's mediating service — api-service's
+// own outbound call to cmd/idp-connector — from cfg's already-resolved
+// fields. Returns an error, not a Fatal-worthy one, when
+// CONNECTOR_CLIENT_ID/SECRET or the two connector-related URLs aren't
+// configured yet: this is a new capability with no existing traffic
+// depending on it and, as of this story, no handler that calls it at
+// all — its one caller in main() below uses this purely as a
+// startup-time config smoke test, discarding the returned *Service, so
+// there is nothing here for a Fatal to protect yet. Once a real
+// onboarding-flow handler consumes this, that handler's own call sites
+// are where a request-time failure actually matters, not this
+// constructor.
+func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
+	if cfg.IssuerTokenURL == "" {
+		return nil, fmt.Errorf("ISSUER_TOKEN_URL must be set")
+	}
+	if cfg.IDPConnectorBaseURL == "" {
+		return nil, fmt.Errorf("IDP_CONNECTOR_BASE_URL must be set")
+	}
+
+	tokenClient, err := onboarding.NewHTTPTokenClient(cfg.IssuerTokenURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	tokens, err := onboarding.NewTokenSource(tokenClient, cfg.ConnectorClientID, cfg.ConnectorClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	connectorClient, err := onboarding.NewHTTPConnectorClient(cfg.IDPConnectorBaseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &onboarding.Service{Tokens: tokens, Connector: connectorClient}, nil
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -141,6 +177,26 @@ func main() {
 				log.Printf("api-service: opening /healthz DB ping handle: %v — /healthz will report db=down", err)
 				pingDB = nil
 			}
+		}
+
+		// LT-33: api-service's own outbound call to cmd/idp-connector.
+		// Constructed here ONLY as a startup-time config smoke test — no
+		// handler exists yet that calls it (no assignment question asks
+		// for an onboarding endpoint, and this story's own non-goals rule
+		// one out), so the constructed *onboarding.Service below is
+		// deliberately discarded, not stored anywhere reachable. This is
+		// NOT the same pattern as repo/pingDB above: those two ARE
+		// consumed by NewVerifierRouter's handlers; this exists only so
+		// a missing/malformed CONNECTOR_CLIENT_ID, ISSUER_TOKEN_URL, etc.
+		// is visible in this process's own log the moment it starts,
+		// rather than only when a future onboarding-flow handler first
+		// tries to use it (Oren Castellan's review, PR #54: the original
+		// "ready" wording here overstated this — nothing is actually
+		// wired to use it yet).
+		if _, err := newOnboardingService(cfg); err != nil {
+			log.Printf("api-service: onboarding (LT-33) config check failed, no consumer wired yet: %v", err)
+		} else {
+			log.Printf("api-service: onboarding (LT-33) config check passed, no consumer wired yet")
 		}
 
 		handler = app.NewVerifierRouter(cfg, repo, pingDB)
