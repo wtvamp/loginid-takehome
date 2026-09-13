@@ -1,10 +1,14 @@
 package sweep
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 
 	"loginid-takehome/internal/dao"
 )
@@ -55,13 +59,20 @@ func (f *fakeExpirySweeper) DeleteExpired(_ context.Context, class dao.Retention
 // including, critically, that a non-drained batch never triggers a call
 // at all.
 type fakeMetricEmitter struct {
-	calls []emittedMetric
+	calls          []emittedMetric
+	runStartedAt   []time.Time
+	runStartedCall int
 }
 
 type emittedMetric struct {
 	class                        dao.RetentionClass
 	rowsExamined, rowsDeleted    int
 	oldestSurvivingRowAgeSeconds *float64
+}
+
+func (f *fakeMetricEmitter) MarkRunStarted(now time.Time) {
+	f.runStartedCall++
+	f.runStartedAt = append(f.runStartedAt, now)
 }
 
 func (f *fakeMetricEmitter) EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64) {
@@ -208,6 +219,9 @@ func TestRun_AlreadyCancelledContextDeletesNothing(t *testing.T) {
 	if len(emit.calls) != 0 {
 		t.Errorf("EmitClassMetrics called %d times, want 0 — nothing drained, nothing to report", len(emit.calls))
 	}
+	if emit.runStartedCall != 1 {
+		t.Errorf("MarkRunStarted called %d times, want exactly 1 — the skip-visibility heartbeat must fire even when every class fails immediately on an already-cancelled context", emit.runStartedCall)
+	}
 }
 
 func TestRun_OneClassErrorDoesNotBlockTheOthers(t *testing.T) {
@@ -235,8 +249,60 @@ func TestRun_OneClassErrorDoesNotBlockTheOthers(t *testing.T) {
 	}
 }
 
-func TestStdoutMetricEmitter_DoesNotPanic(t *testing.T) {
+// TestPrometheusMetricEmitter_WriteToProducesRealExpositionFormat is
+// LT-49's own criterion that these values reach an actual
+// prometheus.Client registration, not just a log.Printf — asserts the
+// rendered text is genuinely parseable Prometheus exposition format
+// (not merely "some bytes were written"), carries the exact metric
+// names/label values observability.md specifies, and that
+// sweep_last_run_timestamp_seconds is present even for a class that
+// never drained (the skip-visibility heartbeat, set unconditionally by
+// MarkRunStarted, independent of any class's own success).
+func TestPrometheusMetricEmitter_WriteToProducesRealExpositionFormat(t *testing.T) {
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	e := NewPrometheusMetricEmitter()
+	e.MarkRunStarted(now)
 	age := 3600.0
-	StdoutMetricEmitter{}.EmitClassMetrics(dao.RetentionDirect, 10, 5, &age)
-	StdoutMetricEmitter{}.EmitClassMetrics(dao.RetentionIDPCacheOrphan, 0, 0, nil)
+	e.EmitClassMetrics(dao.RetentionDirect, 10, 5, &age)
+	e.EmitClassMetrics(dao.RetentionIDPCacheOrphan, 0, 0, nil)
+	// idp_cache deliberately never emitted here — simulating a class
+	// that errored before draining; its own metrics must simply be
+	// absent, not present-with-zero-values.
+
+	var buf bytes.Buffer
+	if err := e.Render(&buf); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	parser := expfmt.NewTextParser(model.LegacyValidation)
+	families, err := parser.TextToMetricFamilies(&buf)
+	if err != nil {
+		t.Fatalf("rendered output is not valid Prometheus exposition format: %v\noutput:\n%s", err, buf.String())
+	}
+
+	for _, name := range []string{"rows_examined", "rows_deleted", "oldest_surviving_row_age_seconds", "sweep_last_run_timestamp_seconds"} {
+		if _, ok := families[name]; !ok {
+			t.Errorf("metric family %q missing from rendered output", name)
+		}
+	}
+
+	ts := families["sweep_last_run_timestamp_seconds"].GetMetric()
+	if len(ts) != 1 || ts[0].GetGauge().GetValue() != float64(now.Unix()) {
+		t.Errorf("sweep_last_run_timestamp_seconds = %+v, want a single sample = %d", ts, now.Unix())
+	}
+
+	found := map[string]bool{}
+	for _, m := range families["rows_examined"].GetMetric() {
+		for _, lp := range m.GetLabel() {
+			if lp.GetName() == "class" {
+				found[lp.GetValue()] = true
+			}
+		}
+	}
+	if found["idp_cache"] {
+		t.Errorf("rows_examined has a sample for class=idp_cache, but that class was never emitted (simulating a failed, undrained class) — a failed class must never appear, even at zero")
+	}
+	if !found["direct"] || !found["idp_cache_orphan"] {
+		t.Errorf("rows_examined missing expected class labels: found=%v", found)
+	}
 }
