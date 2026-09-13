@@ -31,6 +31,18 @@ const (
 	// ScopeSearch queries by name/phone fragment across the table. The
 	// broadest scope; there is no broader one.
 	ScopeSearch Scope = "profile:search"
+	// ScopeConnectorIdentityLookup is cmd/idp-connector's own inbound
+	// scope (LT-41, connector-security.md §5) — a distinct audience
+	// (idp-connector-service) and vocabulary entry from the three
+	// profile:* scopes above, since it's a different service with a
+	// different, smaller caller set (internal services only, not
+	// question 2's broader API clientele). Recognized here (not a
+	// separate switch) so both binaries share one JWT-verification
+	// mechanism (NewJWTMiddleware) rather than each needing its own scope
+	// vocabulary; the audience check is what actually keeps a
+	// profile:*-scoped api-service token from working against the
+	// connector and vice versa, not scope-name separation alone.
+	ScopeConnectorIdentityLookup Scope = "connector:identity-lookup"
 )
 
 // AuthContext is what a validated request carries once past S7's
