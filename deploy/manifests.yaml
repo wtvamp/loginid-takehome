@@ -32,10 +32,16 @@ apiVersion: v1
 kind: ResourceQuota
 metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
 spec:
+  # limits.cpu sized for 2 replicas each of api-service (500m limit) and
+  # api-service-issuer (500m limit) plus idp-connector (250m limit) =
+  # 2250m needed; "2" (2000m) undersized this the moment LT-32 added a
+  # second Deployment — api-service-issuer's second replica was stuck
+  # FailedCreate/exceeded-quota until this bumped. requests.* had
+  # headroom already (450m/1Gi needed).
   hard:
     requests.cpu: "1"
     requests.memory: 1Gi
-    limits.cpu: "2"
+    limits.cpu: "3"
     limits.memory: 2Gi
     pods: "10"
 ---
