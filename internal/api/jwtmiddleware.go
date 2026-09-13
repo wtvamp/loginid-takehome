@@ -127,7 +127,7 @@ func singleScope(raw string) (Scope, error) {
 	found := make(map[Scope]bool, len(fields))
 	for _, f := range fields {
 		switch Scope(f) {
-		case ScopeReadOwn, ScopeReadAny, ScopeSearch:
+		case ScopeReadOwn, ScopeReadAny, ScopeSearch, ScopeConnectorIdentityLookup:
 			found[Scope(f)] = true
 		}
 	}
