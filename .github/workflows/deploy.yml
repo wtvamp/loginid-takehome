@@ -37,7 +37,7 @@ jobs:
       cancel-in-progress: true
     strategy:
       matrix:
-        service: [api-service, idp-connector]
+        service: [api-service, idp-connector, migrate]
     steps:
       - uses: actions/checkout@v4
 
@@ -47,11 +47,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # migrate's Dockerfile lives at deploy/migrate/Dockerfile (not
+      # cmd/<service>/Dockerfile like the two application images) since
+      # it isn't one of them — see deploy/migrate/Dockerfile.
+      - name: Resolve Dockerfile path for ${{ matrix.service }}
+        id: dockerfile
+        run: |
+          if [ "${{ matrix.service }}" = "migrate" ]; then
+            echo "path=deploy/migrate/Dockerfile" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=cmd/${{ matrix.service }}/Dockerfile" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: cmd/${{ matrix.service }}/Dockerfile
+          file: ${{ steps.dockerfile.outputs.path }}
           push: true
           build-args: |
             COMMIT_SHA=${{ github.sha }}
@@ -83,17 +95,40 @@ jobs:
           version: v1.34.0 # matches the cluster's server version (uplift-kub, v1.34.10)
 
       - name: Render manifests for this commit
-        run: sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml > /tmp/rendered.yaml
+        run: |
+          sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml > /tmp/rendered.yaml
+          sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/api-service.yaml > /tmp/rendered-api-service.yaml
 
       - name: Show planned change (kubectl diff)
-        run: kubectl diff -f /tmp/rendered.yaml || true
+        run: |
+          kubectl diff -f /tmp/rendered.yaml || true
+          kubectl diff -f /tmp/rendered-api-service.yaml || true
 
-      - name: Apply manifests
+      # Job pod templates are immutable — delete the previous run before
+      # applying a new image tag. --ignore-not-found so the very first
+      # deploy (no db-migrate Job yet) doesn't fail here.
+      - name: Delete previous migration Job
+        run: kubectl -n loginid-takehome delete job db-migrate --ignore-not-found
+
+      # Everything except api-service: Postgres, the migration Job, the
+      # issuer/connector, NetworkPolicies, Ingress. api-service is applied
+      # separately below, after the migration Job completes (LT-52).
+      - name: Apply manifests (excluding api-service)
         run: kubectl apply -f /tmp/rendered.yaml
+
+      - name: Wait for Postgres to be ready
+        run: kubectl -n loginid-takehome rollout status statefulset/postgres --timeout=180s
+
+      - name: Wait for migration Job to complete
+        run: kubectl -n loginid-takehome wait --for=condition=complete job/db-migrate --timeout=180s
+
+      - name: Apply api-service
+        run: kubectl apply -f /tmp/rendered-api-service.yaml
 
       - name: Wait for rollout
         run: |
           kubectl -n loginid-takehome rollout status deployment/api-service --timeout=120s
+          kubectl -n loginid-takehome rollout status deployment/api-service-issuer --timeout=120s
           kubectl -n loginid-takehome rollout status deployment/idp-connector --timeout=120s
 
       - name: Print deploy summary
