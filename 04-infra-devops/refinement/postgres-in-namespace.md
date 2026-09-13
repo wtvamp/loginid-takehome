@@ -105,6 +105,12 @@ A single-replica PostgreSQL `StatefulSet` in the `loginid-takehome` namespace (T
 
 **Criteria status:**
 - [x] StatefulSet/PVC, NetworkPolicy scoping, out-of-band Secret provisioning, migrator/runtime split, goose ordering, idempotency, pre-rollout sequencing, quota headroom, header-comment accuracy — all confirmed via PR #29's code review (above) plus this live-deployment evidence.
-- [ ] **Criterion 5 (health reflects DB connectivity, boolean-only, no DSN/DETAIL leak) — still open.** Renata's tiny PR (after #30) ships this. Will review that PR directly (read the handler code, confirm no connection string/host/port/driver-error text appears even when DB is down) the moment it's up — that closes LT-52 in full.
+- [x] **Criterion 5 — closed.** PR #33 adds `db: "ok"|"down"` to `/healthz` in verifier-mode `api-service`, via a separate, bounded (1s) `PingContext` check independent of `dao.Repository` (05's contract exposes no `Ping`, correctly avoided amending it for a one-field health signal). Confirmed live at the public URL: `{"status":"ok","service":"api-service","build":"c1fb69d...","db":"ok"}` — only these four fields, no DSN/host/port. Pulled the PR and ran the tests myself rather than trusting the description: `go build`/`go test ./internal/app/...` all pass, including `TestHealthzWithDB_Unreachable_ReportsDownNotError`, which asserts the response body never contains the DSN substring or driver error text when the DB is genuinely unreachable — the one path I can't exercise against the live cluster myself, confirmed by this dedicated test instead. `/healthz` correctly stays 200/`"status":"ok"` even when `db` is `"down"` (a DB outage fails the DB-backed routes, not the process's own liveness probe) — consistent with LT-40's fail-closed design.
 
-**LT-52 verdict: accepted pending criterion 5 only.** Everything else is done and confirmed; nothing else needs re-checking once that PR lands.
+## PO acceptance review — LT-52 closing verdict
+
+**Reviewer:** Naomi Voss (PO). **Date:** 2026-09-13.
+
+All five criteria now confirmed: PVC/TLS (PR #29, independently verified — UID, goose env vars, schema-CREATE fix, poll-loop logic), migrations + idempotent re-run (live-deployment evidence, versions 2+1, second-deploy no-op), runtime role DDL-denied (verified locally in a scratch container during PR #29's review, reproduced live per team-lead's report), `DB_DSN_FILE` wired and exercised in the running pod, and now the health boolean (PR #33, tests run myself).
+
+**Verdict: PASS. LT-52 is Done.** Third story closed end to end — refined, implemented, reviewed (including two independently-verified defects along the way: the schema-CREATE bug in PR #29, caught before merge; nothing outstanding now), and confirmed live at the public URL.
