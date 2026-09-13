@@ -123,6 +123,20 @@ jobs:
           gitleaks detect --source . --no-banner \
             --log-opts="origin/${{ github.base_ref }}..HEAD"
 
+  no-vault-migrated-secrets:
+    name: Guard against a reintroduced Kubernetes Secret for a Vault-migrated credential
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deploy/manifests.yaml and deploy/api-service.yaml
+        # LT-46: six application secrets (postgres-superuser included, per
+        # the PM's 2026-09-13 ruling) now live in Vault, not Kubernetes
+        # Secrets — this fails a future PR that reintroduces a
+        # secretName/secretKeyRef for any of them (e.g. a revert, or a
+        # copy-pasted example from an older manifest).
+        run: python3 deploy/checks/assert-no-migrated-secrets.py
+
   manifest-secret-guard:
     name: Guard against the JWT signing-key Secret leaking into another manifest
     runs-on: ubuntu-latest
