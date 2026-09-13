@@ -37,6 +37,19 @@ const (
 // structured field SQLite's own error format guarantees to contain
 // exactly the constraint name we ourselves wrote in DDL, the same
 // artifact Postgres gives us through PgError.ConstraintName directly.
+//
+// UNLIKE Postgres's PgError.ConstraintName, this is not a stable driver
+// API — it's modernc.org/sqlite's undocumented message formatting.
+// Verified (Oren Castellan, PR #8 review) against every CHECK/UNIQUE/FK/
+// PK condition in the schema, including unnamed CHECKs, which correctly
+// fall through to ErrInvalidArgument because their raw expression text
+// never happens to equal constraintSecretState — not because this parser
+// distinguishes "no name present" from "name present". If a future
+// driver version reflows that message (drops the trailing " (<code>)",
+// changes wording), this silently stops matching and
+// TestIntegration_CredentialCRUDAndErrorTranslation's exact-sentinel
+// assertion is the ONLY thing that catches it — do not remove that
+// assertion as "redundant" with a looser one.
 func checkConstraintName(msg string) (string, bool) {
 	const marker = "CHECK constraint failed: "
 	i := strings.LastIndex(msg, marker)

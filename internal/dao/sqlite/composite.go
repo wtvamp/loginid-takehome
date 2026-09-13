@@ -127,7 +127,16 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 	examined := len(ids)
 	deleted := 0
 	for _, id := range ids {
-		res, err := tx.ExecContext(ctx, "DELETE FROM user_profile WHERE id = ?", id)
+		// Re-checks the same predicate the candidate SELECT used, not
+		// just "WHERE id = ?" — closes the TOCTOU race Oren flagged on
+		// the Postgres backend (a row refreshed between selection and
+		// deletion is excluded rather than deleted anyway). SQLite has
+		// no writable-CTE support (data-modifying statements inside WITH
+		// are a Postgres/CockroachDB feature, confirmed by testing
+		// directly against modernc.org/sqlite), so the single-statement
+		// form used there isn't available here — this is the SQLite-
+		// compatible equivalent of the same fix, not a divergent one.
+		res, err := tx.ExecContext(ctx, "DELETE FROM user_profile WHERE id = ? AND "+extraWhere+" AND "+clockColumn+" < ?", id, cutoff)
 		if err != nil {
 			return dao.SweepResult{}, translateError(err)
 		}
