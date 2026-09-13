@@ -90,3 +90,11 @@ Copy six named Kubernetes Secrets from `loginid-takehome` into KV v2 at `secret/
 - **Theo:** the three `serviceAccountName` additions (`postgres`, `db-migrate`, `idp-connector`) are a hard prerequisite; add the ServiceAccount objects to `deploy/manifests.yaml` so they are declarative. Use the single-line template form Amber verified (trailing-newline trap). Prefer the `vault-ca-cert` verification path over `tls-skip-verify`; the CA expiry (2026-12-14) is Warren's platform item, recorded in `teardown.md`'s neighbourhood, not this project's.
 - **Helena:** five roles; `loginid-takehome-postgres` is the widest. Amber's denial matrix (default SA denied all five, idp-connector denied postgres, same SA name in another namespace denied) is the evidence to re-run, not re-derive.
 - **Deletion of the six Kubernetes Secrets** happens only after Theo's PR is deployed and Naomi's live review passes, on the PM's word, via runbook.
+
+---
+
+## Addendum (10:55 PDT): sixth role, and Amber's independent read of the #56 outage
+
+Amber provisioned `loginid-takehome-retention-sweep` (policy and Kubernetes-auth role, read on `secret/data/loginid-takehome/db-runtime-credential` only), bound to ServiceAccount `retention-sweep` in `loginid-takehome`, which she created in-cluster to mint a test JWT; PR #57's declaration adopts it. Verified: the sweep SA reads that one path and is denied the other five; `default` is denied the role. Nothing else changed.
+
+While there she found the live outage from #56 and diagnosed it independently, matching the PM's and Theo's findings: (1) the injector's default 250m CPU request per agent container pushed the namespace past its `requests.cpu` quota (effective pod request is max(sum of containers, largest init container), so `db-migrate`'s init agent alone charged 250m while it waited for a Postgres that could not be scheduled); (2) `agent-extra-secret` mounts the Secret's keys directly at `/vault/custom/`, so the CA path is `/vault/custom/ca.crt`, which she confirmed with a throwaway pod rather than by reasoning. She deliberately applied neither fix live, because both live in `deploy/manifests.yaml` and a live patch would drift from git and be reverted on the next apply. Both landed in PR #58.
