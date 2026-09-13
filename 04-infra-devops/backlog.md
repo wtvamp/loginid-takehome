@@ -34,7 +34,7 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 - [ ] No `Secret` value appears in a manifest, image layer, build arg, or CI log — enforcement site: manifests reference names only; CI's `gitleaks` stage (Story 3).
 - [ ] No ServiceAccount can `get`/`list` a `Secret` it doesn't mount — enforcement site: per-service `Role`/`RoleBinding` scoped to named `Secret`s.
 - [ ] The migration-runner credential and the runtime service credential are provisioned as two distinct `Secret`s, never one — enforcement site: separate `Secret` objects, separate `Role`s, per 05's R4.
-- [ ] `Secret` resources are encrypted at rest in etcd — enforcement site: cluster `EncryptionConfiguration`.
+- [ ] **Re-scoped per Warren's ruling (2026-09-13), replacing the original etcd-encryption criterion — see `refinement/LT-46.md` for the full record:** application secret material is not stored in etcd; delivered by Vault Agent with per-`ServiceAccount` Vault roles — enforcement site: Vault policy per role, plus a namespace check that none of the six application `Secret`s exist. Accepted platform exceptions stay as Kubernetes `Secret`s and are named explicitly, not silently grandfathered.
 
 **Depends on:** 02 — `handoff-04-secrets.md` (received, v2, final); 05 — `migration-approach.md` R4 (final).
 
