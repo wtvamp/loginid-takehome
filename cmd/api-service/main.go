@@ -6,6 +6,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -41,10 +42,44 @@ func sqlDriverNameFor(daoDriver string) string {
 	}
 }
 
+// validateAuthConfig catches exactly the live-review finding that
+// motivated it: AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE were never set in the
+// deployed manifests, so the issuer minted iss-less tokens and the
+// verifier compared aud against "" — every token "verified" against an
+// empty audience check, which is a silent authorization hole (any
+// signed token, for any audience, would have passed), not a visible
+// failure. A verifier that quietly 401s everything, or an issuer that
+// mints structurally-incomplete tokens, is worse than a crash-loop that
+// names the exact missing variable — this is api-service's own
+// mode-aware check, kept out of internal/config's shared Load() because
+// AUTH_JWT_AUDIENCE is meaningless to cmd/idp-connector (which has its
+// own ConnectorJWTAudience instead) and a blanket check in the shared
+// loader would wrongly fail that binary's startup too.
+//
+// AUTH_JWT_ISSUER is required in BOTH modes: the verifier checks it on
+// every inbound token, and the issuer stamps it into every token it
+// mints. AUTH_JWT_AUDIENCE is required only in verifier mode — the
+// issuer never reads its own audience config; it mints each token's
+// `aud` from the per-client oauth_client.audience column instead
+// (tokenhandler.go), so requiring it here would reject a valid issuer
+// configuration that simply has no use for the variable.
+func validateAuthConfig(cfg config.Config, mode app.Mode) error {
+	if cfg.AuthJWTIssuer == "" {
+		return fmt.Errorf("AUTH_JWT_ISSUER must be set in %s mode", mode)
+	}
+	if mode == app.ModeVerifier && cfg.AuthJWTAudience == "" {
+		return fmt.Errorf("AUTH_JWT_AUDIENCE must be set in verifier mode")
+	}
+	return nil
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("api-service: loading config: %v", err)
+	}
+	if err := validateAuthConfig(cfg, app.Mode(cfg.AppMode)); err != nil {
+		log.Fatalf("api-service: %v", err)
 	}
 
 	addr := cfg.HTTPAddr
