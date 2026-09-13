@@ -42,6 +42,9 @@ func scanProfile(scan func(dest ...any) error) (*model.UserProfile, error) {
 }
 
 func (pr profileRepo) Get(ctx context.Context, id string) (*model.UserProfile, error) {
+	if err := dao.ValidateID(id); err != nil {
+		return nil, err
+	}
 	row := pr.r.db.QueryRowContext(ctx, "SELECT "+profileColumns+" FROM user_profile WHERE id = ?", id)
 	return scanProfile(row.Scan)
 }
@@ -120,6 +123,7 @@ func (pr profileRepo) Create(ctx context.Context, p *model.UserProfile) (*model.
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	// App-side UUID generation — SQLite has no server-side gen_random_uuid().
 	id := uuid.NewString()
@@ -136,9 +140,13 @@ func (pr profileRepo) Create(ctx context.Context, p *model.UserProfile) (*model.
 }
 
 func (pr profileRepo) Update(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	if err := dao.ValidateID(p.ID); err != nil {
+		return nil, err
+	}
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	now := time.Now().UTC().Format(timeLayout)
 	res, err := pr.r.db.ExecContext(ctx, `
@@ -163,9 +171,13 @@ func (pr profileRepo) Update(ctx context.Context, p *model.UserProfile) (*model.
 // Upsert's DO UPDATE SET list deliberately excludes created_at — set only
 // on insert, per 05's Oren-finding-#3 ruling.
 func (pr profileRepo) Upsert(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	if err := dao.ValidateID(p.ID); err != nil {
+		return nil, err
+	}
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	now := time.Now().UTC().Format(timeLayout)
 	_, err := pr.r.db.ExecContext(ctx, `
@@ -189,6 +201,9 @@ func (pr profileRepo) Upsert(ctx context.Context, p *model.UserProfile) (*model.
 }
 
 func (pr profileRepo) Delete(ctx context.Context, id string) error {
+	if err := dao.ValidateID(id); err != nil {
+		return err
+	}
 	res, err := pr.r.db.ExecContext(ctx, "DELETE FROM user_profile WHERE id = ?", id)
 	if err != nil {
 		return translateError(err)

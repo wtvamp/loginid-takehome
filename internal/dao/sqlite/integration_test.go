@@ -88,7 +88,7 @@ func TestIntegration_UpdateMissingRow(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	_, err := repo.Profiles().Update(ctx, &model.UserProfile{ID: "missing", Name: "X", Source: "direct"})
+	_, err := repo.Profiles().Update(ctx, &model.UserProfile{ID: "00000000-0000-0000-0000-000000000000", Name: "X", Source: "direct"})
 	if !errors.Is(err, dao.ErrNotFound) {
 		t.Errorf("Update on missing row = %v, want ErrNotFound", err)
 	}
@@ -264,7 +264,7 @@ func TestIntegration_ListByUserID_EmptyNotError(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	list, err := repo.Credentials().ListByUserID(ctx, "no-such-user")
+	list, err := repo.Credentials().ListByUserID(ctx, "00000000-0000-0000-0000-000000000000")
 	if err != nil {
 		t.Fatalf("ListByUserID for a user with no credentials should not error, got %v", err)
 	}
@@ -425,7 +425,7 @@ func TestIntegration_DeleteProfile_NotFound(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	err := repo.DeleteProfile(ctx, "missing", nil)
+	err := repo.DeleteProfile(ctx, "00000000-0000-0000-0000-000000000000", nil)
 	if !errors.Is(err, dao.ErrNotFound) {
 		t.Errorf("DeleteProfile on missing row = %v, want ErrNotFound", err)
 	}
