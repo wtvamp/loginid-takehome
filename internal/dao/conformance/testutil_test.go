@@ -96,14 +96,17 @@ func splitSQLStatements(sqlText string) []string {
 
 // newPostgresFamilyFixture is shared by the "postgres" and "cockroachdb"
 // backends — same migration, same setup, different env var and driver
-// string. Skips if the corresponding DSN env var isn't set: this suite
-// asserts behavior, it doesn't stand up infrastructure.
+// string. Reads this package's own throwaway per-run database (see
+// TestMain in testmain_test.go) rather than the env var directly — skips
+// if that backend's DSN was never set at all: this suite asserts
+// behavior, it doesn't stand up infrastructure.
 func newPostgresFamilyFixture(t *testing.T, driver, dsnEnvVar string) fixture {
 	t.Helper()
-	dsn := os.Getenv(dsnEnvVar)
-	if dsn == "" {
+	dsnVar := dsnVarForDriver(driver)
+	if dsnVar == nil || *dsnVar == "" {
 		t.Skipf("%s not set — skipping %s conformance run", dsnEnvVar, driver)
 	}
+	dsn := *dsnVar
 
 	admin, err := sql.Open("pgx", dsn)
 	if err != nil {
