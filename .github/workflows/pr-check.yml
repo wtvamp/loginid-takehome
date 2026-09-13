@@ -11,6 +11,31 @@ jobs:
   build-lint-test:
     name: Build, lint, test
     runs-on: ubuntu-latest
+    # Postgres runs as a real services: container, health-checked before
+    # any step starts. CockroachDB has no way to express its required
+    # container command (`start-single-node --insecure`) in the
+    # services: syntax — that key only takes image/env/ports/options,
+    # no command override — so it's started as a plain `docker run`
+    # step below instead, polled for readiness before go test runs, and
+    # torn down after. Both DSNs are set at job level so every step
+    # (including go test) sees them without repeating the values.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: postgres://test:test@localhost:5432/test?sslmode=disable
+      TEST_COCKROACHDB_DSN: postgres://root@localhost:26257/defaultdb?sslmode=disable
     steps:
       - uses: actions/checkout@v4
 
@@ -31,8 +56,27 @@ jobs:
           version: latest
           install-mode: goinstall # compiles against the job's Go 1.27 toolchain instead of a prebuilt (go1.24) release
 
+      - name: Start CockroachDB (single-node, insecure)
+        run: |
+          docker run -d --name crdb -p 26257:26257 -p 8080:8080 \
+            cockroachdb/cockroach:v23.2.0 start-single-node --insecure
+          for i in $(seq 1 30); do
+            if curl -fs "http://localhost:8080/health?ready=1" >/dev/null 2>&1; then
+              echo "CockroachDB ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "CockroachDB never became ready" >&2
+          docker logs crdb
+          exit 1
+
       - name: Test (race)
         run: go test ./... -race -v
+
+      - name: Stop CockroachDB
+        if: always()
+        run: docker rm -f crdb || true
 
   security-scan:
     name: govulncheck
