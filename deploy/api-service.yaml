@@ -12,6 +12,17 @@
 # store (Redis), already named in the relevant code comments; not built
 # for this take-home, so replicas stay at 1 rather than shipping a
 # rate limiter that silently doesn't limit at the stated rate.
+#
+# strategy: Recreate, not the RollingUpdate default — per Tobias's (01)
+# follow-up via Naomi/the PM: RollingUpdate's default maxSurge (25%,
+# rounds up to 1 on a single-replica Deployment) briefly runs the old
+# and new pod together during every future deploy, reopening the exact
+# cross-replica limiter gap the replica-count drop above was meant to
+# close, once per rollout. Recreate guarantees at most one pod exists
+# at any time, at the cost of a few seconds of 503s at the Ingress
+# while the old pod terminates and the new one becomes ready — accepted
+# for a POC where the in-process limiters are security controls that
+# assume exactly one pod, same trade already accepted for replicas: 1.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +30,7 @@ metadata:
   namespace: loginid-takehome
 spec:
   replicas: 1
+  strategy: {type: Recreate}
   selector: {matchLabels: {app: api-service}}
   template:
     metadata: {labels: {app: api-service}}
