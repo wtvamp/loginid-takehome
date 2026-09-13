@@ -36,7 +36,11 @@ CREATE TABLE user_profile (
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	CONSTRAINT pk_user_profile PRIMARY KEY (id),
 	CONSTRAINT ck_user_profile_name_nonempty CHECK (length(trim(name)) > 0),
-	CONSTRAINT ck_user_profile_phone_e164 CHECK (phone IS NULL OR phone ~ '^\+[1-9][0-9]{1,14}$'),
+	-- 7-15 total digits after the '+' (contract amendment A6 — the
+	-- original {1,14} range accepted a 2-digit number, e.g. "+1234",
+	-- that SQLite's own phone CHECK (length BETWEEN 8 AND 16) rejects;
+	-- {6,14} makes both backends accept exactly the same set).
+	CONSTRAINT ck_user_profile_phone_e164 CHECK (phone IS NULL OR phone ~ '^\+[1-9][0-9]{6,14}$'),
 	CONSTRAINT ck_user_profile_street_address_nonempty CHECK (street_address IS NULL OR length(trim(street_address)) > 0),
 	CONSTRAINT ck_user_profile_locality_nonempty CHECK (locality IS NULL OR length(trim(locality)) > 0),
 	CONSTRAINT ck_user_profile_region_nonempty CHECK (region IS NULL OR length(trim(region)) > 0),

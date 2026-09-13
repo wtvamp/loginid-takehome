@@ -116,6 +116,44 @@ func lower(s string) string {
 // ---- Empty-string rejection per ProfileQuery field, one named test case
 // per field, per the "absent, never empty" convention (§7 minimum). ----
 
+// TestConformance_PhoneE164BoundaryParity is contract amendment A6's
+// first new assertion: the same phone string must be accepted or
+// rejected identically by every backend at the digit-count boundary.
+// Before A6, Postgres/CockroachDB's CHECK accepted 2-15 digits after the
+// '+' while SQLite's accepted 7-15 — so "+1234" (5 digits) passed on
+// Postgres and failed on SQLite, provable by arithmetic alone, never
+// exercised by any existing test because none checked this specific
+// boundary. Asserted at all four digit counts around the corrected,
+// now-identical 7-15 range.
+func TestConformance_PhoneE164BoundaryParity(t *testing.T) {
+	cases := []struct {
+		name    string
+		phone   string
+		wantErr bool
+	}{
+		{"6 digits, one below the minimum", "+123456", true},
+		{"7 digits, the minimum", "+1234567", false},
+		{"15 digits, the maximum", "+123456789012345", false},
+		{"16 digits, one above the maximum", "+1234567890123456", true},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			runAgainstAllBackends(t, func(t *testing.T, repo dao.Repository) {
+				phone := tc.phone
+				_, err := repo.Profiles().Create(context.Background(), &model.UserProfile{Name: "Phone Boundary Test", Phone: &phone, Source: "direct"})
+				if tc.wantErr {
+					if !errors.Is(err, dao.ErrInvalidArgument) {
+						t.Errorf("Create with phone %q = %v, want ErrInvalidArgument", phone, err)
+					}
+				} else if err != nil {
+					t.Errorf("Create with phone %q = %v, want success", phone, err)
+				}
+			})
+		})
+	}
+}
+
 func TestConformance_EmptyStringRejection_Name(t *testing.T) {
 	runAgainstAllBackends(t, func(t *testing.T, repo dao.Repository) {
 		_, _, err := repo.Profiles().Search(context.Background(), dao.ProfileQuery{Name: strp("")})
@@ -234,6 +272,40 @@ func TestConformance_Sentinel_ErrDuplicateUsername(t *testing.T) {
 		_, err = repo.Credentials().Create(ctx, &model.UserCredential{UserID: p.ID, Username: "DUPUSER", MethodID: methodID, SecretState: "none"})
 		if !errors.Is(err, dao.ErrDuplicateUsername) {
 			t.Errorf("duplicate (case-folded) username = %v, want ErrDuplicateUsername", err)
+		}
+	})
+}
+
+// TestConformance_UsernameCaseInsensitiveLookup is contract amendment
+// A6's second new assertion: GetByUsername must find a row regardless of
+// the case supplied, on every backend, because both backends fold
+// entirely in SQL (LOWER(username) = LOWER(?)/($1)) against the same
+// LOWER(username) index — case-insensitive collision alone (already
+// covered by TestConformance_Sentinel_ErrDuplicateUsername above) proves
+// the uniqueness constraint fires, not that a differently-cased lookup
+// actually finds the row afterward.
+func TestConformance_UsernameCaseInsensitiveLookup(t *testing.T) {
+	runAgainstAllBackends(t, func(t *testing.T, repo dao.Repository) {
+		ctx := context.Background()
+		p, err := repo.Profiles().Create(ctx, &model.UserProfile{Name: "Case Lookup Test", Source: "direct"})
+		if err != nil {
+			t.Fatalf("creating profile: %v", err)
+		}
+		methodID := seededMethodIDFor(t, repo)
+		created, err := repo.Credentials().Create(ctx, &model.UserCredential{UserID: p.ID, Username: "MixedCaseUser", MethodID: methodID, SecretState: "none"})
+		if err != nil {
+			t.Fatalf("creating credential: %v", err)
+		}
+
+		for _, lookup := range []string{"MixedCaseUser", "mixedcaseuser", "MIXEDCASEUSER", "mIxEdCaSeUsEr"} {
+			got, err := repo.Credentials().GetByUsername(ctx, lookup)
+			if err != nil {
+				t.Errorf("GetByUsername(%q) = %v, want the row created as %q", lookup, err, "MixedCaseUser")
+				continue
+			}
+			if got.ID != created.ID {
+				t.Errorf("GetByUsername(%q) returned id %q, want %q", lookup, got.ID, created.ID)
+			}
 		}
 	})
 }
