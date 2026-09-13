@@ -81,22 +81,41 @@ func (f *fakeRateLimiter) Allow(ctx context.Context, sub string, scope Scope, li
 }
 
 // fakeTouchCounter implements TouchCounter with configurable behavior.
+// reserveOK controls Reserve's decision; settledIDs/settledReserved
+// record what Settle was called with, for tests asserting the
+// reserve/settle pair is used correctly (in particular that a denied or
+// failed request still releases its reservation).
 type fakeTouchCounter struct {
-	allowed     bool
-	allowedErr  error
-	recordFn    func(ctx context.Context, sub string, recordIDs []string) (int, error)
-	recordedIDs []string
+	reserveOK       bool
+	reserveErr      error
+	settleErr       error
+	settleFn        func(ctx context.Context, sub string, recordIDs []string, reserved int) error
+	settledIDs      []string
+	settledReserved []int
 }
 
-func (f *fakeTouchCounter) Allowed(ctx context.Context, sub string) (bool, error) {
-	return f.allowed, f.allowedErr
+func (f *fakeTouchCounter) Reserve(ctx context.Context, sub string, maxNewTouches int) (bool, error) {
+	return f.reserveOK, f.reserveErr
 }
-func (f *fakeTouchCounter) RecordTouches(ctx context.Context, sub string, recordIDs []string) (int, error) {
-	f.recordedIDs = append(f.recordedIDs, recordIDs...)
-	if f.recordFn != nil {
-		return f.recordFn(ctx, sub, recordIDs)
+func (f *fakeTouchCounter) Settle(ctx context.Context, sub string, recordIDs []string, reserved int) error {
+	f.settledIDs = append(f.settledIDs, recordIDs...)
+	f.settledReserved = append(f.settledReserved, reserved)
+	if f.settleFn != nil {
+		return f.settleFn(ctx, sub, recordIDs, reserved)
 	}
-	return len(f.recordedIDs), nil
+	return f.settleErr
+}
+
+// fakeAuditLogger records every event logged, for tests asserting which
+// AuditEventKind a given code path emits — in particular that two paths
+// producing an identical response body (a scope failure and an
+// authorize() denial, per F7) still emit distinguishable audit events.
+type fakeAuditLogger struct {
+	events []AuditEvent
+}
+
+func (f *fakeAuditLogger) Log(ctx context.Context, event AuditEvent) {
+	f.events = append(f.events, event)
 }
 
 // allowAllDeps builds a Deps whose collaborators all say yes — the
@@ -107,6 +126,7 @@ func allowAllDeps() Deps {
 		Repo:         &fakeRepository{},
 		Authz:        &fakeAuthorizer{allow: true},
 		RateLimiter:  &fakeRateLimiter{allow: true},
-		TouchCounter: &fakeTouchCounter{allowed: true},
+		TouchCounter: &fakeTouchCounter{reserveOK: true},
+		AuditLog:     &fakeAuditLogger{},
 	}
 }
