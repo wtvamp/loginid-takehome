@@ -27,7 +27,14 @@ spec:
             - {name: APP_MODE, value: verifier}
             - {name: DB_DRIVER, value: postgres}
             - {name: DB_DSN_FILE, value: /secrets/db/dsn}
-            - {name: AUTH_JWKS_URL, value: http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json}
+            # Explicit :443 — the api-service-issuer Service only exposes
+            # port 443 (-> targetPort 8080, plain HTTP; no in-cluster TLS,
+            # only the public Ingress terminates TLS). No scheme/port
+            # default matches that: bare http:// without a port defaults
+            # to 80, which this Service never exposed — found live, a
+            # real token minted with correct iss/aud still 401'd because
+            # the JWKS fetch was refused and the verifier failed closed.
+            - {name: AUTH_JWKS_URL, value: "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json"}
             # Literal per PLANNING.md's Service boundaries config surface
             # (handoff-03-auth.md) — not secrets. Missing on both api-service
             # and api-service-issuer was why a minted token verified as
