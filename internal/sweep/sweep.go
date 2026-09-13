@@ -26,12 +26,17 @@ const maxRowsPerBatch = 1000
 // idp_cache_orphan), stated there as "Proposed," not "Ruled" — this
 // package implements the numbers as given; deciding whether they're the
 // right numbers is Priya's/legal's call, not this function's. Using
-// calendar-correct AddDate for the 24-month window rather than a fixed
+// calendar-based AddDate for the 24-month window rather than a fixed
 // multiple of 30*24h (which would drift from a true "24 months ago" by
 // several days depending on which months are in the window) — the other
 // two classes are exact-day windows, where AddDate and a fixed duration
 // agree exactly, so AddDate is used uniformly for all three rather than
-// mixing two different arithmetic strategies across classes.
+// mixing two different arithmetic strategies across classes. Not
+// perfectly calendar-correct at every boundary: AddDate normalizes a
+// nonexistent target date (e.g. "Feb 31") forward per its own documented
+// behavior, shifting the cutoff by a day or two in that specific case —
+// immaterial at a 24-month granularity (Oren Castellan, PR #55 review).
+
 func cutoffFor(now time.Time, class dao.RetentionClass) (time.Time, bool) {
 	switch class {
 	case dao.RetentionDirect:
