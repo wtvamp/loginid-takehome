@@ -102,7 +102,7 @@ func (pr profileRepo) Search(ctx context.Context, q dao.ProfileQuery) ([]model.U
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []model.UserProfile
+	results := []model.UserProfile{}
 	for rows.Next() {
 		p, err := scanProfile(rows.Scan)
 		if err != nil {

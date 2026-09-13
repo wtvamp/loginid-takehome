@@ -43,6 +43,21 @@ func New(dsn string) (dao.Repository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: opening connection: %w", err)
 	}
+	// SetMaxOpenConns(1) correctly stops this package's own goroutines
+	// from hitting SQLITE_BUSY against each other — but it does not
+	// remove contention, it moves it into database/sql's pool queue.
+	// Under concurrent callers (e.g. api-service handling concurrent
+	// requests), anything holding this one connection (a large
+	// DeleteExpired sweep, a multi-statement CreateProfileWithCredential)
+	// blocks every other concurrent caller until it releases or the
+	// caller's own context deadline fires — surfacing as a silent
+	// context.DeadlineExceeded, indistinguishable from a slow query
+	// (Nolan Reyes, PR #8 review). This is a correct, cheap
+	// simplification for the tier SQLite is scoped to here: local/dev/
+	// demo, never a concurrent-production backend
+	// (multi-db-strategy.md, "What Search does on SQLite" — "SQLite is
+	// the local/dev/demo backend, not a production peer"). If that scope
+	// ever changes, this connection-pool ceiling needs revisiting first.
 	db.SetMaxOpenConns(1)
 	return &repository{db: db}, nil
 }
