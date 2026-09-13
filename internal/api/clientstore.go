@@ -25,17 +25,25 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/argon2"
 )
 
-// Argon2id parameters — one fixed cost profile for every client secret
-// (and the fixed dummy hash timing-parity depends on, below). Matches
-// threat-home.md Asset 1's own floor: this is not a separate, weaker
-// hashing decision for machine credentials, it's the same discipline
-// applied to a second credential class.
+// Argon2id parameters used when HASHING A NEW secret — hashSecret's own
+// cost profile, matching threat-model.md Asset 1's floor. verifySecret
+// below deliberately does NOT use these constants to recompute a hash:
+// it reads the cost parameters (m, t, p) out of the stored PHC string
+// itself. A verifier that ignored the embedded parameters and always
+// recomputed with these constants would make the PHC string's own
+// self-description pointless — the day this profile changes, every
+// existing hash would break at once with no way to tell an old row from
+// a new one, exactly the failure oauth_client's schema (no hash_algo/
+// hash_cost columns, unlike user_credential) was designed to avoid by
+// relying on the hash string being self-describing (Priya Nandakumar's
+// review, handoff-03-auth.md v7).
 const (
 	argon2Time    = 1
 	argon2Memory  = 64 * 1024 // 64 MiB
@@ -44,39 +52,171 @@ const (
 	argon2SaltLen = 16
 )
 
-// hashSecret returns an Argon2id hash of secret, encoded as
-// "<base64-salt>$<base64-hash>" — self-contained, no separate parameter
-// storage needed since every hash in this store uses the same fixed
-// profile above.
+// phcVersion is Argon2id's own version identifier (argon2.Version,=19,
+// i.e. 0x13) as it appears in a PHC string's "v=" field — a property of
+// the algorithm itself, not a cost knob, so unlike time/memory/threads
+// it is not expected to change independently of upgrading the algorithm
+// version.
+const phcVersion = argon2.Version
+
+// hashSecret returns an Argon2id hash of secret encoded as a standard
+// PHC string: $argon2id$v=19$m=<memory>,t=<time>,p=<threads>$<salt>$<hash>
+// (RFC-adjacent PHC string format; RawStdEncoding, unpadded, matching
+// the same encoding user_credential.secret already uses for its own
+// Argon2id hashes — one encoding convention project-wide, not two).
+// Self-describing: deploy/gen-argon2-hash.go emits the same shape, and
+// verifySecret below reads the embedded parameters back rather than
+// assuming they match argon2Time/argon2Memory/argon2Threads above.
 func hashSecret(secret string) (string, error) {
 	salt := make([]byte, argon2SaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return "", fmt.Errorf("api: generating salt: %w", err)
 	}
 	hash := argon2.IDKey([]byte(secret), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-	return base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(hash), nil
+	return encodePHC(argon2Memory, argon2Time, argon2Threads, salt, hash), nil
 }
 
-// verifySecret reports whether secret matches encodedHash, produced by
-// hashSecret. Comparison is constant-time (crypto/subtle) — Argon2id's
-// own cost already dominates timing versus a plain []byte equality, but
-// there is no reason to reintroduce a length/byte-position side channel
-// on top of it for free.
+// encodePHC always stamps the CURRENT phcVersion — it's for producing a
+// brand-new hash under this package's own live cost profile, never for
+// re-serializing a parsed hash's own (possibly different, possibly
+// older) parameters.
+func encodePHC(memory, time, threads int, salt, hash []byte) string {
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		phcVersion, memory, time, threads,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(hash),
+	)
+}
+
+// parsedPHC is a PHC-string Argon2id hash's parameters, read off the
+// string itself rather than assumed from this package's own constants —
+// the whole reason to use PHC instead of the bare "<salt>$<hash>"
+// encoding this replaced.
+type parsedPHC struct {
+	memory  uint32
+	time    uint32
+	threads uint8
+	salt    []byte
+	hash    []byte
+}
+
+// parsePHC parses a PHC-format Argon2id hash string
+// ($argon2id$v=<ver>$m=<mem>,t=<time>,p=<threads>$<salt>$<hash>) into
+// its components. Returns an error for anything that doesn't match this
+// exact shape — verifySecret treats a parse failure as "does not
+// verify," never as a reason to fall back to any other interpretation.
+func parsePHC(encoded string) (parsedPHC, error) {
+	// "$argon2id$v=19$m=65536,t=1,p=4$<salt>$<hash>" split on "$" is:
+	// ["", "argon2id", "v=19", "m=65536,t=1,p=4", "<salt>", "<hash>"]
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+		return parsedPHC{}, fmt.Errorf("api: not a recognized argon2id PHC string")
+	}
+
+	// parsePHCParam, not fmt.Sscanf: Sscanf doesn't require consuming the
+	// whole input, so "v=19x" would silently parse as version 19 with
+	// "x" discarded — inconsistent with parsePHCParam's own stricter,
+	// whole-field parsing below, and the same "malformed-but-plausible"
+	// gap this function otherwise guards against (Oren Castellan, PR #39
+	// review).
+	versionU64, err := parsePHCParam(parts[2], "v")
+	if err != nil {
+		return parsedPHC{}, err
+	}
+	version := int(versionU64)
+	if version != phcVersion {
+		return parsedPHC{}, fmt.Errorf("api: PHC string names argon2 version %d, this package verifies version %d", version, phcVersion)
+	}
+
+	params := strings.Split(parts[3], ",")
+	if len(params) != 3 {
+		return parsedPHC{}, fmt.Errorf("api: PHC parameter field %q does not have exactly 3 comma-separated parameters", parts[3])
+	}
+	var memory, timeCost, threads uint64
+	if memory, err = parsePHCParam(params[0], "m"); err != nil {
+		return parsedPHC{}, err
+	}
+	if timeCost, err = parsePHCParam(params[1], "t"); err != nil {
+		return parsedPHC{}, err
+	}
+	if threads, err = parsePHCParam(params[2], "p"); err != nil {
+		return parsedPHC{}, err
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return parsedPHC{}, fmt.Errorf("api: decoding PHC salt: %w", err)
+	}
+	hash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return parsedPHC{}, fmt.Errorf("api: decoding PHC hash: %w", err)
+	}
+
+	return parsedPHC{
+		memory:  uint32(memory),
+		time:    uint32(timeCost),
+		threads: uint8(threads),
+		salt:    salt,
+		hash:    hash,
+	}, nil
+}
+
+// parsePHCParam parses one "<name>=<digits>" field (e.g. "m=65536") and
+// requires the field's name to match wantName exactly, in the position
+// PHC's own fixed m,t,p ordering requires — a defensive check against a
+// hand-edited or malformed string silently reading the wrong value into
+// the wrong slot.
+func parsePHCParam(field, wantName string) (uint64, error) {
+	name, digits, found := strings.Cut(field, "=")
+	if !found || name != wantName {
+		return 0, fmt.Errorf("api: PHC parameter field %q is not in the expected %q= form", field, wantName)
+	}
+	v, err := strconv.ParseUint(digits, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("api: parsing PHC parameter %q: %w", field, err)
+	}
+	return v, nil
+}
+
+// verifySecret reports whether secret matches encodedHash, a PHC-format
+// Argon2id hash produced by hashSecret (or by deploy/gen-argon2-hash.go,
+// which emits the identical shape). Recomputes using the memory/time/
+// threads parameters PARSED OUT OF encodedHash itself — never this
+// package's own argon2Time/argon2Memory/argon2Threads constants — so a
+// hash created under a different (older or newer) cost profile still
+// verifies correctly; only the embedded parameters and the embedded
+// salt/hash length (via keyLen = len(parsed hash)) participate.
+// Comparison is constant-time (crypto/subtle) — Argon2id's own cost
+// already dominates timing versus a plain []byte equality, but there is
+// no reason to reintroduce a length/byte-position side channel on top
+// of it for free.
 func verifySecret(secret, encodedHash string) bool {
-	parts := strings.SplitN(encodedHash, "$", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	parsed, err := parsePHC(encodedHash)
 	if err != nil {
 		return false
 	}
-	want, err := base64.RawStdEncoding.DecodeString(parts[1])
+	got := argon2.IDKey([]byte(secret), parsed.salt, parsed.time, parsed.memory, parsed.threads, uint32(len(parsed.hash)))
+	return subtle.ConstantTimeCompare(got, parsed.hash) == 1
+}
+
+// needsRehash reports whether encodedHash's embedded cost parameters
+// differ from this package's CURRENT profile (argon2Memory/argon2Time/
+// argon2Threads) — the mechanism by which a cost-profile bump migrates
+// existing rows forward opportunistically (verify-then-rehash-on-next-
+// successful-auth, Marcus Ilori's ruling, handoff-03-auth.md v7) instead
+// of requiring a live-credential migration. Only ever called after
+// verifySecret has already succeeded against encodedHash — this reports
+// "should be re-hashed under the current profile," not "is valid."
+// encodedHash is assumed parseable here (verifySecret already parsed it
+// successfully in the same call); a parse failure reports false rather
+// than panicking, since "can't tell, so don't rehash" is the safe
+// default for a function only ever called after a successful verify.
+func needsRehash(encodedHash string) bool {
+	parsed, err := parsePHC(encodedHash)
 	if err != nil {
 		return false
 	}
-	got := argon2.IDKey([]byte(secret), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-	return subtle.ConstantTimeCompare(got, want) == 1
+	return parsed.memory != argon2Memory || parsed.time != argon2Time || parsed.threads != argon2Threads
 }
 
 // dummyHash is computed once, at package init, from a fixed (not
@@ -135,6 +275,18 @@ type ClientStore interface {
 	// Get still returns — the token handler decides what "not usable"
 	// means, this interface only reports what's on file).
 	Get(ctx context.Context, clientID string) (rec ClientRecord, ok bool, err error)
+
+	// UpdateSecretHash replaces clientID's stored hash — the
+	// opportunistic-rehash mechanism (Marcus Ilori's ruling,
+	// handoff-03-auth.md v7): called by tokenhandler.go after a
+	// successful grant when needsRehash reports the stored hash's
+	// embedded cost parameters have drifted from this package's current
+	// profile, so an existing row migrates forward the next time its
+	// owner successfully authenticates, without a live-credential
+	// migration. Best-effort from the caller's perspective — a failure
+	// here does not fail the grant already in progress, since the
+	// credential the caller presented was already correctly verified.
+	UpdateSecretHash(ctx context.Context, clientID, newHash string) error
 }
 
 // clientStoreQueryTimeout bounds every Get call against the issuer
@@ -224,6 +376,35 @@ func (s *PostgresClientStore) Get(ctx context.Context, clientID string) (ClientR
 	rec.GrantedScope = Scope(scopes[0])
 	rec.Active = status == "active"
 	return rec, true, nil
+}
+
+// UpdateSecretHash writes newHash for clientID — only ever called on a
+// row whose secret_state is already 'set' (a just-verified grant), so
+// this never needs to touch secret_state itself; the migration's own
+// BEFORE UPDATE trigger sets updated_at. Same clientStoreQueryTimeout
+// bound as Get, for the same reason (Nolan Reyes's review): this must
+// not block indefinitely if the issuer database goes away mid-request.
+func (s *PostgresClientStore) UpdateSecretHash(ctx context.Context, clientID, newHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, clientStoreQueryTimeout)
+	defer cancel()
+
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE oauth_client SET client_secret_hash = $1 WHERE client_id = $2 AND secret_state = 'set'
+	`, newHash, clientID)
+	if err != nil {
+		return fmt.Errorf("api: updating oauth_client secret hash: %w", err)
+	}
+	if n, err := result.RowsAffected(); err == nil && n == 0 {
+		// Returned as an error so the caller (tokenhandler.go) logs
+		// it, but this is a benign, expected race rather than a
+		// genuine failure: the row could have been disabled/revoked
+		// between the successful Get+verify and this call — harmless
+		// either way, since rehashing a revoked row's old secret
+		// would be pointless, and a genuinely absent row can't
+		// happen here (Get just found it moments before).
+		return fmt.Errorf("api: oauth_client row %q no longer has secret_state='set'", clientID)
+	}
+	return nil
 }
 
 // parsePostgresTextArray decodes Postgres's default text output format
