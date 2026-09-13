@@ -8,8 +8,11 @@ package sweep
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/expfmt"
 
 	"loginid-takehome/internal/dao"
 )
@@ -74,14 +77,33 @@ type ExpirySweeper interface {
 	DeleteExpired(ctx context.Context, class dao.RetentionClass, olderThan time.Time, maxRows int) (dao.SweepResult, error)
 }
 
-// MetricEmitter is called exactly once per class, and ONLY when that
-// class's sweep reaches Drained == true — never from an intermediate
-// batch. oldestSurvivingRowAgeSeconds is nil when Drained's own
+// MetricEmitter is the seam Run reports through. EmitClassMetrics is
+// called exactly once per class, and ONLY when that class's sweep
+// reaches Drained == true — never from an intermediate batch.
+// oldestSurvivingRowAgeSeconds is nil when Drained's own
 // SweepResult.OldestSurvivingAt is nil (zero rows remaining in the
 // class after this run), matching observability.md's own warning: a
 // non-drained result publishing this field would fire the alert on
 // every sweep and get muted, worse than not having the metric at all.
+//
+// MarkRunStarted is called exactly once, unconditionally, at the very
+// top of Run — before any class is attempted, regardless of whether any
+// class later errors or the whole run is cancelled. Raised by Tobias
+// Lindqvist's original skip-visibility objection (carried from LT-44),
+// but its actual alerting role was settled by Priya Nandakumar's (05)
+// later alert-formula ruling: her design gets the skip-vs-dead
+// distinction from per-class staleness of oldest_surviving_row_age_seconds
+// itself (no fresh sample in more than 2 sweep intervals), deliberately
+// property-based rather than mechanism-based — so MarkRunStarted's
+// timestamp is NOT wired into any alert rule. It exists as a
+// supplementary, kubectl-logs-level debugging signal only (confirmed
+// with Theo Bergman, 04, PR #59): distinguishing "no process even
+// started this cycle" from "a process started but errored before any
+// class drained" is useful for a human diagnosing a specific incident,
+// even though neither of Priya's alert rules needs the distinction to
+// fire correctly.
 type MetricEmitter interface {
+	MarkRunStarted(now time.Time)
 	EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64)
 }
 
@@ -110,6 +132,9 @@ type ClassResult struct {
 // just the DAO layer's already-covered case) must stop before deleting
 // anything, in every class, not just the first.
 func Run(ctx context.Context, repo ExpirySweeper, now time.Time, emit MetricEmitter) []ClassResult {
+	if emit != nil {
+		emit.MarkRunStarted(now)
+	}
 	results := make([]ClassResult, 0, len(allClasses))
 	for _, class := range allClasses {
 		results = append(results, runClass(ctx, repo, class, now, emit))
@@ -155,20 +180,86 @@ func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass,
 	}
 }
 
-// StdoutMetricEmitter writes each class's metrics as one
-// Prometheus-exposition-compatible line per metric to the process's own
-// stdout — this package's default, mechanism-agnostic emitter for a
-// short-lived batch job with no HTTP scrape target of its own.
-// 04-infra-devops owns how these lines actually reach Prometheus (a log
-// scraper, a Pushgateway wrapper around this process, or something
-// else) — this type's only job is emitting well-formed, correctly
-// labeled values, per observability.md's exact metric names/labels.
-type StdoutMetricEmitter struct{}
+// PrometheusMetricEmitter backs MetricEmitter with real
+// github.com/prometheus/client_golang Gauge objects registered in their
+// own prometheus.Registry — LT-49's own criterion that these values
+// reach an actual prometheus.Client registration, not just a
+// log.Printf or an internal struct field (superseding LT-44's original
+// StdoutMetricEmitter, which only ever produced ad hoc log lines).
+// Render renders the registry's current state in real Prometheus text
+// exposition format — agreed with Theo Bergman (04, PR #59 review):
+// stdout, not a Pushgateway push, is the accepted mechanism for this
+// project's scale (no Pushgateway runs on the real cluster, and
+// standing one up is disproportionate scope for this story, same
+// disposition as LT-44's own metrics-mechanism call) — Theo's own
+// sink reads these lines from the pod's log output via `kubectl logs`
+// today, with Pushgateway named as the documented production next step.
+type PrometheusMetricEmitter struct {
+	registry     *prometheus.Registry
+	rowsExamined *prometheus.GaugeVec
+	rowsDeleted  *prometheus.GaugeVec
+	oldestAge    *prometheus.GaugeVec
+	lastRunTS    prometheus.Gauge
+}
 
-func (StdoutMetricEmitter) EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64) {
-	log.Printf(`rows_examined{class=%q} %d`, class, rowsExamined)
-	log.Printf(`rows_deleted{class=%q} %d`, class, rowsDeleted)
-	if oldestSurvivingRowAgeSeconds != nil {
-		log.Printf(`oldest_surviving_row_age_seconds{class=%q} %g`, class, *oldestSurvivingRowAgeSeconds)
+// NewPrometheusMetricEmitter constructs a ready-to-use emitter with its
+// own private registry — never the global default registry, so this
+// package's metrics can never collide with another package's
+// same-process registration (moot for a one-shot batch binary today,
+// but a self-contained registry costs nothing and rules the class of
+// bug out structurally rather than by convention).
+func NewPrometheusMetricEmitter() *PrometheusMetricEmitter {
+	reg := prometheus.NewRegistry()
+	e := &PrometheusMetricEmitter{
+		registry: reg,
+		rowsExamined: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "rows_examined",
+			Help: "Rows examined by the most recent retention sweep for this class, summed across every batch it took to drain.",
+		}, []string{"class"}),
+		rowsDeleted: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "rows_deleted",
+			Help: "Rows deleted by the most recent retention sweep for this class, summed across every batch it took to drain.",
+		}, []string{"class"}),
+		oldestAge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "oldest_surviving_row_age_seconds",
+			Help: "Age of the oldest surviving row in this class, published only when the sweep drained (never from an intermediate batch).",
+		}, []string{"class"}),
+		lastRunTS: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "sweep_last_run_timestamp_seconds",
+			Help: "Unix timestamp of the most recent sweep invocation's start, set unconditionally regardless of whether any class succeeded. Supplementary/debugging signal only (kubectl-logs-level inspection) — deliberately NOT wired into any alert rule: Priya Nandakumar's (05) alert-formula ruling is property-based (is data surviving, is the sweep still reporting per class), and an alert consuming a mechanism-level 'did a process start' signal is exactly what her ruling argues against. Confirmed with Theo Bergman (04, PR #59) that none of the three alert rules reference this metric.",
+		}),
 	}
+	reg.MustRegister(e.rowsExamined, e.rowsDeleted, e.oldestAge, e.lastRunTS)
+	return e
+}
+
+func (e *PrometheusMetricEmitter) MarkRunStarted(now time.Time) {
+	e.lastRunTS.Set(float64(now.Unix()))
+}
+
+func (e *PrometheusMetricEmitter) EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64) {
+	e.rowsExamined.WithLabelValues(string(class)).Set(float64(rowsExamined))
+	e.rowsDeleted.WithLabelValues(string(class)).Set(float64(rowsDeleted))
+	if oldestSurvivingRowAgeSeconds != nil {
+		e.oldestAge.WithLabelValues(string(class)).Set(*oldestSurvivingRowAgeSeconds)
+	}
+}
+
+// Render renders every metric this emitter has recorded so far, in
+// real Prometheus text exposition format, to w — called once, after
+// Run returns, by cmd/api-service's own runSweepMode, so the values
+// reach the pod's stdout (and therefore `kubectl logs`) exactly once
+// per invocation rather than interleaved with per-class log lines.
+func (e *PrometheusMetricEmitter) Render(w io.Writer) error {
+	mfs, err := e.registry.Gather()
+	if err != nil {
+		return fmt.Errorf("sweep: gathering metrics: %w", err)
+	}
+	enc := expfmt.NewEncoder(w, expfmt.NewFormat(expfmt.TypeTextPlain))
+	for _, mf := range mfs {
+		if err := enc.Encode(mf); err != nil {
+			return fmt.Errorf("sweep: encoding metric family %q: %w", mf.GetName(), err)
+		}
+	}
+	return nil
 }
