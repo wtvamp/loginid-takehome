@@ -59,6 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.0 # matches the cluster's server version (uplift-kub, v1.34.10)
+
       - name: Render manifests for this commit
         run: sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml > /tmp/rendered.yaml
 
