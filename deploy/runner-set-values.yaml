@@ -1,0 +1,45 @@
+# Helm values for a second, narrowly-scoped Actions Runner Controller
+# scale set, dedicated to this repo — NOT the cluster's existing
+# `k8s-linux-x64` scale set (arc-runners namespace, org-scoped to
+# Uplift-Foundation). See 04-infra-devops/decisions/deploy-path.md §2 for
+# why reusing the existing one was rejected (shared blast radius across
+# unrelated org repos/workloads).
+#
+# Install (one-time, run manually against the cluster — not part of any
+# GitHub Actions workflow, since the runner set itself is what workflows
+# depend on to exist). Apply rbac.yaml in this directory FIRST — the
+# ServiceAccount it creates is referenced below:
+#
+#   kubectl apply -f deploy/rbac.yaml
+#   helm install loginid-takehome-runners \
+#     oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#     --version 0.14.2 \
+#     --namespace loginid-takehome-runners --create-namespace \
+#     -f deploy/runner-set-values.yaml
+#
+# Requires the namespace's githubConfigSecret (see below) to already exist
+# — provisioned by Amber/OpenClaw per the PM's coordination, containing a
+# fine-grained GitHub PAT scoped to wtvamp/loginid-takehome only.
+
+githubConfigUrl: https://github.com/wtvamp/loginid-takehome
+githubConfigSecret: loginid-takehome-github-pat # key: github_token
+
+runnerScaleSetName: loginid-takehome
+minRunners: 0 # scales to zero between deploys — this repo doesn't need a warm runner
+maxRunners: 2
+
+template:
+  spec:
+    # ServiceAccount from rbac.yaml — namespace-scoped only (loginid-takehome
+    # via a cross-namespace RoleBinding, see rbac.yaml), never cluster-scoped.
+    serviceAccountName: loginid-takehome-deployer
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:latest
+        command: ["/home/runner/run.sh"]
+        env:
+          - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+        volumeMounts:
+          - {name: work, mountPath: /home/runner/_work}
+    volumes:
+      - {name: work, emptyDir: {}}
