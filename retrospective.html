@@ -127,8 +127,6 @@ th.num{text-align:right;padding-right:0}
 .pattern b{display:block;font-family:var(--display);color:var(--ink);font-size:16px;margin-bottom:2px}
 
 /* architecture */
-.arch{overflow-x:auto}
-.arch svg{min-width:720px}
 .arch .box{fill:var(--panel);stroke:var(--rule);stroke-width:1.2}
 .arch .box.hot{stroke:var(--agent);stroke-width:1.6}
 .arch .box.secb{stroke:var(--sec);stroke-width:1.6}
@@ -137,6 +135,18 @@ th.num{text-align:right;padding-right:0}
 .arch .flow{stroke:var(--ink3);stroke-width:1.3;fill:none;marker-end:url(#arr)}
 .arch .flow.sec{stroke:var(--sec)}
 .arch .flow.deny{stroke:var(--inc);stroke-dasharray:4 4}
+.lanes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media (max-width:860px){.lanes{grid-template-columns:1fr}}
+.lane{display:flex;flex-direction:column;gap:10px}
+.lane.ns{border:1px dashed var(--rule);border-radius:8px;padding:12px}
+.lane-h{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);padding-bottom:4px}
+.node-box{border:1.2px solid var(--rule);border-radius:6px;padding:10px 12px;background:var(--bg)}
+.node-box.hot{border-color:var(--agent);border-width:1.6px}.node-box.secb{border-color:var(--sec);border-width:1.6px}
+.node-box b{display:block;font-family:var(--display);font-weight:600;font-size:15px;line-height:1.2}
+.node-box span{display:block;font-size:12.5px;line-height:1.45;color:var(--ink2);margin-top:4px;font-family:var(--mono)}
+.arrow{font-family:var(--mono);font-size:11px;color:var(--ink3);text-align:center}
+.flows{list-style:none;margin:18px 0 0;padding:14px 0 0;border-top:1px solid var(--rule);display:grid;gap:8px;font-size:14px;color:var(--ink2)}
+.flows li{display:flex;gap:10px;align-items:baseline}.flows .sw{flex:none;position:relative;top:1px}
 .lessons{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;counter-reset:l}
 .lessons div{padding:18px 0 0;border-top:2px solid var(--ink)}
 .lessons b{display:block;font-family:var(--display);font-size:18px;margin-bottom:6px}
@@ -155,8 +165,8 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
   </div>
   <div class="hero">
     <div>
-      <h1>Thirty hours, one human, twenty‑four agents.</h1>
-      <p class="lede">A Go DAO, a secured REST API, and an identity‑provider connector were designed, debated, built, deployed to a real cluster, and reviewed live by a product owner. This is the flight recorder: what was built, who did it, when, and where the human sat in the loop.</p>
+      <h1>Thirty hours, one human, twenty-four agents.</h1>
+      <p class="lede">A Go DAO, a secured REST API, and an identity-provider connector were designed, debated, built, deployed to a real cluster, and reviewed live by a product owner. This is the flight recorder: what was built, who did it, when, and where the human sat in the loop.</p>
       <a class="live" href="https://loginid-takehome.uplifttech.org/healthz"><span class="dot"></span>loginid-takehome.uplifttech.org · build fb8b9d1 · db: ok</a>
       <div class="legend">
         <span><i class="sw" style="background:var(--agent)"></i>agent action</span>
@@ -173,7 +183,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
       <div><div class="k">Pull requests</div><div class="v">75</div><div class="s">73 merged, 2 superseded</div></div>
       <div><div class="k">Commits</div><div class="v">289</div><div class="s">19,444 lines of Go · 11,033 of Markdown</div></div>
       <div><div class="k">Human decisions</div><div class="v">27</div><div class="s">rulings, approvals, corrections</div></div>
-      <div><div class="k">Live‑review failures</div><div class="v">19</div><div class="s">before the 24 implementation passes</div></div>
+      <div><div class="k">Live-review failures</div><div class="v">19</div><div class="s">before the 24 implementation passes</div></div>
     </div>
   </div>
 </header>
@@ -182,29 +192,29 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="loop">
   <div class="sec-head">
     <div><span class="eyebrow">Human in the loop</span><h2>Where the human actually sat</h2></div>
-    <p>Warren made twenty‑seven recorded decisions across thirty hours and wrote no code. Everything else was agents: designing, debating, implementing, reviewing, deploying, and failing each other's work. The ratio below is counted from LOG.md, Jira, and the session record, not estimated.</p>
+    <p>Warren made twenty-seven recorded decisions across thirty hours and wrote no code. Everything else was agents: designing, debating, implementing, reviewing, deploying, and failing each other's work. The ratio below is counted from LOG.md, Jira, and the session record, not estimated.</p>
   </div>
   <div class="split">
     <div class="panel">
       <h3>Actions by origin</h3>
       <p class="sub">One bar per kind of action; the coral slice is the human's share.</p>
       <div id="hil"></div>
-      <p class="note">Merge commits carry Warren's GitHub identity because the PM merged through his authenticated <span class="mono">gh</span> session; they are counted as agent actions here, which is what they were. Twelve early commits under the <span class="mono">wtvamp</span> identity predate the persona‑author rule and are likewise agent work.</p>
+      <p class="note">Merge commits carry Warren's GitHub identity because the PM merged through his authenticated <span class="mono">gh</span> session; they are counted as agent actions here, which is what they were. Twelve early commits under the <span class="mono">wtvamp</span> identity predate the persona-author rule and are likewise agent work.</p>
     </div>
     <div class="panel">
-      <h3>The twenty‑seven decisions</h3>
+      <h3>The twenty-seven decisions</h3>
       <p class="sub">What only the human could decide, grouped.</p>
       <div class="tblwrap"><table>
         <thead><tr><th>Kind</th><th class="num">Count</th><th>Examples</th></tr></thead>
         <tbody>
-          <tr><td>Direction</td><td class="num">6</td><td>code go‑ahead as an agile loop; real cluster over a lab; attribution rule; org topology; teardown timing; "ask Amber what the cluster already has"</td></tr>
-          <tr><td>Rulings</td><td class="num">4</td><td>Vault instead of etcd encryption; audit‑log RBAC as an accepted residual; Filebeat drop‑filter fix; LT‑20 disposition (pending)</td></tr>
-          <tr><td>Permission grants</td><td class="num">9</td><td>Amber provisioning Vault; two deployer Role updates; deleting six Kubernetes Secrets; classifier approvals for cluster‑mutating commands</td></tr>
+          <tr><td>Direction</td><td class="num">6</td><td>code go-ahead as an agile loop; real cluster over a lab; attribution rule; org topology; teardown timing; "ask Amber what the cluster already has"</td></tr>
+          <tr><td>Rulings</td><td class="num">4</td><td>Vault instead of etcd encryption; audit-log RBAC as an accepted residual; Filebeat drop-filter fix; LT-20 disposition (pending)</td></tr>
+          <tr><td>Permission grants</td><td class="num">9</td><td>Amber provisioning Vault; two deployer Role updates; deleting six Kubernetes Secrets; classifier approvals for cluster-mutating commands</td></tr>
           <tr><td>Routing</td><td class="num">3</td><td>DNS and GitHub credentials to Amber; Vault access via Amber; "she is logged in and can drive"</td></tr>
           <tr><td>Cadence</td><td class="num">5</td><td>"usage has reset, keep going" ×5, each relayed to all five leads</td></tr>
         </tbody>
       </table></div>
-      <p class="note">Every ruling reached the tracks through the PM and was written into LOG.md and the root CLAUDE.md so no lead re‑asked a settled question. Two leads' sessions were blocked once each on a permission prompt they correctly declined to route around.</p>
+      <p class="note">Every ruling reached the tracks through the PM and was written into LOG.md and the root CLAUDE.md so no lead re-asked a settled question. Two leads' sessions were blocked once each on a permission prompt they correctly declined to route around.</p>
     </div>
   </div>
 </section>
@@ -213,7 +223,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="timeline">
   <div class="sec-head">
     <div><span class="eyebrow">Timeline</span><h2>The tape</h2></div>
-    <p>Sixty‑eight LOG entries compressed to the moments that changed something. Times are Pacific. The dashed gaps are usage pauses, when every session waited for the window to reset.</p>
+    <p>Sixty-eight LOG entries compressed to the moments that changed something. Times are Pacific. The dashed gaps are usage pauses, when every session waited for the window to reset.</p>
   </div>
   <div class="tl" id="tl"></div>
 </section>
@@ -222,14 +232,14 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="throughput">
   <div class="sec-head">
     <div><span class="eyebrow">Throughput</span><h2>Work over time</h2></div>
-    <p>Commits landed in every waking hour of the window, PR merges clustered around the product owner's review sessions, and the story burn‑up shows the eighteen planning stories closing in one afternoon while the twenty‑four implementation stories took the full loop.</p>
+    <p>Commits landed in every waking hour of the window, PR merges clustered around the product owner's review sessions, and the story burn-up shows the eighteen planning stories closing in one afternoon while the twenty-four implementation stories took the full loop.</p>
   </div>
   <div class="grid2">
     <div class="panel"><h3>Commits per hour</h3><p class="sub">289 commits, all authors, by hour of commit.</p><div id="commits"></div></div>
-    <div class="panel"><h3>Story burn‑up</h3><p class="sub">Cumulative Jira stories Done, by resolution time.</p><div id="burnup"></div></div>
+    <div class="panel"><h3>Story burn-up</h3><p class="sub">Cumulative Jira stories Done, by resolution time.</p><div id="burnup"></div></div>
     <div class="panel"><h3>PR merges per hour</h3><p class="sub">73 merged pull requests, by merge time (UTC converted to PDT).</p><div id="prs"></div></div>
-    <div class="panel"><h3>Pipeline outcomes</h3><p class="sub">GitHub Actions runs on the repo‑scoped ARC runner.</p><div id="ci"></div>
-      <p class="note">Thirteen cancelled deploys are the concurrency group superseding an in‑flight run when the next merge landed, by design after PR #15. The five deploy failures each taught something recorded in the timeline.</p></div>
+    <div class="panel"><h3>Pipeline outcomes</h3><p class="sub">GitHub Actions runs on the repo-scoped ARC runner.</p><div id="ci"></div>
+      <p class="note">Thirteen cancelled deploys are the concurrency group superseding an in-flight run when the next merge landed, by design after PR #15. The five deploy failures each taught something recorded in the timeline.</p></div>
   </div>
 </section>
 
@@ -237,7 +247,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="contrib">
   <div class="sec-head">
     <div><span class="eyebrow">Contribution</span><h2>Who did what, by persona</h2></div>
-    <p>Per‑session token counts were not instrumented, so contribution is shown by what the record can count: commits, lines, and how often a persona's work is named in the project log. The one instrumented data point is Amber's Vault run: 7.2 million cached input tokens read, 49 thousand generated, fifty tool calls.</p>
+    <p>Per-session token counts were not instrumented, so contribution is shown by what the record can count: commits, lines, and how often a persona's work is named in the project log. The one instrumented data point is Amber's Vault run: 7.2 million cached input tokens read, 49 thousand generated, fifty tool calls.</p>
   </div>
   <div class="grid2">
     <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label). Renata's 21,831 lines are the Go; Theo's are manifests and workflows.</p><div id="authors"></div></div>
@@ -249,11 +259,11 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
       <thead><tr><th>Hire</th><th>Archetype · track</th><th>Finding that changed the build</th></tr></thead>
       <tbody>
         <tr><td>Tobias Lindqvist</td><td>Designated Skeptic · 01</td><td>One replica still runs two pods during a RollingUpdate; Recreate strategy. Sweep CronJob needs concurrencyPolicy Forbid. Vault unreachable at pod start must fail loud.</td></tr>
-        <tr><td>Oren Castellan</td><td>Detail Hawk · 03</td><td>Shared‑database race between test packages reproduced both ways; misleading "ready" log; silent‑zero in the required‑env function; timestamp precision contract.</td></tr>
-        <tr><td>Desmond Okafor</td><td>Spreadsheet · 01</td><td>The "fake updated in the same PR" rule had no artifact; retention sweep missing from the stubbed list; never‑log list said nine items, was eleven.</td></tr>
-        <tr><td>Helena Marsh</td><td>Principled Architect · 02</td><td>The Vault denial matrix never tested api‑service against the issuer role, the exact split the architecture exists for.</td></tr>
-        <tr><td>Ingrid Solano</td><td>Designated Skeptic · 02</td><td>Required‑env list must be structurally tied to config reads; URL‑shape validation on the two URL variables.</td></tr>
-        <tr><td>Tomasz Wrede</td><td>Adversary · 02</td><td>Three attack‑tree rounds on the connector; the failure‑ratio limiter that later fired live in review.</td></tr>
+        <tr><td>Oren Castellan</td><td>Detail Hawk · 03</td><td>Shared-database race between test packages reproduced both ways; misleading "ready" log; silent-zero in the required-env function; timestamp precision contract.</td></tr>
+        <tr><td>Desmond Okafor</td><td>Spreadsheet · 01</td><td>The "fake updated in the same PR" rule had no artifact; retention sweep missing from the stubbed list; never-log list said nine items, was eleven.</td></tr>
+        <tr><td>Helena Marsh</td><td>Principled Architect · 02</td><td>The Vault denial matrix never tested api-service against the issuer role, the exact split the architecture exists for.</td></tr>
+        <tr><td>Ingrid Solano</td><td>Designated Skeptic · 02</td><td>Required-env list must be structurally tied to config reads; URL-shape validation on the two URL variables.</td></tr>
+        <tr><td>Tomasz Wrede</td><td>Adversary · 02</td><td>Three attack-tree rounds on the connector; the failure-ratio limiter that later fired live in review.</td></tr>
         <tr><td>Wesley Okonkwo</td><td>Newcomer · 04</td><td>Cold read of the README: four limiter mechanisms named without saying whether they were one or four; claims with no reproduction path.</td></tr>
       </tbody>
     </table></div>
@@ -264,7 +274,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="org">
   <div class="sec-head">
     <div><span class="eyebrow">AI architecture</span><h2>The org that built it</h2></div>
-    <p>One product manager session orchestrated five track‑lead sessions, each a top‑level Claude Code process in its own tmux window with its own persona and CLAUDE.md. Each lead hired three or four specialist agents with deliberately varied temperaments. Hires returned prose; leads wrote files; the PM alone merged to main and wrote Jira. A separate OpenClaw agent on another machine held cluster and Vault credentials.</p>
+    <p>One product manager session orchestrated five track-lead sessions, each a top-level Claude Code process in its own tmux window with its own persona and CLAUDE.md. Each lead hired three or four specialist agents with deliberately varied temperaments. Hires returned prose; leads wrote files; the PM alone merged to main and wrote Jira. A separate OpenClaw agent on another machine held cluster and Vault credentials.</p>
   </div>
   <div class="org">
     <div class="org-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
@@ -278,9 +288,9 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
     <div class="pattern">
       <div><b>Adversarial pair</b>Proposer drafts, skeptic numbers objections, lead rules. Used on search authorization scoping and the Search() query shape.</div>
       <div><b>Red team / blue team</b>Adversary writes an attack tree, architect answers each leaf. Used once, on the connector token lifecycle; three live rounds.</div>
-      <div><b>Three hats</b>Optimist, pessimist, pragmatist write in parallel; lead synthesizes. Used on the multi‑database abstraction and Go layout.</div>
-      <div><b>Newcomer's question</b>A hire reads a finished hand‑off cold and lists what cannot be acted on. Highest return of any pattern; it failed the README once.</div>
-      <div><b>Rotating objection seat</b>Every refinement carried a standing objection. It caught Recreate, Forbid, fail‑loud on Vault, and a rolling‑day alert that could never fire.</div>
+      <div><b>Three hats</b>Optimist, pessimist, pragmatist write in parallel; lead synthesizes. Used on the multi-database abstraction and Go layout.</div>
+      <div><b>Newcomer's question</b>A hire reads a finished hand-off cold and lists what cannot be acted on. Highest return of any pattern; it failed the README once.</div>
+      <div><b>Rotating objection seat</b>Every refinement carried a standing objection. It caught Recreate, Forbid, fail-loud on Vault, and a rolling-day alert that could never fire.</div>
       <div><b>Live PO review</b>Nothing was Done until the product owner exercised it at the public URL or inside the cluster. Nineteen stories failed that review first.</div>
     </div>
   </div>
@@ -290,49 +300,38 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <section id="arch">
   <div class="sec-head">
     <div><span class="eyebrow">Software architecture</span><h2>What runs in the namespace</h2></div>
-    <p>Two Go binaries built into three images. The API service runs twice: once as an OAuth2 token issuer that alone mounts the signing key, once as a verifier that only ever sees the public JWKS. Every application secret arrives from Vault as a file in memory; none is a Kubernetes Secret. Each workload has its own identity, and default‑deny network policies name who may talk to whom.</p>
+    <p>Two Go binaries built into three images. The API service runs twice: once as an OAuth2 token issuer that alone mounts the signing key, once as a verifier that only ever sees the public JWKS. Every application secret arrives from Vault as a file in memory; none is a Kubernetes Secret. Each workload has its own identity, and default-deny network policies name who may talk to whom.</p>
   </div>
   <div class="panel arch">
-    <svg viewBox="0 0 1040 560" role="img" aria-label="Deployment architecture of the loginid-takehome namespace">
-      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink3)"/></marker></defs>
-      <!-- outside -->
-      <rect x="20" y="20" width="200" height="70" rx="6" class="box"/><text x="120" y="48" text-anchor="middle" class="lbl">Client</text><text x="120" y="68" text-anchor="middle" class="sm">curl / QA clients · client‑credentials</text>
-      <rect x="20" y="130" width="200" height="70" rx="6" class="box"/><text x="120" y="158" text-anchor="middle" class="lbl">nginx Ingress + cert‑manager</text><text x="120" y="178" text-anchor="middle" class="sm">loginid-takehome.uplifttech.org</text>
-      <path class="flow" d="M120 90 V126"/>
-      <!-- namespace box -->
-      <rect x="260" y="20" width="760" height="520" rx="10" fill="none" stroke="var(--rule)" stroke-dasharray="6 5"/>
-      <text x="280" y="44" class="sm" style="font-size:12px;letter-spacing:.12em">NAMESPACE loginid-takehome · quota · default‑deny NetworkPolicies</text>
-      <!-- issuer -->
-      <rect x="300" y="70" width="230" height="96" rx="6" class="box secb"/><text x="415" y="96" text-anchor="middle" class="lbl">api-service-issuer</text><text x="415" y="116" text-anchor="middle" class="sm">APP_MODE=issuer · /auth/token · JWKS</text><text x="415" y="134" text-anchor="middle" class="sm">RS256 · per‑client aud · Argon2id PHC</text><text x="415" y="152" text-anchor="middle" class="sm">1 replica · Recreate · SA api-service-issuer</text>
-      <!-- verifier -->
-      <rect x="300" y="200" width="230" height="110" rx="6" class="box hot"/><text x="415" y="226" text-anchor="middle" class="lbl">api-service (verifier)</text><text x="415" y="246" text-anchor="middle" class="sm">/profiles/search · /profiles/{id}</text><text x="415" y="264" text-anchor="middle" class="sm">masked search · read:own / read:any</text><text x="415" y="282" text-anchor="middle" class="sm">in‑process rate + touch + grant limiters</text><text x="415" y="300" text-anchor="middle" class="sm">:9101 /metrics → Prometheus (ns monitoring)</text>
-      <!-- connector -->
-      <rect x="300" y="350" width="230" height="96" rx="6" class="box"/><text x="415" y="376" text-anchor="middle" class="lbl">idp-connector</text><text x="415" y="396" text-anchor="middle" class="sm">/auth · /identity · stub vendor</text><text x="415" y="414" text-anchor="middle" class="sm">no token cache · uniform‑timing failures</text><text x="415" y="432" text-anchor="middle" class="sm">ingress only from api-service</text>
-      <!-- postgres -->
-      <rect x="600" y="200" width="200" height="110" rx="6" class="box"/><text x="700" y="226" text-anchor="middle" class="lbl">postgres-0</text><text x="700" y="246" text-anchor="middle" class="sm">StatefulSet · TLS</text><text x="700" y="264" text-anchor="middle" class="sm">app db + issuer db</text><text x="700" y="282" text-anchor="middle" class="sm">migrator / runtime roles</text><text x="700" y="300" text-anchor="middle" class="sm">ingress: 4 named consumers</text>
-      <!-- jobs -->
-      <rect x="600" y="70" width="200" height="70" rx="6" class="box"/><text x="700" y="96" text-anchor="middle" class="lbl">db-migrate Job</text><text x="700" y="116" text-anchor="middle" class="sm">goose ×3 · waits for DNS · gates deploy</text>
-      <rect x="600" y="350" width="200" height="82" rx="6" class="box"/><text x="700" y="376" text-anchor="middle" class="lbl">retention-sweep CronJob</text><text x="700" y="396" text-anchor="middle" class="sm">17 3 * * * · Forbid · 1h deadline</text><text x="700" y="414" text-anchor="middle" class="sm">persists retention_sweep_run</text>
-      <!-- vault -->
-      <rect x="850" y="70" width="150" height="362" rx="6" class="box secb"/><text x="925" y="96" text-anchor="middle" class="lbl">Vault (ns vault)</text><text x="925" y="118" text-anchor="middle" class="sm">HA · Agent Injector</text><text x="925" y="150" text-anchor="middle" class="sm">6 roles, 1 per SA</text><text x="925" y="168" text-anchor="middle" class="sm">read‑only policies</text><text x="925" y="200" text-anchor="middle" class="sm">files in memory</text><text x="925" y="218" text-anchor="middle" class="sm">init‑only, exit on</text><text x="925" y="236" text-anchor="middle" class="sm">auth error</text><text x="925" y="270" text-anchor="middle" class="sm">CA‑verified TLS</text><text x="925" y="300" text-anchor="middle" class="sm">no app secret</text><text x="925" y="318" text-anchor="middle" class="sm">in etcd</text>
-      <!-- flows -->
-      <path class="flow" d="M220 150 H265 Q290 150 290 175 V240 H296"/>
-      <path class="flow" d="M220 165 H250 Q270 165 270 140 V118 H296"/>
-      <text x="236" y="112" class="sm">/auth/token</text>
-      <path class="flow sec" d="M415 200 V170"/><text x="428" y="188" class="sm" style="fill:var(--sec)">JWKS in‑cluster :443</text>
-      <path class="flow" d="M415 310 V346"/><text x="428" y="332" class="sm">connector‑scoped token</text>
-      <path class="flow" d="M530 255 H596"/><path class="flow" d="M530 122 H596"/><path class="flow" d="M600 105 H580 Q560 105 560 130 V240"/>
-      <path class="flow" d="M700 310 V346"/><path class="flow" d="M700 140 V196"/>
-      <path class="flow sec" d="M850 118 H804"/><path class="flow sec" d="M850 255 H804"/><path class="flow sec" d="M850 390 H804"/>
-      <path class="flow sec" d="M850 96 H575 Q545 96 545 118 H534"/>
-      <path class="flow deny" d="M220 180 H240 Q262 180 262 210 V398 H296"/><text x="236" y="470" class="sm" style="fill:var(--inc)">connector not exposed publicly</text>
-      <text x="280" y="522" class="sm">Observability: stdout → Filebeat → Elasticsearch (ns logging) · ServiceMonitor + PrometheusRule (4 rules) adopted by kube‑prometheus‑stack · Alertmanager → discord</text>
-    </svg>
+    <div class="lanes">
+      <div class="lane"><div class="lane-h">Edge</div>
+        <div class="node-box"><b>Client</b><span>curl or QA clients · OAuth2 client-credentials</span></div>
+        <div class="arrow">↓ HTTPS</div>
+        <div class="node-box"><b>nginx Ingress + cert-manager</b><span>loginid-takehome.uplifttech.org · /auth/token → issuer · /profiles → verifier · connector not routed</span></div>
+      </div>
+      <div class="lane ns"><div class="lane-h">Namespace loginid-takehome · quota · default-deny NetworkPolicies</div>
+        <div class="node-box secb"><b>api-service-issuer</b><span>APP_MODE=issuer · /auth/token · JWKS in-cluster on :443 · RS256, per-client audience, Argon2id PHC secrets · 1 replica, Recreate · SA api-service-issuer</span></div>
+        <div class="node-box hot"><b>api-service (verifier)</b><span>/profiles/search masked · /profiles/{id} with read:own or read:any + reason code · in-process rate, touch and grant limiters · 1 replica, Recreate · :9101 /metrics admits only ns monitoring</span></div>
+        <div class="node-box"><b>idp-connector</b><span>/auth · /identity against a stub vendor · no token cache · uniform-timing failures · per-identity + overflow backoff · ingress only from api-service · SA idp-connector</span></div>
+        <div class="node-box"><b>db-migrate Job · retention-sweep CronJob</b><span>goose ×3 gates the deploy, waits for Postgres DNS · sweep daily 03:17 UTC, Forbid, 1h deadline, persists retention_sweep_run · own SAs</span></div>
+      </div>
+      <div class="lane"><div class="lane-h">Data and secrets</div>
+        <div class="node-box"><b>postgres-0</b><span>StatefulSet, TLS · app database + issuer database · migrator and runtime roles · ingress from four named consumers only · SA postgres</span></div>
+        <div class="node-box secb"><b>Vault (ns vault)</b><span>HA + Agent Injector · six read-only roles, one per ServiceAccount · init-only agents, exit on auth error · CA-verified TLS · no application secret stored in etcd</span></div>
+        <div class="node-box"><b>Observability (shared stacks)</b><span>stdout → Filebeat → Elasticsearch (ns logging) · ServiceMonitor + PrometheusRule adopted by kube-prometheus-stack (ns monitoring) · four rules → Alertmanager</span></div>
+      </div>
+    </div>
+    <ul class="flows">
+      <li><i class="sw" style="background:var(--sec)"></i>Verifier and connector fetch the issuer's JWKS in-cluster; the signing key never leaves the issuer pod.</li>
+      <li><i class="sw" style="background:var(--agent)"></i>api-service obtains a connector-scoped token with its own credential, then calls the connector; the vendor token lives only between /auth and /identity.</li>
+      <li><i class="sw" style="background:var(--deploy)"></i>Every deploy: build three images → migrate Job (must succeed) → apply api-service; a preflight refuses to start if the deployer lacks a grant for any rendered kind.</li>
+      <li><i class="sw" style="background:var(--inc)"></i>Denied by policy: the public Ingress to the connector, any pod to Postgres it is not named for, any namespace but monitoring to :9101.</li>
+    </ul>
   </div>
   <div class="grid3" style="margin-top:28px">
-    <div class="panel"><h3>Q1 · Data access</h3><p class="sub">DAO for user_profile and user_credential</p><p style="font-size:15px;color:var(--ink2);margin:0">One Repository interface, three backends (Postgres, CockroachDB, SQLite). A conformance suite runs the same assertions against real containers of all three in CI, including CockroachDB's serialization‑retry path. Sentinel errors by SQLSTATE, never by message text.</p></div>
-    <div class="panel"><h3>Q2 · REST + auth</h3><p class="sub">Search and retrieve, secured</p><p style="font-size:15px;color:var(--ink2);margin:0">OAuth2 client credentials mint RS256 tokens with per‑client audiences; the verifier checks issuer, audience, and JWKS with bounded staleness. Search returns masked PII; full reads need read:own or read:any with a closed reason‑code enum. Scope and policy denials return byte‑identical 403s.</p></div>
-    <div class="panel"><h3>Q3 · IDP connector</h3><p class="sub">/auth and /identity to a vendor</p><p style="font-size:15px;color:var(--ink2);margin:0">Vendor tokens are fetched, used once, and discarded; never cached. Failures take uniform time. Per‑identity and overflow‑bucket backoff; the failure‑ratio limiter fired live during review. Reachable only from api‑service by NetworkPolicy.</p></div>
+    <div class="panel"><h3>Q1 · Data access</h3><p class="sub">DAO for user_profile and user_credential</p><p style="font-size:15px;color:var(--ink2);margin:0">One Repository interface, three backends (Postgres, CockroachDB, SQLite). A conformance suite runs the same assertions against real containers of all three in CI, including CockroachDB's serialization-retry path. Sentinel errors by SQLSTATE, never by message text.</p></div>
+    <div class="panel"><h3>Q2 · REST + auth</h3><p class="sub">Search and retrieve, secured</p><p style="font-size:15px;color:var(--ink2);margin:0">OAuth2 client credentials mint RS256 tokens with per-client audiences; the verifier checks issuer, audience, and JWKS with bounded staleness. Search returns masked PII; full reads need read:own or read:any with a closed reason-code enum. Scope and policy denials return byte-identical 403s.</p></div>
+    <div class="panel"><h3>Q3 · IDP connector</h3><p class="sub">/auth and /identity to a vendor</p><p style="font-size:15px;color:var(--ink2);margin:0">Vendor tokens are fetched, used once, and discarded; never cached. Failures take uniform time. Per-identity and overflow-bucket backoff; the failure-ratio limiter fired live during review. Reachable only from api-service by NetworkPolicy.</p></div>
   </div>
 </section>
 
@@ -344,11 +343,11 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
   </div>
   <div class="lessons">
     <div><b>Config named, never set</b><p>Three times a binary read an environment variable no manifest set: issuer and audience, the JWKS port, the connector's entire auth. Now every mode declares its required variables in code, refuses to start without them, and a CI test diffs the manifests against that list.</p></div>
-    <div><b>A pattern not carried forward</b><p>Five times a control established for one component was missing on a structurally identical new one: NetworkPolicy allow‑lists, Forbid on a CronJob, a ServiceAccount per workload. Each got a test that ties the new component to the rule.</p></div>
+    <div><b>A pattern not carried forward</b><p>Five times a control established for one component was missing on a structurally identical new one: NetworkPolicy allow-lists, Forbid on a CronJob, a ServiceAccount per workload. Each got a test that ties the new component to the rule.</p></div>
     <div><b>Verification that skips</b><p>CI was green for hours while every Postgres and CockroachDB test silently skipped for want of a DSN. The fixtures now fail under CI, and the containers are always present.</p></div>
     <div><b>The detector can fail too</b><p>The rule "diff against origin before declaring done" returned a false clean for untracked files, the case most likely to be lost. Five artifacts stranded; the rule now treats a <span class="mono">??</span> line as unshipped work.</p></div>
-    <div><b>Arithmetic outlives its assumption</b><p>An alert threshold of window‑plus‑one‑interval would have fired on every healthy cycle; a rolling‑day skip rate was meaningless at a daily schedule. Both were rewritten as functions of one interval constant.</p></div>
-    <div><b>Fail loud, always</b><p>Two independent retry loops in Vault Agent; one exits on failure, the other retried forever and hung a pod in Init for seven minutes. The product owner's forced‑failure test found it, and now the pod crash‑loops in thirty‑six seconds.</p></div>
+    <div><b>Arithmetic outlives its assumption</b><p>An alert threshold of window-plus-one-interval would have fired on every healthy cycle; a rolling-day skip rate was meaningless at a daily schedule. Both were rewritten as functions of one interval constant.</p></div>
+    <div><b>Fail loud, always</b><p>Two independent retry loops in Vault Agent; one exits on failure, the other retried forever and hung a pod in Init for seven minutes. The product owner's forced-failure test found it, and now the pod crash-loops in thirty-six seconds.</p></div>
   </div>
 </section>
 
@@ -365,7 +364,7 @@ const commitsPerHour = [["12·11",3],["12·12",0],["12·13",0],["12·14",2],["12
 const prsPerHour = [["12·16",2],["12·19",5],["12·20",8],["12·21",9],["13·04",4],["13·05",8],["13·06",4],["13·07",5],["13·09",6],["13·10",4],["13·11",8],["13·12",4],["13·14",6]];
 // story resolutions (PDT decimal hours from 09-12 00:00)
 const doneTimes = [14.92,14.92,14.92,14.95,14.95,14.97,14.97,14.97,14.97,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.28,15.38,20.92,21.5,29.38,31.1,31.1,31.42,33.42,33.55,33.55,33.55,33.55,33.55,33.55,33.63,33.7,34.3,34.4,35.72,35.73,36.67,38.47,39.0];
-const authors = [["Renata Cole (03)",21831,78,"agent"],["merges via Warren's gh identity",8437,74,"agent"],["Theo Bergman (04)",3651,55,"agent"],["Dana Whitfield (PM)",1682,48,"agent"],["wtvamp (pre‑rule identity)",8437,12,"agent"],["Priya Nandakumar (05)",306,8,"agent"],["Naomi Voss (01)",253,2,"agent"],["Marcus Ilori (02)",171,12,"agent"]];
+const authors = [["Renata Cole (03)",21831,78,"agent"],["merges via Warren's gh identity",8437,74,"agent"],["Theo Bergman (04)",3651,55,"agent"],["Dana Whitfield (PM)",1682,48,"agent"],["wtvamp (pre-rule identity)",8437,12,"agent"],["Priya Nandakumar (05)",306,8,"agent"],["Naomi Voss (01)",253,2,"agent"],["Marcus Ilori (02)",171,12,"agent"]];
 // fix: wtvamp lines were 8437 and "Warren Thompson" author lines were not separately reported; use commit counts as primary and lines where measured
 authors[1][1]=0; // merge commits add no lines of their own
 const mentions = [["Theo",71],["Warren",62],["Naomi",48],["Renata",41],["Priya",41],["Marcus",37],["Amber",20],["Tobias",19],["Oren",17],["Desmond",12],["Tomasz",12],["Nolan",12],["Helena",8],["Wesley",8],["Ingrid",6],["Saoirse",5]];
@@ -382,38 +381,38 @@ const leads = [
 const events = [
  // [day, time, kind, title, detail]
  ["12","09:17","agent","Repository scaffolded; six research subagents fan out in parallel","Market framing, IAM and passwordless landscape, IDP aggregation, one topic each."],
- ["12","09:50","incident","Code written prematurely is wiped","A lead started implementing before the design was settled. Rule made: no code until the go‑ahead, and the reasoning stays in the record."],
- ["12","10:45","human","Org plan approved","Five leads as top‑level sessions, eighteen hires, a casting registry with thirteen archetypes and variance rules."],
+ ["12","09:50","incident","Code written prematurely is wiped","A lead started implementing before the design was settled. Rule made: no code until the go-ahead, and the reasoning stays in the record."],
+ ["12","10:45","human","Org plan approved","Five leads as top-level sessions, eighteen hires, a casting registry with thirteen archetypes and variance rules."],
  ["12","~12:30","human","Deployment target: the real shared cluster","Not a throwaway lab. This decision created most of the day's security work and every one of its real findings."],
- ["12","~13:00","human","Attribution rule","Every commit, PR, and Jira transition names the persona who did the work. Merges carry Work‑By trailers."],
- ["12","14:55","done","Planning phase closes: 18 stories Done in Jira","Three cross‑track consistency passes, 52 findings, all addressed before code."],
+ ["12","~13:00","human","Attribution rule","Every commit, PR, and Jira transition names the persona who did the work. Merges carry Work-By trailers."],
+ ["12","14:55","done","Planning phase closes: 18 stories Done in Jira","Three cross-track consistency passes, 52 findings, all addressed before code."],
  ["12","~17:30","human","Implementation go, as an agile loop","Pull, refine, hand to engineering, QA, deploy, PO review. Show the URL on every deploy."],
  ["12","20:45","deploy","First deployment to the public URL","Walking skeleton: two binaries, health endpoint, ARC runner, Ingress with TLS. DNS by Amber."],
- ["12","20:55","done","LT‑34 Done: first story closed end to end","Deployed, reviewed live by the product owner, recorded."],
- ["12","21:30","done","LT‑32 Done: issuer split into its own Deployment","Only the issuer mounts the signing key; the verifier sees the public JWKS."],
+ ["12","20:55","done","LT-34 Done: first story closed end to end","Deployed, reviewed live by the product owner, recorded."],
+ ["12","21:30","done","LT-32 Done: issuer split into its own Deployment","Only the issuer mounts the signing key; the verifier sees the public JWKS."],
  ["12","21:55","human","Teardown will run on Warren's word next week, unscheduled",""],
  ["gap","22:00 → 04:15","","Usage pause",""],
- ["13","04:50","deploy","A database behind the API","In‑namespace Postgres, migration Job gating the api‑service apply. Base64 slash in a password broke the DSN; hex fixed it."],
- ["13","05:23","done","LT‑52 Done; LT‑40 live and failing closed",""],
+ ["13","04:50","deploy","A database behind the API","In-namespace Postgres, migration Job gating the api-service apply. Base64 slash in a password broke the DSN; hex fixed it."],
+ ["13","05:23","done","LT-52 Done; LT-40 live and failing closed",""],
  ["13","06:30","sec","First real token minted at the URL, and what verifying it found","Issuer and audience were never set in any manifest. The verifier compared audience to an empty string. Two more config gaps followed within the hour."],
- ["13","07:06","done","Joint live review: LT‑40 and LT‑51 Done","Masked search, full read with reason codes, byte‑identical 403s, all exercised at the URL."],
+ ["13","07:06","done","Joint live review: LT-40 and LT-51 Done","Masked search, full read with reason codes, byte-identical 403s, all exercised at the URL."],
  ["13","07:10","incident","Review finds CI has been skipping every Postgres and CockroachDB test","Green meant SQLite only. Fixtures now fail under CI; real containers added."],
- ["13","07:30","done","LT‑39 Done: the rate limit now limits","Two replicas split a burst across independent counters. Replicas 1 plus Recreate; Tobias's catch."],
- ["13","07:55","sec","Connector's inbound auth was never wired","Third enforcement‑site gap; startup guards and a manifest‑vs‑config test make the class fail in CI."],
- ["13","08:00","done","LT‑41 Done: Q3 delivered","In‑cluster review; the failure‑ratio limiter fired live."],
- ["13","09:40","done","Close‑out wave: fourteen Done, two honest reversals","LT‑42 passed then withdrawn within fourteen minutes when a rule had no artifact. LT‑46's etcd criterion found unmet on the cluster."],
+ ["13","07:30","done","LT-39 Done: the rate limit now limits","Two replicas split a burst across independent counters. Replicas 1 plus Recreate; Tobias's catch."],
+ ["13","07:55","sec","Connector's inbound auth was never wired","Third enforcement-site gap; startup guards and a manifest-vs-config test make the class fail in CI."],
+ ["13","08:00","done","LT-41 Done: Q3 delivered","In-cluster review; the failure-ratio limiter fired live."],
+ ["13","09:40","done","Close-out wave: fourteen Done, two honest reversals","LT-42 passed then withdrawn within fourteen minutes when a rule had no artifact. LT-46's etcd criterion found unmet on the cluster."],
  ["13","09:55","human","Ruling: Vault, not etcd encryption","The cluster already ran HA Vault with the injector. Secrets leave etcd entirely."],
- ["13","10:25","sec","Amber provisions Vault; finds three workloads sharing the default identity","Six roles, dedicated ServiceAccounts, denial matrix proven, a trailing‑newline template trap caught."],
- ["13","10:44","incident","LT‑46 deploy takes the database down for sixteen minutes","Injector default CPU requests versus the namespace quota; a CA path under the wrong directory. Three people diagnosed it independently; fixed forward in the time box."],
- ["13","11:15","sec","Forced‑failure test: a denied pod hung in Init forever","Vault Agent's auth loop retried indefinitely. Exit‑on‑error plus bounded backoff; crash‑loop in 36 seconds."],
+ ["13","10:25","sec","Amber provisions Vault; finds three workloads sharing the default identity","Six roles, dedicated ServiceAccounts, denial matrix proven, a trailing-newline template trap caught."],
+ ["13","10:44","incident","LT-46 deploy takes the database down for sixteen minutes","Injector default CPU requests versus the namespace quota; a CA path under the wrong directory. Three people diagnosed it independently; fixed forward in the time box."],
+ ["13","11:15","sec","Forced-failure test: a denied pod hung in Init forever","Vault Agent's auth loop retried indefinitely. Exit-on-error plus bounded backoff; crash-loop in 36 seconds."],
  ["13","11:42","human","Warren approves deleting the six Kubernetes Secrets","Namespace now holds only TLS certs, the QA client credential, and Vault's CA."],
- ["13","11:44","done","LT‑46 Done: no application secret in etcd",""],
- ["13","12:00","agent","Amber inventories the observability stack, read‑only","kube‑prometheus‑stack with self‑service rule adoption; Filebeat already shipping stdout; a filter dropping any line containing \"health\"."],
+ ["13","11:44","done","LT-46 Done: no application secret in etcd",""],
+ ["13","12:00","agent","Amber inventories the observability stack, read-only","kube-prometheus-stack with self-service rule adoption; Filebeat already shipping stdout; a filter dropping any line containing \"health\"."],
  ["13","12:18","human","Warren approves the shared Filebeat fix; Amber applies it","The one change to a shared stack all day, confirmed from the cluster, not the summary."],
- ["13","12:40","done","LT‑48 Done on the third live run","No issuer in the dev loop, then a SQLite path under the Postgres profile. Startup guards firing correctly in a new place."],
- ["13","14:28","done","LT‑20 Done: a 90‑day floor, not a ceiling","Audit retention is a minimum driven by incident review; every other window is a maximum driven by minimization."],
+ ["13","12:40","done","LT-48 Done on the third live run","No issuer in the dev loop, then a SQLite path under the Postgres profile. Startup guards firing correctly in a new place."],
+ ["13","14:28","done","LT-20 Done: a 90-day floor, not a ceiling","Audit retention is a minimum driven by incident review; every other window is a maximum driven by minimization."],
  ["13","14:52","deploy","Last hotfix: a Service with no labels had no scrape target","ServiceMonitors select Services by label, not by the pods they select."],
- ["13","15:00","done","Backlog closed: 42 of 42","LT‑49 passes with the scrape target up, four rules loaded, a real alert reaching Alertmanager with the namespace label."]
+ ["13","15:00","done","Backlog closed: 42 of 42","LT-49 passes with the scrape target up, four rules loaded, a real alert reaching Alertmanager with the namespace label."]
 ];
 
 // ---------- helpers ----------
@@ -502,7 +501,7 @@ hourBars($("#prs"),prsPerHour,"var(--deploy)","merges");
     s.appendChild(el("rect",{x:L,y,width:w,height:24,fill:"var(--agent)",rx:2}));
     s.appendChild(el("text",{x:L+w+8,y:y+17,"font-size":12},`${d[1].toLocaleString()} lines · ${d[2]} commits`));
   });
-  s.appendChild(el("text",{x:L,y:H-8,"font-size":10,fill:"var(--ink3)"},"plus 74 merge commits by the PM under Warren's GitHub identity and 12 pre‑rule commits as wtvamp (8,437 lines)"));
+  s.appendChild(el("text",{x:L,y:H-8,"font-size":10,fill:"var(--ink3)"},"plus 74 merge commits by the PM under Warren's GitHub identity and 12 pre-rule commits as wtvamp (8,437 lines)"));
   $("#authors").appendChild(s);
 })();
 
