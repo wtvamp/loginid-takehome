@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"loginid-takehome/internal/app"
+	"loginid-takehome/internal/config"
 )
 
 // TestValidateAuthConfig_VerifierMode is the live-review finding's own
@@ -97,6 +98,46 @@ func TestValidateAuthConfig_IssuerMode(t *testing.T) {
 			}
 			if c.wantErr && !strings.Contains(err.Error(), "AUTH_JWT_ISSUER") {
 				t.Errorf("error = %q, want it to name AUTH_JWT_ISSUER", err)
+			}
+		})
+	}
+}
+
+// TestNewOnboardingService confirms LT-33's best-effort wiring: fully
+// configured succeeds, and each individually-missing piece of config
+// (the two connector-related URLs, or the client credential) is
+// reported as an error rather than a Fatal-worthy panic — this
+// capability must never crash-loop api-service over its own
+// misconfiguration, per newOnboardingService's own doc comment.
+func TestNewOnboardingService(t *testing.T) {
+	full := func() config.Config {
+		return config.Config{
+			IssuerTokenURL:        "http://issuer.example/auth/token",
+			IDPConnectorBaseURL:   "http://connector.example",
+			ConnectorClientID:     "client-id",
+			ConnectorClientSecret: "client-secret",
+		}
+	}
+
+	if _, err := newOnboardingService(full()); err != nil {
+		t.Errorf("newOnboardingService(fully configured) = %v, want nil", err)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*config.Config)
+	}{
+		{name: "issuer token url missing", mutate: func(c *config.Config) { c.IssuerTokenURL = "" }},
+		{name: "connector base url missing", mutate: func(c *config.Config) { c.IDPConnectorBaseURL = "" }},
+		{name: "connector client id missing", mutate: func(c *config.Config) { c.ConnectorClientID = "" }},
+		{name: "connector client secret missing", mutate: func(c *config.Config) { c.ConnectorClientSecret = "" }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := full()
+			c.mutate(&cfg)
+			if _, err := newOnboardingService(cfg); err == nil {
+				t.Errorf("newOnboardingService(%s) = nil error, want an error", c.name)
 			}
 		})
 	}
