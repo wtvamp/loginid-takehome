@@ -11,3 +11,4 @@
 - [ ] Any new env var read in config.go is set in every Deployment whose APP_MODE uses it (handoff-03-auth.md v9)
 - [ ] No secret or token in code, tests, or comments (gitleaks runs on this PR's commits)
 - [ ] `git diff origin/main` reviewed before requesting merge
+- [ ] If this PR changes `deploy/rbac.yaml`, `deploy/bootstrap.yaml`, or the `ResourceQuota`, say who applies it and when, because the pipeline does not

@@ -241,3 +241,22 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Model/effort:** Sonnet, low.
 **Type:** Task.
 **Labels:** `track-04`, `track-03` (item 2 only).
+
+---
+
+## Story 13 — Preflight check: deployer RBAC drift is a silent-until-deploy failure class
+
+**Status: done** (this story's own fix landed in the PR that recorded it) — flagged by the PM after deploy 34774066342 failed applying the LT-44 `retention-sweep` CronJob: PR #57 added `cronjobs` to `deploy/rbac.yaml`'s Role, but `rbac.yaml` is applied out of band at bootstrap, never by `deploy.yml` (the deployer identity can't grant itself new permissions), so the rule existed in git and nowhere else until someone applied it by hand. Same failure class as the `ResourceQuota` bump in #58's incident — a bootstrap-file change with no CI apply path, silent until a real deploy needs the new permission.
+
+**Description:** Add a preflight step to `.github/workflows/deploy.yml`, before any `kubectl apply`: run `kubectl auth can-i --list -n loginid-takehome`, extract every distinct `kind` present in that commit's rendered manifests, map each to its plural resource name, and fail loudly — `deploy/rbac.yaml drift: bootstrap apply required`, naming the missing kind/resource — if any of them has no matching grant. Also adds a `pull_request_template.md` checklist line: "If this PR changes `deploy/rbac.yaml`, `deploy/bootstrap.yaml`, or the `ResourceQuota`, say who applies it and when, because the pipeline does not."
+
+**Acceptance criteria:**
+- [x] The preflight step runs before the first `kubectl apply` in `deploy.yml`.
+- [x] Verified against the real, live incident: impersonating the actual deployer identity (`kubectl auth can-i --list -n loginid-takehome --as=system:serviceaccount:loginid-takehome-runners:loginid-takehome-deployer`) reproduced the exact gap (no `cronjobs` grant) and the preflight script correctly caught it — not a synthetic test, the actual broken state at the time this story was written.
+- [x] Confirmed the same check passes cleanly once the missing grant is simulated as present.
+- [x] The PR template's checklist names the responsibility gap explicitly, so a future rbac.yaml/bootstrap.yaml/quota change states who applies it, rather than assuming CI does.
+
+**Depends on:** none.
+**Model/effort:** Sonnet, low.
+**Type:** Task.
+**Labels:** `track-04`.

@@ -99,6 +99,75 @@ jobs:
           sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml > /tmp/rendered.yaml
           sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/api-service.yaml > /tmp/rendered-api-service.yaml
 
+      # Backlog Story 13: deploy 34774066342 failed applying the
+      # retention-sweep CronJob — PR #57 added `cronjobs` to
+      # deploy/rbac.yaml's Role, but rbac.yaml is applied out of band at
+      # bootstrap, never by this workflow (the deployer can't grant
+      # itself permissions), so the rule existed in git and nowhere
+      # else. Same failure class as the ResourceQuota bump in #58's
+      # incident: a bootstrap-file change with no apply path, silent
+      # until a real deploy needs the new permission. This preflight
+      # catches that gap BEFORE any apply, not after a failed one: every
+      # distinct `kind` in the rendered manifests must have a matching
+      # resource in what the deployer can actually do in this namespace,
+      # or the deploy fails loudly here with a message naming the fix,
+      # instead of failing deep inside `kubectl apply` with a generic
+      # "forbidden" that doesn't say why.
+      - name: Preflight — deployer RBAC covers every kind in this deploy
+        run: |
+          kubectl auth can-i --list -n loginid-takehome > /tmp/can-i.txt
+          python3 - <<'PYEOF'
+          import re
+          import sys
+
+          # Kubernetes' plural-resource-name convention: kind.lower() + 's',
+          # with the irregulars this project's manifests actually use.
+          IRREGULAR = {
+              "NetworkPolicy": "networkpolicies",
+              "Ingress": "ingresses",
+              "ResourceQuota": "resourcequotas",
+          }
+
+          def resource_name(kind: str) -> str:
+              return IRREGULAR.get(kind, kind.lower() + "s")
+
+          kinds = set()
+          for path in ("/tmp/rendered.yaml", "/tmp/rendered-api-service.yaml"):
+              for line in open(path):
+                  m = re.match(r"^kind:\s*(\S+)\s*$", line)
+                  if m:
+                      kinds.add(m.group(1))
+
+          can_i = open("/tmp/can-i.txt").read()
+          # Each "Resources" column entry is "resourcename" or
+          # "resourcename.apigroup" — match on the bare resource name
+          # ignoring the group suffix, since a namespaced Role's `can-i
+          # --list` output doesn't always spell the group the same way
+          # a manifest's apiVersion does.
+          resources_grantable = set(
+              re.match(r"^([a-z0-9-]+)", entry).group(1)
+              for entry in re.findall(r"^(\S+\.?\S*)\s", can_i, re.MULTILINE)
+              if re.match(r"^[a-z]", entry)
+          )
+
+          missing = []
+          for kind in sorted(kinds):
+              resource = resource_name(kind)
+              if resource not in resources_grantable:
+                  missing.append(f"{kind} (resource: {resource})")
+
+          if missing:
+              print("::error::deploy/rbac.yaml drift: bootstrap apply required")
+              print("The following kinds appear in this deploy's rendered manifests")
+              print("but the deployer's current RBAC (kubectl auth can-i --list) has")
+              print("no matching grant — deploy/rbac.yaml was changed in git but never")
+              print("applied out of band (rbac.yaml is bootstrap, not CI-applied):")
+              for m in missing:
+                  print(f"  - {m}")
+              sys.exit(1)
+          print("Preflight OK: every kind in this deploy has a matching RBAC grant.")
+          PYEOF
+
       - name: Show planned change (kubectl diff)
         run: |
           kubectl diff -f /tmp/rendered.yaml || true
