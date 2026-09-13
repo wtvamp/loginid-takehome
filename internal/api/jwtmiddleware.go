@@ -188,7 +188,16 @@ func logAuthnFailure(ctx context.Context, audit AuditLogger, err error) {
 		return
 	}
 	kind := AuditAuthnFailure
-	if errors.Is(err, ErrJWKSStale) {
+	// Both sentinels mean "verification is unavailable" (a
+	// token-infrastructure problem), not "this specific token is
+	// invalid" — ErrJWKSStale (a cache exists but aged past max
+	// staleness) and ErrJWKSUnreachable (no cache exists yet at all,
+	// the cold-start case) get the same distinct audit kind. A live
+	// review finding caught this middleware previously only checking
+	// ErrJWKSStale, so a cold-start JWKS failure (e.g. a Service port
+	// mismatch discovered on the very first mint) was miscategorized as
+	// an ordinary bad-credential attempt.
+	if errors.Is(err, ErrJWKSStale) || errors.Is(err, ErrJWKSUnreachable) {
 		kind = AuditJWKSUnavailable
 	}
 	audit.Log(ctx, AuditEvent{Kind: kind, Timestamp: time.Now().UTC()})
