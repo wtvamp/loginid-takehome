@@ -31,7 +31,12 @@ apiVersion: v1
 kind: ResourceQuota
 metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
 spec:
-  # Quota math (LT-52 adds Postgres + a transient migration Job pod):
+  # Quota math (LT-52 adds Postgres + a transient migration Job pod;
+  # LT-51 adds the issuer database in the same Postgres instance and the
+  # migration Job's third invocation — no new pods, no change to the
+  # numbers below beyond what LT-52 already established. api-service-
+  # issuer's replicas dropped 2 -> 1 per Helena's (02) ruling, which
+  # only tightens headroom further, not loosens it):
   #   requests.cpu:    550m existing + postgres 100m + migrate 50m  = 700m  (limit "1" = 1000m, fits)
   #   requests.memory: 704Mi existing + postgres 256Mi + migrate 64Mi = 1024Mi (was AT the 1Gi limit already — bumped to 2Gi for real headroom)
   #   limits.cpu:      2750m existing + postgres 500m + migrate 200m = 3450m (was "3" = 3000m — bumped to "4")
@@ -57,13 +62,21 @@ spec:
 # (F13's fix, per handoff-04-secrets.md row #2 and
 # containerization-design.md's "Why two Deployments of one image, not RBAC
 # on one"). Same image as api-service, mode selected by APP_MODE.
+#
+# replicas: 1, not 2 — per Helena's (02) LT-51 review: GrantLimiter
+# (internal/api, wired around the client-credentials grant) tracks
+# failed-attempt state in-process, per-pod. Two replicas behind
+# round-robin means an attacker's failures split across both, silently
+# halving the limiter's effective threshold before it engages — a real
+# security regression, not a cosmetic one. This POC issuer has no HA
+# requirement that would justify accepting that.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-service-issuer
   namespace: loginid-takehome
 spec:
-  replicas: 2
+  replicas: 1
   selector: {matchLabels: {app: api-service-issuer}}
   template:
     metadata: {labels: {app: api-service-issuer}}
@@ -81,11 +94,15 @@ spec:
             - {name: HTTP_ADDR, value: ":8080"}
             - {name: APP_MODE, value: issuer}
             - {name: JWT_SIGNING_KEY_FILE, value: /secrets/jwt/signing-key}
+            - {name: ISSUER_DB_DSN_FILE, value: /secrets/issuer-db/dsn}
           volumeMounts:
             - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
+            - {name: issuer-db-runtime-credential, mountPath: /secrets/issuer-db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
       volumes:
+        - name: issuer-db-runtime-credential
+          secret: {secretName: issuer-db-runtime-credential}
         - name: jwt-signing-key
           secret: {secretName: api-service-jwt-signing-key}
 ---
@@ -103,6 +120,18 @@ spec:
 # CI-applied (no secret material) — the passwords it interpolates come
 # from Secret env vars at container start, never written into this
 # ConfigMap itself.
+#
+# CAVEAT — the same class as the sequences/UUID note below, stated up
+# front rather than rediscovered: docker-entrypoint-initdb.d scripts run
+# ONLY on an empty $PGDATA (Postgres's own first-init behavior, not a
+# choice this manifest makes). Once a PVC has been initialized, editing
+# these scripts changes nothing on the live instance — a future edit
+# here (a new role, a new grant, a new database) has to be hand-applied
+# against the running instance too, the same way the issuer
+# database/roles below were (see deploy/db-secret-bootstrap.yaml's
+# "Hand-apply procedure used for LT-51" section for the exact commands
+# that were actually run, and the note there on the better long-term
+# shape this should eventually become).
 apiVersion: v1
 kind: ConfigMap
 metadata: {name: postgres-initdb, namespace: loginid-takehome}
@@ -139,6 +168,41 @@ data:
       -- added here — this is the first place to look if that happens.
       ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO runtime;
+    EOSQL
+  02-create-issuer-db.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    # LT-51: the token issuer's client store is a separate `issuer`
+    # database in this same Postgres instance (Priya's ruling — a
+    # distinct database, not just a distinct schema, makes a
+    # cross-database join to user_profile/user_credential structurally
+    # impossible, not merely policy-forbidden). Same migrator/runtime
+    # role-split discipline as the main database, carried over rather
+    # than rediscovered — including the CREATE ON SCHEMA public grant
+    # that LT-52 already had to learn the hard way.
+    #
+    # CREATE DATABASE must be the ONLY statement in its query — verified
+    # empirically against a real container: psql sends a multi-statement
+    # -c/heredoc string as one simple-query protocol message, which
+    # Postgres wraps in an implicit transaction block, and CREATE DATABASE
+    # cannot run inside any transaction block, explicit or implicit
+    # ("CREATE DATABASE cannot run inside a transaction block") — even
+    # when it's the first of several statements targeting a database
+    # other than itself. Its own invocation, alone, then a separate one
+    # for the roles (roles are cluster-wide, not per-database), then a
+    # third reconnecting to `issuer` for the database-and-schema-scoped
+    # grants.
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "CREATE DATABASE issuer;"
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      CREATE ROLE issuer_migrator WITH LOGIN PASSWORD '$ISSUER_MIGRATOR_PASSWORD' CREATEDB;
+      CREATE ROLE issuer_runtime WITH LOGIN PASSWORD '$ISSUER_RUNTIME_PASSWORD';
+    EOSQL
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname issuer <<-EOSQL
+      GRANT ALL PRIVILEGES ON DATABASE issuer TO issuer_migrator;
+      GRANT CREATE ON SCHEMA public TO issuer_migrator;
+      GRANT CONNECT ON DATABASE issuer TO issuer_runtime;
+      ALTER DEFAULT PRIVILEGES FOR ROLE issuer_migrator IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO issuer_runtime;
     EOSQL
 ---
 # Self-signed Issuer + Certificate for Postgres's server TLS, per
@@ -215,6 +279,10 @@ spec:
               valueFrom: {secretKeyRef: {name: db-migrator-credential, key: password}}
             - name: RUNTIME_PASSWORD
               valueFrom: {secretKeyRef: {name: db-runtime-credential, key: password}}
+            - name: ISSUER_MIGRATOR_PASSWORD
+              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: password}}
+            - name: ISSUER_RUNTIME_PASSWORD
+              valueFrom: {secretKeyRef: {name: issuer-db-runtime-credential, key: password}}
             - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
           ports: [{containerPort: 5432}]
           volumeMounts:
@@ -256,18 +324,21 @@ spec:
   ingress:
     - from:
         - {podSelector: {matchLabels: {app: api-service}}}
+        - {podSelector: {matchLabels: {app: api-service-issuer}}}
         - {podSelector: {matchLabels: {app: db-migrate}}}
 ---
-# Migration Job: two goose invocations against two independent version
-# tables, backend directory FIRST then shared/ SECOND (Priya's corrected
-# order — shared/ now holds only the auth_method seed row, which depends
-# on auth_method existing, which the backend DDL creates). Both must
-# succeed or the Job fails; idempotent by construction (goose skips
-# already-applied versions; the seed's own ON CONFLICT DO NOTHING covers
-# a hand-seeded database). Runs to completion before api-service's
-# rollout — sequenced by the deploy workflow (kubectl wait for this Job's
-# completion before applying api-service's Deployment), not by an
-# assumption about scheduling order.
+# Migration Job: three goose invocations, each against its own version
+# table. Main-database pair first — backend directory then shared/
+# (Priya's corrected order: shared/ holds only the auth_method seed row,
+# which depends on auth_method existing, which the backend DDL creates)
+# — then the issuer database LAST (LT-51), since it has no ordering
+# dependency on the main database's migrations at all; running it last
+# is simplest, not required by any dependency. All three must succeed or
+# the Job fails; idempotent by construction (goose skips already-applied
+# versions). Runs to completion before api-service's rollout — sequenced
+# by the deploy workflow (kubectl wait for this Job's completion before
+# applying api-service's Deployment), not by an assumption about
+# scheduling order.
 apiVersion: batch/v1
 kind: Job
 metadata: {name: db-migrate, namespace: loginid-takehome}
@@ -294,6 +365,8 @@ spec:
               value: postgres
             - name: GOOSE_DBSTRING
               valueFrom: {secretKeyRef: {name: db-migrator-credential, key: dsn}}
+            - name: ISSUER_GOOSE_DBSTRING
+              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: dsn}}
           command:
             - sh
             - -c
@@ -301,6 +374,7 @@ spec:
               set -e
               GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
               GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
+              GOOSE_DBSTRING="$ISSUER_GOOSE_DBSTRING" GOOSE_MIGRATION_DIR=/migrations/issuer goose -table goose_db_version_issuer up
 ---
 apiVersion: apps/v1
 kind: Deployment
