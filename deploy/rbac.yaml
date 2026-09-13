@@ -25,6 +25,12 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: [networkpolicies, ingresses]
     verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["cert-manager.io"]
+    resources: [issuers, certificates]
+    # Not secrets: the Certificate resource here only requests that
+    # cert-manager mint one; the resulting TLS Secret is managed by
+    # cert-manager's own controller, not read/written by this identity.
+    verbs: [get, list, watch, create, update, patch]
   - apiGroups: ["batch"]
     resources: [jobs]
     # `delete` is needed because a Job's pod template is immutable — the

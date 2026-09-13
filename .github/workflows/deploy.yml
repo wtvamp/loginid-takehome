@@ -119,8 +119,39 @@ jobs:
       - name: Wait for Postgres to be ready
         run: kubectl -n loginid-takehome rollout status statefulset/postgres --timeout=180s
 
+      # `kubectl wait --for=condition=complete` does NOT fail fast on a
+      # Failed Job — verified empirically against the real cluster (a
+      # deliberately failing Job in a scratch namespace): it waits out the
+      # full --timeout regardless, then exits non-zero as a timeout, not
+      # as a detected failure. That still stops this workflow before
+      # api-service is applied (the safety property holds), but wastes
+      # the whole timeout on every real migration failure. Poll both
+      # conditions explicitly instead, so a genuine Failed exits within
+      # seconds of backoffLimit being exhausted.
       - name: Wait for migration Job to complete
-        run: kubectl -n loginid-takehome wait --for=condition=complete job/db-migrate --timeout=180s
+        run: |
+          for i in $(seq 1 90); do
+            # Multiple conditions can be True at once (e.g. "SuccessCriteriaMet
+            # Complete", verified against the real cluster) — the jsonpath
+            # below returns a space-separated list, so this must be a word
+            # match, never exact string equality (an earlier version of this
+            # script used `= "Complete"` and would never have matched).
+            conditions=$(kubectl -n loginid-takehome get job db-migrate -o jsonpath='{.status.conditions[?(@.status=="True")].type}')
+            case " $conditions " in
+              *" Complete "*)
+                echo "db-migrate: Complete"
+                exit 0
+                ;;
+              *" Failed "*)
+                echo "::error::db-migrate Job failed"
+                kubectl -n loginid-takehome logs job/db-migrate --all-containers --tail=200
+                exit 1
+                ;;
+            esac
+            sleep 2
+          done
+          echo "::error::db-migrate did not reach Complete or Failed within the timeout"
+          exit 1
 
       - name: Apply api-service
         run: kubectl apply -f /tmp/rendered-api-service.yaml

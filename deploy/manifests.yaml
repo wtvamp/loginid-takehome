@@ -113,6 +113,13 @@ data:
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
       CREATE ROLE migrator WITH LOGIN PASSWORD '$MIGRATOR_PASSWORD' CREATEDB;
       GRANT ALL PRIVILEGES ON DATABASE $POSTGRES_DB TO migrator;
+      -- Postgres 15+ revoked PUBLIC's implicit CREATE on the public
+      -- schema — database-level privileges above don't cover schema-level
+      -- ones. Without this, migrator's own CREATE TABLE fails with
+      -- "permission denied for schema public" (verified against a live
+      -- postgres:16-alpine container by 01/Naomi — this would have broken
+      -- the first real deploy).
+      GRANT CREATE ON SCHEMA public TO migrator;
       CREATE ROLE runtime WITH LOGIN PASSWORD '$RUNTIME_PASSWORD';
       GRANT CONNECT ON DATABASE $POSTGRES_DB TO runtime;
       -- runtime gets DML on tables migrator creates from now on, without
@@ -120,9 +127,47 @@ data:
       -- after the migration Job runs — Postgres 15+ default privileges no
       -- longer grant CREATE on the public schema to non-owners, so
       -- runtime genuinely cannot run DDL (LT-52's acceptance criterion).
+      --
+      -- CAVEAT, stated rather than discovered later: this ALTER DEFAULT
+      -- PRIVILEGES clause is scoped to ON TABLES only — it grants nothing
+      -- on sequences. The current schema is UUID-keyed throughout (per
+      -- 05-data-ops/multi-db-strategy.md), so no column depends on a
+      -- SERIAL/IDENTITY sequence and this gap is currently inert. If a
+      -- future migration ever adds a SERIAL/IDENTITY column, runtime
+      -- would silently be unable to insert into that table (no USAGE on
+      -- its sequence) until a matching `... ON SEQUENCES ...` grant is
+      -- added here — this is the first place to look if that happens.
       ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO runtime;
     EOSQL
+---
+# Self-signed Issuer + Certificate for Postgres's server TLS, per
+# Marcus's (02) ruling on threat-model.md Assumption 9: PII crosses this
+# connection, and this track already requires TLS for the same PII one
+# hop earlier (client-facing), so plaintext one hop later on a shared
+# cluster with unverified network isolation would be inconsistent.
+# letsencrypt-prod (used by the public Ingress) can't issue for an
+# internal-only DNS name — self-signed is sufficient here because the
+# client uses sslmode=require, not verify-full (NetworkPolicy already
+# restricts *who* can reach the DB Service; TLS covers *what's on the
+# wire*, not identity verification, per Marcus's own scoping of what this
+# hop needs).
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata: {name: postgres-selfsigned, namespace: loginid-takehome}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: {name: postgres-server-tls, namespace: loginid-takehome}
+spec:
+  secretName: postgres-server-tls
+  issuerRef: {name: postgres-selfsigned, kind: Issuer}
+  dnsNames:
+    - postgres.loginid-takehome.svc.cluster.local
+    - postgres.loginid-takehome.svc
+    - postgres
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -134,10 +179,30 @@ spec:
   template:
     metadata: {labels: {app: postgres}}
     spec:
-      securityContext: {runAsNonRoot: true}
+      # postgres:16-alpine's image defaults to root (its entrypoint drops
+      # to the postgres user internally via gosu when started as root) —
+      # runAsNonRoot alone fails with "container has runAsNonRoot and
+      # image will run as root" without an explicit numeric runAsUser, the
+      # same class of bug as LT-45's distroless fix. Verified the actual
+      # UID/GID directly (`docker run --entrypoint getent ... passwd
+      # postgres` -> uid 70, not the commonly-assumed 999) rather than
+      # guessing — confirmed the entrypoint runs correctly when started
+      # already as UID 70 (skips its own root-detection branch).
+      securityContext: {runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, fsGroup: 70}
       containers:
         - name: postgres
           image: postgres:16-alpine
+          # ssl_key_file must not be group/world-readable or postgres
+          # refuses to start; cert-manager's Secret mounts default to
+          # 0644, so defaultMode below + fsGroup above are what make this
+          # actually work, not just "a cert exists".
+          args:
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/certs/tls.crt
+            - -c
+            - ssl_key_file=/certs/tls.key
           resources:
             requests: {cpu: "100m", memory: "256Mi"}
             limits: {cpu: "500m", memory: "512Mi"}
@@ -155,11 +220,14 @@ spec:
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
             - {name: initdb, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+            - {name: server-tls, mountPath: /certs, readOnly: true}
           readinessProbe: {exec: {command: [pg_isready, -U, postgres]}, initialDelaySeconds: 5, periodSeconds: 5}
           livenessProbe: {exec: {command: [pg_isready, -U, postgres]}, initialDelaySeconds: 10, periodSeconds: 10}
       volumes:
         - name: initdb
           configMap: {name: postgres-initdb, defaultMode: 0555}
+        - name: server-tls
+          secret: {secretName: postgres-server-tls, defaultMode: 0600}
   volumeClaimTemplates:
     - metadata: {name: data}
       spec:
@@ -216,15 +284,23 @@ spec:
             requests: {cpu: "50m", memory: "64Mi"}
             limits: {cpu: "200m", memory: "128Mi"}
           env:
-            - name: MIGRATOR_DSN
+            # GOOSE_DBSTRING, not an argv/positional argument: goose's own
+            # env-var support means the DSN (which contains a password)
+            # never appears in `ps` output inside this pod's PID
+            # namespace — per review, api-service already does the
+            # stronger file-based equivalent (DB_DSN_FILE) and this
+            # should match that discipline, not fall back to argv.
+            - name: GOOSE_DRIVER
+              value: postgres
+            - name: GOOSE_DBSTRING
               valueFrom: {secretKeyRef: {name: db-migrator-credential, key: dsn}}
           command:
             - sh
             - -c
             - |
               set -e
-              goose -dir /migrations/postgres postgres "$MIGRATOR_DSN" -table goose_db_version_postgres up
-              goose -dir /migrations/shared postgres "$MIGRATOR_DSN" -table goose_db_version_shared up
+              GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
+              GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
 ---
 apiVersion: apps/v1
 kind: Deployment
