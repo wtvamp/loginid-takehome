@@ -218,3 +218,51 @@ func resolveDSNFrom(fileEnv, plainEnv string) (string, error) {
 	}
 	return os.Getenv(plainEnv), nil
 }
+
+// RequiredAuthEnvVars is the single source of truth for which auth-related
+// env vars a given (service, mode) combination MUST have set to function
+// correctly — read by both this process's own startup validation
+// (cmd/api-service/main.go's validateAuthConfig, cmd/idp-connector/main.go's
+// equivalent) and, independently, by internal/config's own
+// TestManifestsSetRequiredAuthEnvVars, which parses the actual deployed
+// manifests (deploy/api-service.yaml, deploy/manifests.yaml) and asserts
+// every Deployment sets everything its own (service, mode) requires.
+//
+// Exists because of two separate live-review incidents in one day, both
+// the same shape: a real, correctly-signed token failed verification
+// because a required auth env var was silently absent from a
+// Deployment's manifest, and nothing caught it before a human noticed
+// the symptom in production. cmd/api-service/main.go's own
+// validateAuthConfig (added after the first incident) only checks the
+// binary it lives in — it has no way to know cmd/idp-connector's
+// Deployment was missing AUTH_JWKS_URL/AUTH_JWT_ISSUER entirely (the
+// second incident), because idp-connector never runs that check at all
+// until this same list is wired into its own main() too. And neither
+// check, however complete, can catch a manifest that's simply missing
+// the variable outright before a real request exercises the gap — only
+// a test that reads the manifest text itself can do that ahead of time,
+// which is what this declaration exists to make possible.
+//
+// service is "api-service" or "idp-connector" — the binary, not the
+// Deployment name (api-service and api-service-issuer are the SAME
+// binary in different modes). mode is "verifier"/"issuer" for
+// api-service (matching AppMode's own two values), or "" for
+// idp-connector, which has no mode concept.
+func RequiredAuthEnvVars(service, mode string) []string {
+	switch {
+	case service == "api-service" && mode == "verifier":
+		return []string{"AUTH_JWT_ISSUER", "AUTH_JWT_AUDIENCE", "AUTH_JWKS_URL"}
+	case service == "api-service" && mode == "issuer":
+		// AUTH_JWT_AUDIENCE deliberately absent here — the issuer mints
+		// each token's aud from the per-client oauth_client.audience
+		// column (tokenhandler.go), never from its own config, so
+		// requiring it would reject a valid issuer configuration for a
+		// variable it has no use for (validateAuthConfig's own doc
+		// comment states this same reasoning).
+		return []string{"AUTH_JWT_ISSUER"}
+	case service == "idp-connector":
+		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}
+	default:
+		return nil
+	}
+}
