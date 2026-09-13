@@ -165,6 +165,16 @@ data:
   01-create-roles.sh: |
     #!/bin/bash
     set -euo pipefail
+    # LT-46: MIGRATOR_PASSWORD/RUNTIME_PASSWORD are no longer container
+    # env vars (postgres's own env block only sets POSTGRES_PASSWORD_FILE
+    # now — see deploy/manifests.yaml's postgres StatefulSet) — read
+    # directly from the files Vault Agent renders them to instead. Read
+    # once into a shell var rather than inline `$(cat ...)` inside the
+    # heredoc so a read failure (file missing/empty) trips `set -e`
+    # immediately, before any SQL runs, rather than embedding an empty
+    # string into a CREATE ROLE statement silently.
+    MIGRATOR_PASSWORD="$(cat /vault/secrets/db-migrator-credential)"
+    RUNTIME_PASSWORD="$(cat /vault/secrets/db-runtime-credential)"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
       CREATE ROLE migrator WITH LOGIN PASSWORD '$MIGRATOR_PASSWORD' CREATEDB;
       GRANT ALL PRIVILEGES ON DATABASE $POSTGRES_DB TO migrator;
@@ -218,6 +228,9 @@ data:
     # for the roles (roles are cluster-wide, not per-database), then a
     # third reconnecting to `issuer` for the database-and-schema-scoped
     # grants.
+    # LT-46: same file-not-env-var change as 01-create-roles.sh.
+    ISSUER_MIGRATOR_PASSWORD="$(cat /vault/secrets/issuer-db-migrator-credential)"
+    ISSUER_RUNTIME_PASSWORD="$(cat /vault/secrets/issuer-db-runtime-credential)"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "CREATE DATABASE issuer;"
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
       CREATE ROLE issuer_migrator WITH LOGIN PASSWORD '$ISSUER_MIGRATOR_PASSWORD' CREATEDB;
@@ -296,34 +309,27 @@ spec:
           resources:
             requests: {cpu: "100m", memory: "256Mi"}
             limits: {cpu: "500m", memory: "512Mi"}
-          # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: this env block is
-          # deliberately left UNCHANGED for now, unlike the other three
-          # workloads' Secret references removed elsewhere in this file
-          # — postgres is the one consumer needing an actual delivery
-          # -mechanism decision, not just a name swap, before it's safe
-          # to touch (see decisions/vault-migration-postgres-env-vars.md):
-          # POSTGRES_PASSWORD has a documented POSTGRES_PASSWORD_FILE
-          # alternative (Docker Official postgres image), so that one's a
-          # clean file-mount swap; MIGRATOR_PASSWORD/RUNTIME_PASSWORD/
-          # ISSUER_MIGRATOR_PASSWORD/ISSUER_RUNTIME_PASSWORD are read
-          # directly by this project's own 01-create-roles.sh, which
-          # doesn't have an image-provided _FILE equivalent — closing
-          # those requires editing that script to read files instead of
-          # env vars, a real (if small) code change, not just a manifest
-          # edit. Left as a single flagged TODO rather than half-done.
+          # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: per the PM's
+          # ruling, postgres-superuser also moves to Vault (a fifth
+          # Vault role, loginid-takehome-postgres, is part of Amber's
+          # request) rather than staying an accepted platform exception
+          # — the earlier bootstrap-ordering reason for that exception
+          # no longer holds, since Vault is already running on this
+          # cluster before Postgres ever starts. POSTGRES_PASSWORD_FILE
+          # (Docker Official postgres image's own documented
+          # alternative to POSTGRES_PASSWORD) below still points at a
+          # TODO path pending Amber's real KV paths/role — same for the
+          # four role passwords, now read from files by
+          # 01-create-roles.sh (see that ConfigMap below) instead of
+          # env vars, per decisions/vault-migration-postgres-env-vars.md.
+          # TODO(LT-46, blocked on Amber): add vault.hashicorp.com/
+          # agent-inject (+ role: loginid-takehome-postgres + path/
+          # template annotations rendering to the five file paths
+          # referenced below) once real KV paths exist.
           env:
             - {name: POSTGRES_USER, value: postgres}
             - {name: POSTGRES_DB, value: loginid}
-            - name: POSTGRES_PASSWORD
-              valueFrom: {secretKeyRef: {name: postgres-superuser, key: password}}
-            - name: MIGRATOR_PASSWORD
-              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: password}}
-            - name: RUNTIME_PASSWORD
-              valueFrom: {secretKeyRef: {name: db-runtime-credential, key: password}}
-            - name: ISSUER_MIGRATOR_PASSWORD
-              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: password}}
-            - name: ISSUER_RUNTIME_PASSWORD
-              valueFrom: {secretKeyRef: {name: issuer-db-runtime-credential, key: password}}
+            - {name: POSTGRES_PASSWORD_FILE, value: /vault/secrets/postgres-superuser}
             - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
           ports: [{containerPort: 5432}]
           volumeMounts:
@@ -435,18 +441,21 @@ spec:
             requests: {cpu: "50m", memory: "64Mi"}
             limits: {cpu: "200m", memory: "128Mi"}
           # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: GOOSE_DBSTRING/
-          # ISSUER_GOOSE_DBSTRING's secretKeyRefs are removed below,
-          # nothing replaces them yet (Amber's provisioning still in
-          # progress — see api-service-issuer's own TODO comment above
-          # for why no annotation is added with a fabricated name).
-          # TODO(LT-46, blocked on Amber): goose reads its DSN from an
-          # env var deliberately (not argv, to keep it out of `ps`), but
-          # Vault Agent Injector's default mode writes secret material
-          # to FILES, not container env vars — this container's
-          # `command` will need to `source` a Vault-rendered env file
-          # (e.g. `. /vault/secrets/goose-env && goose ...`) before each
-          # goose invocation, once real paths/role exist. Same class of
-          # file-vs-env mismatch as decisions/vault-migration-postgres-env-vars.md.
+          # ISSUER_GOOSE_DBSTRING's secretKeyRefs are removed. goose
+          # reads its DSN from an env var deliberately (not argv, to
+          # keep it out of `ps`), but Vault Agent Injector's default
+          # mode writes secret material to FILES, not container env
+          # vars — read each rendered file's content into a shell var
+          # right before the goose invocation that needs it, same
+          # pattern as 01-create-roles.sh/02-create-issuer-db.sh above.
+          # File paths mirror the KV key names Amber's request
+          # preserves ("dsn", same as today's Secret key) — pending
+          # confirmation once her reply lands.
+          # TODO(LT-46, blocked on Amber): add vault.hashicorp.com/
+          # agent-inject (+ role: loginid-takehome-db-migrate + path/
+          # template annotations rendering to the two paths below,
+          # plus agent-pre-populate-only: "true" per this Job's own
+          # existing annotation) once real KV paths exist.
           env:
             - name: GOOSE_DRIVER
               value: postgres
@@ -455,9 +464,9 @@ spec:
             - -c
             - |
               set -e
-              GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
-              GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
-              GOOSE_DBSTRING="$ISSUER_GOOSE_DBSTRING" GOOSE_MIGRATION_DIR=/migrations/issuer goose -table goose_db_version_issuer up
+              GOOSE_DBSTRING="$(cat /vault/secrets/db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/postgres goose -table goose_db_version_postgres up
+              GOOSE_DBSTRING="$(cat /vault/secrets/db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/shared goose -table goose_db_version_shared up
+              GOOSE_DBSTRING="$(cat /vault/secrets/issuer-db-migrator-credential-dsn)" GOOSE_MIGRATION_DIR=/migrations/issuer goose -table goose_db_version_issuer up
 ---
 apiVersion: apps/v1
 kind: Deployment

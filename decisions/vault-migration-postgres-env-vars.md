@@ -55,19 +55,32 @@ now:
    file-read pattern (1) already uses for the superuser password — one
    delivery shape for all five values, not two.
 
-Both are stated as recommendations now that (1) is confirmed against the
-image's own documented behavior, not left as an open toss-up — but
-neither is implemented in this draft (`deploy/manifests.yaml`'s postgres
-env block is deliberately left untouched), since doing so means deciding
-and writing real injected-file paths, which still wants Amber's actual
-Vault paths/roles to exist first so the file paths correspond to
-something real rather than another guess. Flagging for whoever finalizes
-the `postgres` StatefulSet's Vault annotations (Theo, once Amber's
-roles/paths exist), since it changes what Amber's Vault role for the
-`postgres` `ServiceAccount` needs read access to: **all five** paths,
-not just `postgres-superuser`'s own — the enumeration in
-`refinement/LT-46.md` undercounts `postgres`'s own Vault role scope if
-read as "one secret per workload."
+## Resolved (2026-09-13, PM's ruling)
+
+Both recommendations above are now implemented in `deploy/manifests.yaml`:
+`POSTGRES_PASSWORD` -> `POSTGRES_PASSWORD_FILE`, and `01-create-roles.sh`/
+`02-create-issuer-db.sh` now `cat` their four role passwords from files
+instead of reading env vars. File paths (`/vault/secrets/<name>`) are the
+standard Vault Agent Injector convention, pending confirmation once
+Amber's real KV paths/role land — this is a file-naming choice within
+this track's own control, not a guess at Amber's Vault backend layout.
+
+**Verified locally, not just read as correct:** ran both scripts against
+a real (fresh, unmodified) `postgres:16-alpine` container with the four
+password files placed at `/vault/secrets/<name>` standing in for what
+Vault Agent will render — `01-create-roles.sh` and `02-create-issuer-db.sh`
+both exited 0, and a live `psql` login as `migrator` with the file-sourced
+password succeeded. Confirms the file-read pattern actually works against
+this exact Postgres image, not merely that the script parses.
+
+**Scope correction from the original gap above:** `postgres-superuser`
+is no longer an accepted platform exception either — the PM's ruling
+retired that exception now that Vault is confirmed running on this
+cluster before Postgres ever starts (the earlier bootstrap-ordering
+reason no longer applies). A fifth Vault role, `loginid-takehome-postgres`,
+is part of Amber's request, scoped to read all five paths this StatefulSet
+needs (not just its own superuser secret) — closing the undercount this
+doc originally flagged.
 
 ## What does NOT change
 
