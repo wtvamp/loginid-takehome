@@ -3,6 +3,14 @@ name: Deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LOG.md"
+      - "PLAN.md"
+      - "PLANNING.md"
+      - "CASTING.md"
+      - "decisions/**"
+      - "0[1-5]-*/**"
 
 permissions:
   contents: read
