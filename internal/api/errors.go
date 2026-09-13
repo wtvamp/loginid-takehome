@@ -96,3 +96,21 @@ func writeDAOError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
 	}
 }
+
+// writeInternalError is writeDAOError's twin for a collaborator that
+// isn't the DAO — RateLimiter, TouchCounter, Authorizer — kept as a
+// separate, identically-behaving function rather than reusing
+// writeDAOError at those call sites (Oren Castellan, PR #26 review):
+// writeDAOError is named and documented as the DAO-sentinel translator,
+// and a future edit to its switch (adding a case for some DAO-specific
+// condition) should not silently also change how an authz/rate-limit
+// collaborator's errors are handled. Behavior is identical today — never
+// err.Error(), context.DeadlineExceeded still maps to 504 — because none
+// of these collaborators have their own sentinel set to translate.
+func writeInternalError(w http.ResponseWriter, err error) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		writeError(w, http.StatusGatewayTimeout, "deadline_exceeded", "request timed out")
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+}

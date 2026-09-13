@@ -1,23 +1,26 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"loginid-takehome/internal/dao"
 )
 
 // Deps bundles a handler's collaborators — the DAO, the object-level
-// policy hook, and the two independent limiters — so NewSearchHandler/
-// NewGetProfileHandler take one argument instead of four, and a test
-// fake for any one of them doesn't require constructing the other three
-// by hand each time.
+// policy hook, the two independent limiters, and the audit sink — so
+// NewSearchHandler/NewGetProfileHandler take one argument instead of
+// five, and a test fake for any one of them doesn't require constructing
+// the other four by hand each time.
 type Deps struct {
 	Repo         dao.Repository
 	Authz        Authorizer
 	RateLimiter  RateLimiter
 	TouchCounter TouchCounter
+	AuditLog     AuditLogger
 }
 
 const (
@@ -42,51 +45,72 @@ type searchResponse struct {
 	NextCursor string                `json:"next_cursor,omitempty"`
 }
 
+// auditCtx is the small bundle handler code passes to Deps.audit — a
+// context.Context plus the sub/scope an audit event needs, since those
+// two are read from AuthContext once per request rather than threaded as
+// separate parameters to every call. sub/scope are zero-valued for the
+// one case that precedes reading AuthContext at all (a missing/invalid
+// token).
+type auditCtx struct {
+	ctx   context.Context
+	sub   string
+	scope Scope
+}
+
+func (d Deps) audit(ac auditCtx, kind AuditEventKind, recordIDs []string, reasonCode ReasonCode) {
+	d.AuditLog.Log(ac.ctx, AuditEvent{
+		Sub:        ac.sub,
+		Scope:      ac.scope,
+		Kind:       kind,
+		RecordIDs:  recordIDs,
+		ReasonCode: reasonCode,
+		Timestamp:  time.Now().UTC(),
+	})
+}
+
 // NewSearchHandler implements profile:search (handoff-03-auth.md v3).
-// Order of checks, deliberately: auth context present -> scope is
-// ScopeSearch -> per-minute rate limit -> cumulative touch cap -> request
-// shape (empty body, bare-wildcard-shaped unconstrained query) ->
-// authorize() -> the DAO call -> record touches -> masked response. Scope
-// mismatch and an authorize() denial return an identical body (F7); only
-// the audit log (not built by this story — see refinement/LT-39.md's
-// non-goals) would distinguish them.
+// Order of checks, deliberately, and matching NewGetProfileHandler's
+// order below (shape validation before either limiter, both limiters
+// before authorize()) rather than the two handlers disagreeing on it for
+// no stated reason (Oren Castellan, PR #26 review): auth context present
+// -> scope is ScopeSearch -> request shape (unknown fields, empty body,
+// page_size cap) -> per-minute rate limit -> cumulative touch cap ->
+// authorize() -> the DAO call -> settle touches -> masked response. Scope
+// mismatch and an authorize() denial return an identical client-visible
+// body (F7); the audit log below is the only place that distinction is
+// allowed to exist (Ingrid Solano, PR #26 review — this story's
+// acceptance criteria require the distinction to be logged, not merely
+// kept out of the response).
 func NewSearchHandler(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		ac, ok := AuthContextFromContext(ctx)
 		if !ok {
+			d.audit(auditCtx{ctx: ctx}, AuditAuthnFailure, nil, "")
 			writeUnauthorized(w)
 			return
 		}
+		actx := auditCtx{ctx: ctx, sub: ac.Sub, scope: ac.Scope}
 		if ac.Scope != ScopeSearch {
+			d.audit(actx, AuditScopeFailure, nil, "")
 			writeForbidden(w)
-			return
-		}
-
-		allow, err := d.RateLimiter.Allow(ctx, ac.Sub, ScopeSearch, searchRateLimit)
-		if err != nil {
-			writeDAOError(w, err)
-			return
-		}
-		if !allow {
-			writeRateLimited(w)
-			return
-		}
-
-		capOK, err := d.TouchCounter.Allowed(ctx, ac.Sub)
-		if err != nil {
-			writeDAOError(w, err)
-			return
-		}
-		if !capOK {
-			writeTouchCapExceeded(w)
 			return
 		}
 
 		var req searchRequest
 		if r.Body != nil {
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				writeBadRequest(w, "malformed request body")
+			dec := json.NewDecoder(r.Body)
+			// Reject any field this shape doesn't name — in particular
+			// an "offset" key, which would otherwise be silently
+			// ignored rather than rejected. The API-facing contract is
+			// cursor-only pagination (handoff-03-auth.md v3's F-pag);
+			// a caller-supplied offset-shaped parameter is exactly the
+			// bypass that contract exists to close, so it must fail
+			// loudly, not be dropped quietly (Ingrid Solano, PR #26
+			// review).
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&req); err != nil {
+				writeBadRequest(w, "malformed request body or unrecognized field")
 				return
 			}
 		}
@@ -119,15 +143,50 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 			return
 		}
 
+		allow, err := d.RateLimiter.Allow(ctx, ac.Sub, ScopeSearch, searchRateLimit)
+		if err != nil {
+			writeInternalError(w, err)
+			return
+		}
+		if !allow {
+			d.audit(actx, AuditRateLimited, nil, "")
+			writeRateLimited(w)
+			return
+		}
+
+		// Reserve, not just check: this books pageSize's worth of budget
+		// against the window immediately, atomically with the capacity
+		// check, so a second concurrent request from the same sub sees
+		// this reservation and is correctly denied before either
+		// request's DAO call returns — closing a check-then-act race a
+		// separate Allowed()-then-RecordTouches() pair had, which could
+		// let N concurrent requests each add a full page's worth of
+		// touches before any of them recorded (Nolan Reyes, PR #26
+		// review). Every exit past this point must call Settle exactly
+		// once to release it.
+		reserved, err := d.TouchCounter.Reserve(ctx, ac.Sub, pageSize)
+		if err != nil {
+			writeInternalError(w, err)
+			return
+		}
+		if !reserved {
+			d.audit(actx, AuditCapExceeded, nil, "")
+			writeTouchCapExceeded(w)
+			return
+		}
+
 		// The object-level policy hook, per v3: called after scope
 		// validation (above) and request-shape validation (above), before
 		// the DAO call. ScopeSearch has no single target id.
 		allowed, err := d.Authz.Authorize(ctx, ac.Sub, ac.Scope, "")
 		if err != nil {
-			writeDAOError(w, err)
+			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
+			writeInternalError(w, err)
 			return
 		}
 		if !allowed {
+			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
+			d.audit(actx, AuditPolicyDenial, nil, "")
 			writeForbidden(w)
 			return
 		}
@@ -142,6 +201,8 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 		}
 		results, total, err := d.Repo.Profiles().Search(ctx, q)
 		if err != nil {
+			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
+			d.audit(actx, AuditRequestFailed, nil, "")
 			writeDAOError(w, err)
 			return
 		}
@@ -152,11 +213,12 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 			ids[i] = p.ID
 			masked[i] = toSearchResult(p)
 		}
-		if _, err := d.TouchCounter.RecordTouches(ctx, ac.Sub, ids); err != nil {
-			writeDAOError(w, err)
+		if err := d.TouchCounter.Settle(ctx, ac.Sub, ids, pageSize); err != nil {
+			writeInternalError(w, err)
 			return
 		}
 
+		d.audit(actx, AuditSuccess, ids, "")
 		resp := searchResponse{Results: masked, Total: total}
 		if offset+len(results) < total {
 			resp.NextCursor = encodeCursor(offset + len(results))
@@ -166,10 +228,10 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 }
 
 // NewGetProfileHandler implements profile:read:own and profile:read:any
-// against the same handler — the two scopes differ only in what
-// Authorize() checks (referral membership vs. a logged reason_code), not
-// in the handler's own shape. id is read from the request path via
-// r.PathValue("id") (Go 1.22+ ServeMux pattern, e.g.
+// against the same handler — the two scopes differ in what Authorize()
+// checks (referral membership vs. a logged reason_code) and in whether
+// the cumulative touch cap applies at all. id is read from the request
+// path via r.PathValue("id") (Go 1.22+ ServeMux pattern, e.g.
 // "GET /profiles/{id}"); this handler is not yet registered on any real
 // route (refinement/LT-39.md's Acceptance outcome — deferred until S7's
 // auth middleware exists to protect it), so tests call it directly with
@@ -179,10 +241,13 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 		ctx := r.Context()
 		ac, ok := AuthContextFromContext(ctx)
 		if !ok {
+			d.audit(auditCtx{ctx: ctx}, AuditAuthnFailure, nil, "")
 			writeUnauthorized(w)
 			return
 		}
+		actx := auditCtx{ctx: ctx, sub: ac.Sub, scope: ac.Scope}
 		if ac.Scope != ScopeReadOwn && ac.Scope != ScopeReadAny {
+			d.audit(actx, AuditScopeFailure, nil, "")
 			writeForbidden(w)
 			return
 		}
@@ -193,6 +258,15 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 			return
 		}
 
+		// reasonCode is validated here and logged with every audit event
+		// on this request (handoff-03-auth.md v3: "reason_code, when the
+		// scope is profile:read:any" is a required audit-log field).
+		// There is deliberately no other consumer of the value — no
+		// policy decision in this story reads it beyond validating its
+		// membership in the closed enum; threading it into Authorizer's
+		// signature is a follow-up story's job if a real policy
+		// implementation ever needs it for more than logging (Oren
+		// Castellan, PR #26 review).
 		var reasonCode ReasonCode
 		if ac.Scope == ScopeReadAny {
 			reasonCode = ReasonCode(r.URL.Query().Get("reason_code"))
@@ -204,51 +278,74 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 
 		allow, err := d.RateLimiter.Allow(ctx, ac.Sub, ac.Scope, readRateLimit)
 		if err != nil {
-			writeDAOError(w, err)
+			writeInternalError(w, err)
 			return
 		}
 		if !allow {
+			d.audit(actx, AuditRateLimited, nil, reasonCode)
 			writeRateLimited(w)
 			return
 		}
 
-		// Applies to profile:read:any unconditionally, whether or not a
-		// reason_code is present — the exact regression handoff-03-auth.md
-		// v3 fixed (an earlier wording made this counter a no-op for
+		// The cumulative cap applies to profile:search and
+		// profile:read:any (handoff-03-auth.md v3, verbatim) — not
+		// profile:read:own, which is bounded by the caller_referral
+		// relationship rather than an open id space, so it isn't the
+		// enumeration surface this control exists for. A valid, logged
+		// reason_code on read:any satisfies Authorize() below but does
+		// not exempt the caller from this cap — the exact regression v3
+		// fixed (an earlier wording made this counter a no-op for
 		// read:any, since that scope requires a reason_code on every call
-		// by design; a valid, logged reason_code satisfies Authorize()
-		// below but does not exempt the caller from this cap).
-		capOK, err := d.TouchCounter.Allowed(ctx, ac.Sub)
-		if err != nil {
-			writeDAOError(w, err)
-			return
-		}
-		if !capOK {
-			writeTouchCapExceeded(w)
-			return
+		// by design).
+		var reserved bool
+		if ac.Scope == ScopeReadAny {
+			reserved, err = d.TouchCounter.Reserve(ctx, ac.Sub, 1)
+			if err != nil {
+				writeInternalError(w, err)
+				return
+			}
+			if !reserved {
+				d.audit(actx, AuditCapExceeded, nil, reasonCode)
+				writeTouchCapExceeded(w)
+				return
+			}
 		}
 
 		allowed, err := d.Authz.Authorize(ctx, ac.Sub, ac.Scope, id)
 		if err != nil {
-			writeDAOError(w, err)
+			if reserved {
+				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
+			}
+			writeInternalError(w, err)
 			return
 		}
 		if !allowed {
+			if reserved {
+				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
+			}
+			d.audit(actx, AuditPolicyDenial, []string{id}, reasonCode)
 			writeForbidden(w)
 			return
 		}
 
 		p, err := d.Repo.Profiles().Get(ctx, id)
 		if err != nil {
+			if reserved {
+				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
+			}
+			d.audit(actx, AuditRequestFailed, []string{id}, reasonCode)
 			writeDAOError(w, err)
 			return
 		}
 
-		if _, err := d.TouchCounter.RecordTouches(ctx, ac.Sub, []string{p.ID}); err != nil {
-			writeDAOError(w, err)
-			return
+		if reserved {
+			if err := d.TouchCounter.Settle(ctx, ac.Sub, []string{p.ID}, 1); err != nil {
+				writeInternalError(w, err)
+				return
+			}
 		}
 
+		d.audit(actx, AuditSuccess, []string{p.ID}, reasonCode)
 		writeJSON(w, http.StatusOK, toProfileResponse(p))
 	}
 }

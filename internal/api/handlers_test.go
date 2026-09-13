@@ -136,7 +136,7 @@ func TestSearchHandler_RateLimited_429(t *testing.T) {
 // 429 and is NOT served — not merely observed to exceed the threshold.
 func TestSearchHandler_TouchCapExceeded_429NotServed(t *testing.T) {
 	d := allowAllDeps()
-	d.TouchCounter = &fakeTouchCounter{allowed: false}
+	d.TouchCounter = &fakeTouchCounter{reserveOK: false}
 	repo := d.Repo.(*fakeRepository)
 	repo.profiles.searchFn = func(ctx context.Context, q dao.ProfileQuery) ([]model.UserProfile, int, error) {
 		t.Fatal("Search must not be called once the touch cap is already exceeded")
@@ -243,7 +243,7 @@ func TestGetProfileHandler_ReadAny_RequiresValidReasonCode(t *testing.T) {
 // NOT exempt the caller from the cumulative touch cap.
 func TestGetProfileHandler_ReadAny_ValidReasonCodeStillHitsTouchCap(t *testing.T) {
 	d := allowAllDeps()
-	d.TouchCounter = &fakeTouchCounter{allowed: false} // already over cap
+	d.TouchCounter = &fakeTouchCounter{reserveOK: false} // already over cap
 	repo := d.Repo.(*fakeRepository)
 	repo.profiles.getFn = func(ctx context.Context, id string) (*model.UserProfile, error) {
 		t.Fatal("Get must not be called once the touch cap is already exceeded, even with a valid reason_code")
@@ -263,10 +263,13 @@ func TestGetProfileHandler_ReadAny_ValidReasonCodeStillHitsTouchCap(t *testing.T
 // TestGetProfileHandler_ScopeFailureAndAuthorizeDenial_IdenticalBody is
 // F7 (decisions/error-semantics.md): a scope failure and an authorize()
 // policy denial return an identical client-visible body — distinguished
-// only in the audit log, never in what the client sees.
+// ONLY in the audit log (Ingrid Solano, PR #26 review: this story's own
+// acceptance criteria require that distinction to actually be logged
+// somewhere, not merely kept out of the response).
 func TestGetProfileHandler_ScopeFailureAndAuthorizeDenial_IdenticalBody(t *testing.T) {
 	// Scope failure: caller has ScopeSearch but hits the read endpoint.
 	d1 := allowAllDeps()
+	audit1 := d1.AuditLog.(*fakeAuditLogger)
 	h1 := NewGetProfileHandler(d1)
 	req1 := newGetRequest("11111111-1111-1111-1111-111111111111")
 	req1 = req1.WithContext(withScope("client1", ScopeSearch))
@@ -276,6 +279,7 @@ func TestGetProfileHandler_ScopeFailureAndAuthorizeDenial_IdenticalBody(t *testi
 	// authorize() denial: right scope, policy says no.
 	d2 := allowAllDeps()
 	d2.Authz = &fakeAuthorizer{allow: false}
+	audit2 := d2.AuditLog.(*fakeAuditLogger)
 	h2 := NewGetProfileHandler(d2)
 	req2 := newGetRequest("11111111-1111-1111-1111-111111111111")
 	req2 = req2.WithContext(withScope("client1", ScopeReadOwn))
@@ -287,6 +291,105 @@ func TestGetProfileHandler_ScopeFailureAndAuthorizeDenial_IdenticalBody(t *testi
 	}
 	if w1.Body.String() != w2.Body.String() {
 		t.Errorf("scope failure body %q must be identical to authorize() denial body %q", w1.Body.String(), w2.Body.String())
+	}
+
+	if len(audit1.events) != 1 || audit1.events[0].Kind != AuditScopeFailure {
+		t.Errorf("scope-failure path audit events = %+v, want exactly one AuditScopeFailure", audit1.events)
+	}
+	if len(audit2.events) != 1 || audit2.events[0].Kind != AuditPolicyDenial {
+		t.Errorf("authorize()-denial path audit events = %+v, want exactly one AuditPolicyDenial", audit2.events)
+	}
+}
+
+// TestGetProfileHandler_ReadOwn_DoesNotHitTouchCap: the cumulative
+// distinct-record-touch cap applies to profile:search and
+// profile:read:any (handoff-03-auth.md v3, verbatim) — profile:read:own
+// is bounded by the caller_referral relationship, not an open id space,
+// so it must not be gated by TouchCounter at all (Oren Castellan, PR #26
+// review: an earlier version of this handler applied the cap to
+// read:own too, contradicting the package's own doc comment, and nothing
+// caught it).
+func TestGetProfileHandler_ReadOwn_DoesNotHitTouchCap(t *testing.T) {
+	d := allowAllDeps()
+	// A TouchCounter that denies everything — if read:own ever calls it,
+	// the request fails; it must not be called at all for this scope.
+	d.TouchCounter = &fakeTouchCounter{reserveOK: false}
+	repo := d.Repo.(*fakeRepository)
+	repo.profiles.getFn = func(ctx context.Context, id string) (*model.UserProfile, error) {
+		return &model.UserProfile{ID: id, Name: "Jane Doe"}, nil
+	}
+	h := NewGetProfileHandler(d)
+	req := newGetRequest("11111111-1111-1111-1111-111111111111")
+	req = req.WithContext(withScope("client1", ScopeReadOwn))
+	w := httptest.NewRecorder()
+	h(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 — profile:read:own must not be gated by the cumulative touch cap", w.Code)
+	}
+}
+
+// TestSearchHandler_RejectsUnknownField is Ingrid Solano's PR #26 finding:
+// an unrecognized field (in particular an "offset" key, the exact bypass
+// the opaque-cursor contract exists to close) must be rejected outright,
+// not silently ignored.
+func TestSearchHandler_RejectsUnknownField(t *testing.T) {
+	h := NewSearchHandler(allowAllDeps())
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a","offset":40}`))
+	req = req.WithContext(withScope("client1", ScopeSearch))
+	w := httptest.NewRecorder()
+	h(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 for an unrecognized \"offset\" field", w.Code)
+	}
+}
+
+// TestSearchHandler_SuccessAuditsWithRecordIDs asserts a successful
+// search still emits an audit event (the field list requires "record
+// id(s) touched" and "request outcome" on every call, not only denials).
+func TestSearchHandler_SuccessAuditsWithRecordIDs(t *testing.T) {
+	d := allowAllDeps()
+	audit := d.AuditLog.(*fakeAuditLogger)
+	repo := d.Repo.(*fakeRepository)
+	repo.profiles.searchFn = func(ctx context.Context, q dao.ProfileQuery) ([]model.UserProfile, int, error) {
+		return []model.UserProfile{{ID: "p1", Name: "Jane"}}, 1, nil
+	}
+	h := NewSearchHandler(d)
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"jane"}`))
+	req = req.WithContext(withScope("client1", ScopeSearch))
+	w := httptest.NewRecorder()
+	h(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if len(audit.events) != 1 || audit.events[0].Kind != AuditSuccess {
+		t.Fatalf("audit events = %+v, want exactly one AuditSuccess", audit.events)
+	}
+	if len(audit.events[0].RecordIDs) != 1 || audit.events[0].RecordIDs[0] != "p1" {
+		t.Errorf("audit event RecordIDs = %v, want [p1]", audit.events[0].RecordIDs)
+	}
+}
+
+// TestSearchHandler_DeniedRequestReleasesTouchReservation asserts that
+// when authorize() denies a request after Reserve already booked its
+// budget, that budget is released via Settle rather than permanently
+// consumed — a denied request must not itself count against the cap.
+func TestSearchHandler_DeniedRequestReleasesTouchReservation(t *testing.T) {
+	d := allowAllDeps()
+	d.Authz = &fakeAuthorizer{allow: false}
+	tc := d.TouchCounter.(*fakeTouchCounter)
+	h := NewSearchHandler(d)
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+	req = req.WithContext(withScope("client1", ScopeSearch))
+	w := httptest.NewRecorder()
+	h(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if len(tc.settledReserved) != 1 || tc.settledReserved[0] != defaultPageSize {
+		t.Errorf("Settle calls = %v, want exactly one release of the full reserved page size (%d)", tc.settledReserved, defaultPageSize)
+	}
+	if len(tc.settledIDs) != 0 {
+		t.Errorf("a denied request must settle with no record ids, got %v", tc.settledIDs)
 	}
 }
 
