@@ -76,6 +76,8 @@ So mutual exclusion has to come from the orchestration layer — a job with para
 
 Both credentials belong on 02's secrets inventory; I am flagging the requirement, not claiming that surface.
 
+**R4a. Applied migrations are immutable, and constraint changes need care on CockroachDB.** A correction to an already-applied migration is a **no-op** — goose does not re-run an applied version, so the live database keeps the old definition while the file looks correct. Corrections ship as a new numbered migration in every affected directory. Two consequences for the pipeline: verification must apply the *previous* state and migrate forward rather than building a fresh schema (a fresh build passes for an edited migration, which is how this hides), and **CockroachDB rejects a same-transaction `DROP` + `ADD` of a same-named constraint**, so those migrations carry `-- +goose NO TRANSACTION`. Established against live CockroachDB v23.2.0.
+
 **R5. Rollback is not the recovery plan for data.** Down migrations will exist for the base schema and are genuinely useful in development. They are not a recovery mechanism in production: reversing a migration that dropped a column does not bring the data back, and the data in question here is PII. Recovery from a destructive migration is backup-restore, and backup policy is 04's. I raise it because "we have down migrations" reads like a safety net and is not one.
 
 ## 4. Seed data
