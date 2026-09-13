@@ -118,6 +118,28 @@ var ErrJWKSStale = errors.New("api: JWKS cache exceeded max staleness and could 
 const (
 	jwksMaxStalenessMultiple      = 3
 	jwksUnknownKidRefetchInterval = 30 * time.Second
+
+	// jwksMinRefreshRetryInterval floors how often a TTL-expired cache
+	// with a just-failed refresh will attempt another real network
+	// fetch. Without this, every single request during a sustained
+	// issuer outage triggers its own fetch attempt for as long as the
+	// outage lasts (up to maxStaleness) — the same "don't hammer a
+	// struggling dependency" reasoning already applied to the
+	// unknown-kid path, missing from the ordinary refresh path (Oren
+	// Castellan, PR #30 re-review). Short relative to ttl/maxStaleness:
+	// this only throttles retries during an active failure, it must not
+	// delay picking up a healthy issuer again once it recovers.
+	jwksMinRefreshRetryInterval = 5 * time.Second
+
+	// jwksMaxTrackedUnknownKids bounds how many distinct kids can hold an
+	// outstanding unknown-kid retry reservation at once. Without this,
+	// keying the reservation per-kid (see reserveUnknownKidRetry) reopens
+	// its own version of the same map-growth concern a flood of DISTINCT
+	// garbage kids would create: capped here, so an attacker sending many
+	// different fabricated kids can force at most this many extra
+	// fetches per jwksUnknownKidRefetchInterval, not one per distinct
+	// value they bother to send.
+	jwksMaxTrackedUnknownKids = 64
 )
 
 // JWKSCache fetches a JWKS document from url and caches the parsed key
@@ -137,9 +159,10 @@ type JWKSCache struct {
 	mu                  sync.Mutex
 	keys                map[string]*rsa.PublicKey
 	fetchedAt           time.Time // last SUCCESSFUL fetch
+	lastAttempt         time.Time // last fetch ATTEMPT, success or failure
 	consecutiveFailures int
 	staleAlerted        bool
-	lastUnknownKidRetry time.Time
+	unknownKidRetryAt   map[string]time.Time // per-kid, not global — see reserveUnknownKidRetry
 }
 
 // defaultJWKSClientTimeout backstops a hung fetch (a connection that
@@ -184,10 +207,20 @@ func NewJWKSCache(url string, ttl time.Duration, httpClient *http.Client) *JWKSC
 func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	c.mu.Lock()
 	needsRefresh := c.keys == nil || c.now().Sub(c.fetchedAt) >= c.ttl
+	canAttempt := c.now().Sub(c.lastAttempt) >= jwksMinRefreshRetryInterval
 	c.mu.Unlock()
 
 	if needsRefresh {
-		if err := c.refresh(ctx); err != nil {
+		if canAttempt {
+			if err := c.refresh(ctx); err != nil {
+				return nil, err
+			}
+		} else if err := c.enforceStaleness(); err != nil {
+			// Backing off from a very recent failed attempt (see
+			// jwksMinRefreshRetryInterval) — no new network call this
+			// time, but the staleness ceiling must still be enforced
+			// against the existing cache regardless of whether this
+			// particular call was the one that tried to refresh it.
 			return nil, err
 		}
 	}
@@ -204,7 +237,7 @@ func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, 
 	// the retry populated the kid we're actually looking for, and a
 	// refresh() failure here has already been handled (logged / staleness
 	// tracked) inside refresh() itself.
-	if c.reserveUnknownKidRetry() {
+	if c.reserveUnknownKidRetry(kid) {
 		_ = c.refresh(ctx)
 		if key, ok := c.lookupKey(kid); ok {
 			return key, nil
@@ -222,16 +255,47 @@ func (c *JWKSCache) lookupKey(kid string) (*rsa.PublicKey, bool) {
 }
 
 // reserveUnknownKidRetry reports whether an unknown-kid-triggered refetch
-// may proceed now, and if so atomically marks one as just having started
-// — a caller enumerating unknown kids can trigger at most one extra
-// fetch per jwksUnknownKidRefetchInterval, not one per request.
-func (c *JWKSCache) reserveUnknownKidRetry() bool {
+// may proceed now for THIS specific kid, and if so atomically marks one
+// as just having started. Keyed per kid, not by one global timestamp
+// (Ingrid Solano, 02 cold re-check): KeyForKid runs before signature
+// verification, so an unauthenticated caller can send a token with a
+// fabricated kid at no cost — a single global gate lets that caller
+// permanently occupy the one reservation slot by repeating it every
+// jwksUnknownKidRefetchInterval, pushing a legitimately-rotated real
+// key's own refetch back to the full calendar-TTL rollover, silently
+// recreating most of the original gap this mechanism exists to close.
+// Per-kid closes that: a garbage kid's repeated reservation never blocks
+// a DIFFERENT (real) kid's own reservation. jwksMaxTrackedUnknownKids
+// caps how many distinct kids can hold a reservation at once, so a flood
+// of distinct fabricated kids still can't hammer the issuer past that
+// bound — rate-limiting is scoped per-kid, not removed.
+func (c *JWKSCache) reserveUnknownKidRetry(kid string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.now().Sub(c.lastUnknownKidRetry) < jwksUnknownKidRefetchInterval {
+
+	if c.unknownKidRetryAt == nil {
+		c.unknownKidRetryAt = make(map[string]time.Time)
+	}
+	if last, ok := c.unknownKidRetryAt[kid]; ok && c.now().Sub(last) < jwksUnknownKidRefetchInterval {
 		return false
 	}
-	c.lastUnknownKidRetry = c.now()
+
+	// Sweep expired entries before checking the size cap, so a kid
+	// that's aged out of its own window doesn't count against another
+	// kid's chance to reserve.
+	for k, t := range c.unknownKidRetryAt {
+		if c.now().Sub(t) >= jwksUnknownKidRefetchInterval {
+			delete(c.unknownKidRetryAt, k)
+		}
+	}
+	if len(c.unknownKidRetryAt) >= jwksMaxTrackedUnknownKids {
+		// At capacity with distinct in-flight-window kids — deny this
+		// one rather than let the map grow further. The ordinary
+		// TTL-driven refresh still eventually picks up a real rotated
+		// key regardless of this outcome.
+		return false
+	}
+	c.unknownKidRetryAt[kid] = c.now()
 	return true
 }
 
@@ -245,25 +309,44 @@ func (c *JWKSCache) reserveUnknownKidRetry() bool {
 // the stale cache is still good enough to use, per the resilience this
 // mechanism exists for.
 func (c *JWKSCache) refresh(ctx context.Context) error {
+	c.mu.Lock()
+	c.lastAttempt = c.now()
+	c.mu.Unlock()
+
 	fresh, err := c.fetch(ctx)
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if err == nil {
 		c.keys = fresh
 		c.fetchedAt = c.now()
 		c.consecutiveFailures = 0
 		c.staleAlerted = false
+		c.mu.Unlock()
 		return nil
 	}
-
 	c.consecutiveFailures++
+	noCache := c.keys == nil
+	c.mu.Unlock()
 
-	if c.keys == nil {
+	if noCache {
 		return err
 	}
+	return c.enforceStaleness()
+}
 
+// enforceStaleness checks the existing cache against maxStaleness and
+// fails closed (ErrJWKSStale) if it's been exceeded — factored out of
+// refresh() so the same check applies on a call that skips an actual
+// network attempt because jwksMinRefreshRetryInterval hasn't elapsed yet
+// (Oren Castellan, PR #30 re-review: without this, backing off from
+// hammering a struggling issuer would also silently suspend the
+// staleness ceiling for however long the backoff lasts).
+func (c *JWKSCache) enforceStaleness() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.keys == nil {
+		return errors.New("api: JWKS cache not yet populated")
+	}
 	staleSince := c.now().Sub(c.fetchedAt)
 	if staleSince > c.maxStaleness {
 		if !c.staleAlerted {
@@ -272,10 +355,10 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 			// fetch-failure run — not a policy decision (AuditLogger is
 			// for those), an operational signal that this process's own
 			// key infrastructure is degraded.
-			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed: %v",
-				staleSince, c.consecutiveFailures, c.maxStaleness, err)
+			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed",
+				staleSince, c.consecutiveFailures, c.maxStaleness)
 		}
-		return fmt.Errorf("%w: stale for %s across %d consecutive failures: %v", ErrJWKSStale, staleSince, c.consecutiveFailures, err)
+		return fmt.Errorf("%w: stale for %s across %d consecutive failures", ErrJWKSStale, staleSince, c.consecutiveFailures)
 	}
 	return nil
 }
