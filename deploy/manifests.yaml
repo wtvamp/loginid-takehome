@@ -11,10 +11,14 @@
 # actually needs. This file grows to match the full design (issuer
 # Deployment, migration Job, DB/JWT secrets) exactly when 03 lands the
 # DAO/JWT wiring those need, per 04-infra-devops/decisions/deploy-path.md.
-apiVersion: v1
-kind: Namespace
-metadata: {name: loginid-takehome}
----
+#
+# No Namespace object here, deliberately: the scoped loginid-takehome-deployer
+# ServiceAccount's RBAC (deploy/rbac.yaml) is namespace-scoped to
+# loginid-takehome and correctly cannot get/create/patch a cluster-scoped
+# Namespace object — that's the isolation working as designed, not a gap.
+# The namespace itself is created once, out of band, by whoever runs the
+# initial cluster bootstrap (deploy/rbac.yaml also creates
+# loginid-takehome-runners for the same reason).
 apiVersion: v1
 kind: ResourceQuota
 metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
@@ -37,7 +41,7 @@ spec:
   template:
     metadata: {labels: {app: api-service}}
     spec:
-      securityContext: {runAsNonRoot: true}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
       containers:
         - name: api-service
           image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
@@ -68,7 +72,7 @@ spec:
   template:
     metadata: {labels: {app: idp-connector}}
     spec:
-      securityContext: {runAsNonRoot: true}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
       containers:
         - name: idp-connector
           image: ghcr.io/wtvamp/loginid-takehome/idp-connector:IMAGE_TAG
