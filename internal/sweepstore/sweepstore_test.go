@@ -316,11 +316,21 @@ func TestStartRun_MissedSlotsComputedAgainstInterval(t *testing.T) {
 // own framing: "a genuine absence of rows, not a stale scrape," ungated
 // on Drained), while OldestSurvivingAt — meaningful only from a Drained
 // result — must stay nil, per the table's own tying CHECK.
+//
+// Uses time.Now() (a real wall-clock reading, nanosecond precision in
+// Go) rather than a hand-constructed time.Date, deliberately: this is
+// the one test in this file exercising the actual column precision
+// contract. Postgres's TIMESTAMPTZ stores microsecond precision, not
+// nanosecond — every other test in this package hand-constructs
+// timestamps whose sub-microsecond digits are already zero, which
+// hides this. The comparison here truncates to microseconds before
+// comparing, on both backends, so the assertion is true of what the
+// column actually stores rather than of Go's in-memory value.
 func TestFinishedButNotDrained_ReportsCompletionButNeverOldestSurviving(t *testing.T) {
 	for _, b := range backends(t) {
 		t.Run(b.name, func(t *testing.T) {
 			ctx := context.Background()
-			finishedAt := time.Now()
+			finishedAt := time.Now().Truncate(time.Microsecond)
 			runID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, finishedAt.Add(-time.Second), 0)
 			if err != nil {
 				t.Fatalf("StartRun: %v", err)
@@ -337,8 +347,8 @@ func TestFinishedButNotDrained_ReportsCompletionButNeverOldestSurviving(t *testi
 				if s.Class != dao.RetentionDirect {
 					continue
 				}
-				if s.LastFinishedAt == nil || !s.LastFinishedAt.Equal(finishedAt) {
-					t.Errorf("LastFinishedAt = %v, want %v — a finished-but-not-drained run must still be visible as a completion", s.LastFinishedAt, finishedAt)
+				if s.LastFinishedAt == nil || !s.LastFinishedAt.Truncate(time.Microsecond).Equal(finishedAt) {
+					t.Errorf("LastFinishedAt = %v, want %v (compared at microsecond precision — Postgres's TIMESTAMPTZ column resolution) — a finished-but-not-drained run must still be visible as a completion", s.LastFinishedAt, finishedAt)
 				}
 				if s.OldestSurvivingAt != nil {
 					t.Errorf("OldestSurvivingAt = %v, want nil — this run finished but did not drain, so this field must stay unset", s.OldestSurvivingAt)

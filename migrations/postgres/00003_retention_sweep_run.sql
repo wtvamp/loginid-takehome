@@ -10,6 +10,11 @@
 -- one-null defect secret_state exists to prevent. Not a RetentionClass,
 -- not written to deletion_log, self-pruned by the sweep at 30 days (all
 -- per §3d — this table holds operational metadata, no PII).
+-- TIMESTAMPTZ here stores microsecond precision, not nanosecond — Go's
+-- time.Time (nanosecond) is truncated on write. internal/sweepstore's
+-- own tests compare timestamps at microsecond precision for exactly
+-- this reason; don't assert nanosecond-exact equality against a value
+-- that has round-tripped through this table.
 CREATE TABLE retention_sweep_run (
 	id UUID DEFAULT gen_random_uuid(),
 	class TEXT NOT NULL,
