@@ -5,13 +5,20 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 
+	"loginid-takehome/internal/api"
 	"loginid-takehome/internal/app"
 	"loginid-takehome/internal/config"
 	"loginid-takehome/internal/dao"
 
+	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
+	// registers the "pgx" database/sql driver this file uses directly
+	// for the issuer database below — Go dedupes an import by package
+	// path, so this isn't a second registration, and no separate blank
+	// import of that package is needed here.
 	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
 	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
 )
@@ -51,12 +58,43 @@ func main() {
 			repo = nil
 		}
 		handler = app.NewVerifierRouter(cfg, repo)
+	case app.ModeIssuer:
+		// config.Load already fails startup if JWT_SIGNING_KEY_FILE is
+		// missing/unreadable in issuer mode (resolveSigningKeyPath) —
+		// LoadSigningKey failing here means the file is readable but not
+		// a valid RSA private key, a genuine misconfiguration this
+		// process cannot usefully run past (there is no "serve /healthz,
+		// fail closed" story for a router with no key at all: both of
+		// its routes need one). Fatal, not degrade — unlike the DAO
+		// repository above, which has a real story for "not there yet."
+		key, err := api.LoadSigningKey(cfg.JWTSigningKeyPath)
+		if err != nil {
+			log.Fatalf("api-service: loading JWT signing key: %v", err)
+		}
+
+		// issuerDB, like the verifier's pingDB, is opened independently
+		// of whether it can be reached yet — sql.Open never dials. Empty
+		// IssuerDBDSN (not configured yet) leaves issuerDB nil;
+		// NewIssuerRouter's /auth/token then fails every grant closed
+		// with server_error rather than panicking on a nil ClientStore.
+		var issuerDB *sql.DB
+		if cfg.IssuerDBDSN != "" {
+			issuerDB, err = sql.Open("pgx", cfg.IssuerDBDSN)
+			if err != nil {
+				log.Printf("api-service: opening issuer database: %v — /auth/token will return server_error until this is resolved", err)
+				issuerDB = nil
+			}
+		} else {
+			log.Printf("api-service: ISSUER_DB_DSN/ISSUER_DB_DSN_FILE not set — /auth/token will return server_error until this is resolved")
+		}
+
+		handler = app.NewIssuerRouter(cfg, key, issuerDB)
 	default:
-		// ModeIssuer (and the unrecognized-mode fallback, which
-		// NewRouter itself already logs loudly and treats as verifier —
-		// see app.NewRouter's own doc comment) don't need the full
-		// verifier stack; NewRouter's existing /auth/token placeholder
-		// (LT-32) and /healthz cover both.
+		// The unrecognized-mode fallback (NewRouter itself already logs
+		// loudly and treats it as verifier — see app.NewRouter's own doc
+		// comment) doesn't need the full verifier stack; NewRouter's
+		// /healthz alone covers it, matching the safer of the two route
+		// sets.
 		handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))
 	}
 
