@@ -6,12 +6,17 @@
 -- against migrations/postgres/00001_initial_schema.sql + 00002 with
 -- Renata before writing this.
 --
--- Apply (after LT-51 lands, so the joint review has both data and a
--- working issuer to mint tokens against):
+-- Apply after (a) the migration Job has run, INCLUDING shared/ — the
+-- credential insert below resolves method_id via a subquery against
+-- auth_method, seeded only by shared/00001_seed_auth_method.sql; skip
+-- that and the subquery returns NULL, failing this file's NOT NULL
+-- constraint with an error that reads like a schema bug, not an
+-- ordering mistake — and (b) after LT-51 lands, so the joint review has
+-- both data and a working issuer to mint tokens against:
 --
 --   MIGRATOR_DSN=$(kubectl -n loginid-takehome get secret \
 --     db-migrator-credential -o jsonpath='{.data.dsn}' | base64 -d)
---   psql "$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -f deploy/demo-data/001-review-profiles.sql
+--   psql "$MIGRATOR_DSN" -v ON_ERROR_STOP=1 -f deploy/demo-data/review-profiles.sql
 --
 -- Fixed UUIDs, not gen_random_uuid(): user_profile has no unique
 -- constraint beyond its own PK (per Renata — no natural conflict target
