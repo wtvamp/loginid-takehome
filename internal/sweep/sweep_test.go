@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -101,7 +102,7 @@ func TestRun_LoopsUntilDrained(t *testing.T) {
 	)
 	emit := &fakeMetricEmitter{}
 
-	results := Run(context.Background(), f, time.Now(), emit)
+	results := Run(context.Background(), f, time.Now(), emit, nil, 0)
 
 	var direct ClassResult
 	for _, r := range results {
@@ -122,7 +123,7 @@ func TestRun_LoopsUntilDrained(t *testing.T) {
 
 func TestRun_EveryClassCalledOnceEachWithItsOwnPredicate(t *testing.T) {
 	f := allDrainedFake()
-	Run(context.Background(), f, time.Now(), &fakeMetricEmitter{})
+	Run(context.Background(), f, time.Now(), &fakeMetricEmitter{}, nil, 0)
 
 	for _, c := range allClasses {
 		if f.calls[c] != 1 {
@@ -144,7 +145,7 @@ func TestRun_MetricsOnlyEmittedOnDrained(t *testing.T) {
 	f.script(dao.RetentionIDPCacheOrphan, batchResult{result: dao.SweepResult{RowsExamined: 1, RowsDeleted: 1, Drained: true}})
 	emit := &fakeMetricEmitter{}
 
-	Run(context.Background(), f, time.Now(), emit)
+	Run(context.Background(), f, time.Now(), emit, nil, 0)
 
 	if len(emit.calls) != len(allClasses) {
 		t.Fatalf("EmitClassMetrics called %d times, want %d (exactly once per class, only on the drained batch — the direct class's first, non-drained batch must not have triggered a call)", len(emit.calls), len(allClasses))
@@ -160,7 +161,7 @@ func TestRun_OldestSurvivingAtNilWhenNoRowsRemain(t *testing.T) {
 	f := allDrainedFake() // default: OldestSurvivingAt nil on every class
 	emit := &fakeMetricEmitter{}
 
-	Run(context.Background(), f, time.Now(), emit)
+	Run(context.Background(), f, time.Now(), emit, nil, 0)
 
 	for _, c := range emit.calls {
 		if c.oldestSurvivingRowAgeSeconds != nil {
@@ -178,7 +179,7 @@ func TestRun_OldestSurvivingAtConvertedToAgeSeconds(t *testing.T) {
 	f.script(dao.RetentionIDPCacheOrphan, batchResult{result: dao.SweepResult{Drained: true}})
 	emit := &fakeMetricEmitter{}
 
-	Run(context.Background(), f, now, emit)
+	Run(context.Background(), f, now, emit, nil, 0)
 
 	var got *float64
 	for _, c := range emit.calls {
@@ -201,7 +202,7 @@ func TestRun_AlreadyCancelledContextDeletesNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	results := Run(ctx, f, time.Now(), emit)
+	results := Run(ctx, f, time.Now(), emit, nil, 0)
 
 	for _, r := range results {
 		if r.Err == nil {
@@ -229,7 +230,7 @@ func TestRun_OneClassErrorDoesNotBlockTheOthers(t *testing.T) {
 	f.script(dao.RetentionIDPCache, batchResult{err: errors.New("connection reset by peer")})
 	emit := &fakeMetricEmitter{}
 
-	results := Run(context.Background(), f, time.Now(), emit)
+	results := Run(context.Background(), f, time.Now(), emit, nil, 0)
 
 	byClass := make(map[dao.RetentionClass]ClassResult)
 	for _, r := range results {
@@ -304,5 +305,125 @@ func TestPrometheusMetricEmitter_WriteToProducesRealExpositionFormat(t *testing.
 	}
 	if !found["direct"] || !found["idp_cache_orphan"] {
 		t.Errorf("rows_examined missing expected class labels: found=%v", found)
+	}
+}
+
+// fakeRunRecorder is a minimal hand-written fake for RunRecorder, per
+// decisions/test-double-strategy.md.
+type fakeRunRecorder struct {
+	nextRunID     int
+	startCalls    []dao.RetentionClass
+	finishCalls   []finishCall
+	pruneCalls    []time.Time
+	startErr      error
+	finishErr     error
+	pruneErr      error
+	missedSlotsFn func(class dao.RetentionClass) int
+}
+
+type finishCall struct {
+	runID             string
+	rowsExamined      int
+	rowsDeleted       int
+	drained           bool
+	oldestSurvivingAt *time.Time
+}
+
+func (f *fakeRunRecorder) StartRun(_ context.Context, class dao.RetentionClass, _ time.Time, _ time.Duration) (string, int, error) {
+	f.startCalls = append(f.startCalls, class)
+	if f.startErr != nil {
+		return "", 0, f.startErr
+	}
+	f.nextRunID++
+	missed := 0
+	if f.missedSlotsFn != nil {
+		missed = f.missedSlotsFn(class)
+	}
+	return fmt.Sprintf("run-%d", f.nextRunID), missed, nil
+}
+
+func (f *fakeRunRecorder) FinishRun(_ context.Context, runID string, _ time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error {
+	f.finishCalls = append(f.finishCalls, finishCall{runID, rowsExamined, rowsDeleted, drained, oldestSurvivingAt})
+	return f.finishErr
+}
+
+func (f *fakeRunRecorder) PruneOlderThan(_ context.Context, cutoff time.Time) error {
+	f.pruneCalls = append(f.pruneCalls, cutoff)
+	return f.pruneErr
+}
+
+func TestRun_RecorderStartedAndFinishedOncePerDrainedClass(t *testing.T) {
+	f := allDrainedFake()
+	recorder := &fakeRunRecorder{}
+
+	Run(context.Background(), f, time.Now(), &fakeMetricEmitter{}, recorder, time.Hour)
+
+	if len(recorder.startCalls) != len(allClasses) {
+		t.Fatalf("StartRun called %d times, want %d (once per class)", len(recorder.startCalls), len(allClasses))
+	}
+	if len(recorder.finishCalls) != len(allClasses) {
+		t.Fatalf("FinishRun called %d times, want %d (every class drained)", len(recorder.finishCalls), len(allClasses))
+	}
+	for i, c := range recorder.finishCalls {
+		if !c.drained {
+			t.Errorf("finishCalls[%d].drained = false, want true", i)
+		}
+		if c.runID == "" {
+			t.Errorf("finishCalls[%d].runID is empty, want the id StartRun returned", i)
+		}
+	}
+}
+
+func TestRun_RecorderNotFinishedWhenClassErrors(t *testing.T) {
+	f := allDrainedFake()
+	f.script(dao.RetentionIDPCache, batchResult{err: errors.New("connection reset")})
+	recorder := &fakeRunRecorder{}
+
+	Run(context.Background(), f, time.Now(), &fakeMetricEmitter{}, recorder, time.Hour)
+
+	if len(recorder.startCalls) != len(allClasses) {
+		t.Fatalf("StartRun called %d times, want %d — every class gets a start row even if it later errors", len(recorder.startCalls), len(allClasses))
+	}
+	// Only 2 of 3 classes drain (idp_cache errors) — its row must stay
+	// at finished_at == NULL (§3d's "started and died" state), so
+	// FinishRun must NOT be called for it.
+	if len(recorder.finishCalls) != len(allClasses)-1 {
+		t.Errorf("FinishRun called %d times, want %d (idp_cache errored and must not be finished)", len(recorder.finishCalls), len(allClasses)-1)
+	}
+}
+
+func TestRun_RecorderPrunedOncePerRun(t *testing.T) {
+	f := allDrainedFake()
+	recorder := &fakeRunRecorder{}
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+
+	Run(context.Background(), f, now, &fakeMetricEmitter{}, recorder, time.Hour)
+
+	if len(recorder.pruneCalls) != 1 {
+		t.Fatalf("PruneOlderThan called %d times, want exactly 1 (once per Run, not per class)", len(recorder.pruneCalls))
+	}
+	wantCutoff := now.Add(-retentionSweepRunRetention)
+	if !recorder.pruneCalls[0].Equal(wantCutoff) {
+		t.Errorf("PruneOlderThan called with cutoff %v, want %v (30 days before now)", recorder.pruneCalls[0], wantCutoff)
+	}
+}
+
+func TestRun_RecorderErrorsAreNonFatal(t *testing.T) {
+	f := allDrainedFake()
+	recorder := &fakeRunRecorder{startErr: errors.New("db write failed"), finishErr: errors.New("db write failed"), pruneErr: errors.New("db write failed")}
+
+	results := Run(context.Background(), f, time.Now(), &fakeMetricEmitter{}, recorder, time.Hour)
+
+	// The sweep's own real work (deletion) must succeed regardless of
+	// whether the observability persistence layer is healthy — a
+	// database hiccup on retention_sweep_run must never be reported as
+	// a failed sweep.
+	for _, r := range results {
+		if r.Err != nil {
+			t.Errorf("class %q: Err = %v, want nil — a RunRecorder failure must not fail the sweep itself", r.Class, r.Err)
+		}
+		if !r.Drained {
+			t.Errorf("class %q: Drained = false, want true", r.Class)
+		}
 	}
 }
