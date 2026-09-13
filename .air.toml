@@ -1,0 +1,16 @@
+# Dev-profile hot-reload only (docker compose --profile dev), read
+# automatically by the api-service-dev service's cosmtrek/air image.
+# Zero effect on the production build: cmd/api-service/Dockerfile
+# never references this file, and this file never touches it.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/api-service ./cmd/api-service"
+bin = "./tmp/api-service"
+include_ext = ["go"]
+exclude_dir = ["tmp", ".dev-secrets", "deploy"]
+delay = 300
+
+[log]
+time = true
