@@ -91,3 +91,20 @@ A single-replica PostgreSQL `StatefulSet` in the `loginid-takehome` namespace (T
 - **TLS on the Postgres connection (`sslmode=require`, a self-signed `cert-manager` `Issuer`/`Certificate`)** — this is Marcus's ruling (`threat-model.md` Assumption 9), consistently applied with the client-facing TLS requirement one hop earlier. I did not independently stand up cert-manager to re-verify the handshake myself (a heavier repro than the container tests above), so this one line item rests on Theo's own reported end-to-end scratch-namespace test (TLS on, migrator creates tables, runtime blocked from DDL, both goose invocations succeed) rather than my own empirical confirmation — flagged honestly rather than claimed as independently verified.
 
 **Verdict: PASSES.** The one blocking defect from my prior pass is fixed and independently re-confirmed; every other change since then is either independently verified by me directly (UID, goose env vars, poll-loop logic, sequences caveat) or, for the one item I couldn't cheaply re-verify myself (the TLS handshake), honestly attributed to Theo's own reported test rather than claimed as mine. Posting this to the PR; merge can proceed once Priya's post lands too.
+
+## PO acceptance review — live deployment (all criteria but #5)
+
+**Reviewer:** Naomi Voss (PO). **Date:** 2026-09-13. Prepared now, ahead of criterion 5 landing, per team-lead's request, so acceptance is a single pass once it does.
+
+**Directly, independently confirmed by me against the live URL** (`curl --resolve loginid-takehome.uplifttech.org:443:67.168.194.236 https://loginid-takehome.uplifttech.org/healthz`): HTTP 200, `{"status":"ok","service":"api-service","build":"aead77e3d0e3d1fe439dd4109ef10878377e1ab3"}` — the service is up and serving a real, current commit SHA.
+
+**Reported by Theo/team-lead, not independently re-run by me against the live cluster (I have no cluster access) — recorded as attributed evidence, consistent with this review's own discipline of not overclaiming what I actually checked:**
+- Migrations applied (versions 2 + 1, matching the two-directory split); the `runtime` role's DDL denial confirmed live (`CREATE TABLE` → permission denied; `SELECT` works) — this is the live-cluster instance of the same permission model I verified locally in a scratch container during the PR #29 review, now confirmed against the real deployed database.
+- The second deploy's migration `Job` re-run reported "no migrations to run" for both directories — satisfies the idempotency criterion.
+- All Deployments Ready.
+
+**Criteria status:**
+- [x] StatefulSet/PVC, NetworkPolicy scoping, out-of-band Secret provisioning, migrator/runtime split, goose ordering, idempotency, pre-rollout sequencing, quota headroom, header-comment accuracy — all confirmed via PR #29's code review (above) plus this live-deployment evidence.
+- [ ] **Criterion 5 (health reflects DB connectivity, boolean-only, no DSN/DETAIL leak) — still open.** Renata's tiny PR (after #30) ships this. Will review that PR directly (read the handler code, confirm no connection string/host/port/driver-error text appears even when DB is down) the moment it's up — that closes LT-52 in full.
+
+**LT-52 verdict: accepted pending criterion 5 only.** Everything else is done and confirmed; nothing else needs re-checking once that PR lands.
