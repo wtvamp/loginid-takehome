@@ -25,6 +25,15 @@ const (
 	AuditCapExceeded   AuditEventKind = "cumulative_cap_exceeded"
 	AuditRequestFailed AuditEventKind = "request_failed" // a DAO/internal error, not a policy decision
 	AuditSuccess       AuditEventKind = "success"
+
+	// AuditJWKSUnavailable is LT-40's distinct signal for the JWKS
+	// fail-closed case (Tomasz Wrede, 02 cold review, PM ruling): the
+	// cached key set exceeded its max-staleness bound with no successful
+	// refresh, and the verifier refused every token rather than trust
+	// keys that old — a token-infrastructure degradation, not an
+	// ordinary bad-credential attempt, and worth distinguishing from
+	// AuditAuthnFailure for exactly that reason.
+	AuditJWKSUnavailable AuditEventKind = "jwks_unavailable"
 )
 
 // AuditEvent carries exactly the fields handoff-03-auth.md v3's audit-log
