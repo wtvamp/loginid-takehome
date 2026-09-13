@@ -414,6 +414,25 @@ spec:
           env:
             - {name: HTTP_ADDR, value: ":8081"}
             - {name: CONNECTOR_JWT_AUDIENCE, value: "idp-connector-service"}
+            # AUTH_JWKS_URL/AUTH_JWT_ISSUER were missing entirely — the
+            # third instance of this enforcement-site class (after the
+            # AUTH_JWT_* gap fixed for api-service/api-service-issuer,
+            # and the :443 port gap fixed in PR #43): NewConnectorRouter
+            # builds its JWKS cache from cfg.AuthJWKSURL and its
+            # middleware from cfg.AuthJWTIssuer the same way
+            # NewVerifierRouter does, but nothing had ever set either
+            # here. Found live: every /auth and /identity call 401'd,
+            # connector log showed "JWKS fetch failed (host=, ...)
+            # unsupported protocol scheme \"\"" — an empty AuthJWKSURL
+            # parses to no scheme at all. Same literal values
+            # api-service.yaml uses: same issuer, same JWKS endpoint,
+            # same :443 (the issuer Service's only exposed port — see
+            # api-service.yaml's own comment on why the port is
+            # explicit). NetworkPolicy already admits
+            # idp-connector -> api-service-issuer ingress; no policy
+            # change needed.
+            - {name: AUTH_JWKS_URL, value: "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json"}
+            - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
           readinessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 10}
 ---
