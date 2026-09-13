@@ -28,6 +28,9 @@ func scanProfile(scan func(dest ...any) error) (*model.UserProfile, error) {
 }
 
 func (pr profileRepo) Get(ctx context.Context, id string) (*model.UserProfile, error) {
+	if err := dao.ValidateID(id); err != nil {
+		return nil, err
+	}
 	row := pr.r.db.QueryRowContext(ctx, "SELECT "+profileColumns+" FROM user_profile WHERE id = $1", id)
 	return scanProfile(row.Scan)
 }
@@ -101,6 +104,7 @@ func (pr profileRepo) Create(ctx context.Context, p *model.UserProfile) (*model.
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	var created *model.UserProfile
 	err := pr.r.withRetry(ctx, func(tx *sql.Tx) error {
@@ -123,9 +127,13 @@ func (pr profileRepo) Create(ctx context.Context, p *model.UserProfile) (*model.
 }
 
 func (pr profileRepo) Update(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	if err := dao.ValidateID(p.ID); err != nil {
+		return nil, err
+	}
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	var updated *model.UserProfile
 	err := pr.r.withRetry(ctx, func(tx *sql.Tx) error {
@@ -153,9 +161,13 @@ func (pr profileRepo) Update(ctx context.Context, p *model.UserProfile) (*model.
 // only on insert, per 05's Oren-finding-#3 ruling (§3a note 3). A
 // re-hydration Upsert must never reset the original creation timestamp.
 func (pr profileRepo) Upsert(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	if err := dao.ValidateID(p.ID); err != nil {
+		return nil, err
+	}
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 
 	var result *model.UserProfile
 	err := pr.r.withRetry(ctx, func(tx *sql.Tx) error {
@@ -188,6 +200,9 @@ func (pr profileRepo) Upsert(ctx context.Context, p *model.UserProfile) (*model.
 }
 
 func (pr profileRepo) Delete(ctx context.Context, id string) error {
+	if err := dao.ValidateID(id); err != nil {
+		return err
+	}
 	return pr.r.withRetry(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "DELETE FROM user_profile WHERE id = $1", id)
 		if err != nil {
