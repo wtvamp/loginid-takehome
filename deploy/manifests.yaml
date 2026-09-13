@@ -97,6 +97,24 @@ spec:
     spec:
       serviceAccountName: api-service-issuer
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
+      # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: the Kubernetes-Secret
+      # volumes/mounts that used to sit here are removed below. Nothing
+      # replaces them yet — Amber's Vault provisioning (KV paths + a
+      # per-ServiceAccount Kubernetes-auth role for api-service-issuer)
+      # is still in progress; adding vault.hashicorp.com/agent-inject
+      # annotations with fabricated path/role names now would be worse
+      # than leaving this TODO, since a fabricated name that happens to
+      # look plausible is harder to catch at review time than an
+      # obviously-missing piece. JWT_SIGNING_KEY_FILE and
+      # ISSUER_DB_DSN_FILE below are UNCHANGED (still /secrets/jwt/
+      # signing-key and /secrets/issuer-db/dsn) — the application already
+      # reads both as files, not as native env-var secretKeyRefs, so the
+      # eventual Vault Agent Injector annotations only need to render to
+      # these same paths; no application code or config surface changes.
+      # TODO(LT-46, blocked on Amber): add vault.hashicorp.com/agent-inject
+      # (+ role, + per-secret path/template annotations rendering to
+      # /secrets/jwt/signing-key and /secrets/issuer-db/dsn) once real
+      # KV paths and the api-service-issuer Vault role exist.
       containers:
         - name: api-service
           image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
@@ -111,16 +129,8 @@ spec:
             - {name: ISSUER_DB_DSN_FILE, value: /secrets/issuer-db/dsn}
             - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
             - {name: AUTH_JWT_AUDIENCE, value: "loginid-api-service"}
-          volumeMounts:
-            - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
-            - {name: issuer-db-runtime-credential, mountPath: /secrets/issuer-db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
-      volumes:
-        - name: issuer-db-runtime-credential
-          secret: {secretName: issuer-db-runtime-credential}
-        - name: jwt-signing-key
-          secret: {secretName: api-service-jwt-signing-key}
 ---
 apiVersion: v1
 kind: Service
@@ -286,6 +296,21 @@ spec:
           resources:
             requests: {cpu: "100m", memory: "256Mi"}
             limits: {cpu: "500m", memory: "512Mi"}
+          # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: this env block is
+          # deliberately left UNCHANGED for now, unlike the other three
+          # workloads' Secret references removed elsewhere in this file
+          # — postgres is the one consumer needing an actual delivery
+          # -mechanism decision, not just a name swap, before it's safe
+          # to touch (see decisions/vault-migration-postgres-env-vars.md):
+          # POSTGRES_PASSWORD has a documented POSTGRES_PASSWORD_FILE
+          # alternative (Docker Official postgres image), so that one's a
+          # clean file-mount swap; MIGRATOR_PASSWORD/RUNTIME_PASSWORD/
+          # ISSUER_MIGRATOR_PASSWORD/ISSUER_RUNTIME_PASSWORD are read
+          # directly by this project's own 01-create-roles.sh, which
+          # doesn't have an image-provided _FILE equivalent — closing
+          # those requires editing that script to read files instead of
+          # env vars, a real (if small) code change, not just a manifest
+          # edit. Left as a single flagged TODO rather than half-done.
           env:
             - {name: POSTGRES_USER, value: postgres}
             - {name: POSTGRES_DB, value: loginid}
@@ -361,7 +386,20 @@ metadata: {name: db-migrate, namespace: loginid-takehome}
 spec:
   backoffLimit: 2
   template:
-    metadata: {labels: {app: db-migrate}}
+    # agent-pre-populate-only (LT-46 prep): this pod runs to completion
+    # and exits, unlike api-service/api-service-issuer/postgres — a
+    # long-lived Vault Agent sidecar here would never be reaped (Jobs
+    # don't get one killed off automatically the way a Deployment's
+    # rollout would), so the init-container-only delivery mode is the
+    # correct one, not the default sidecar mode. Inert until the real
+    # vault.hashicorp.com/agent-inject + role + path annotations land
+    # (Amber's provisioning) — pre-populate-only has no effect unless
+    # agent-inject is also enabled. Added now since it needs no
+    # project-specific name to state correctly.
+    metadata:
+      labels: {app: db-migrate}
+      annotations:
+        vault.hashicorp.com/agent-pre-populate-only: "true"
     spec:
       restartPolicy: Never
       # Story 8 (backlog.md): the first real deploy's migrate attempt
@@ -396,19 +434,22 @@ spec:
           resources:
             requests: {cpu: "50m", memory: "64Mi"}
             limits: {cpu: "200m", memory: "128Mi"}
+          # LT-46 DRAFT (Vault re-scope), NOT YET LIVE: GOOSE_DBSTRING/
+          # ISSUER_GOOSE_DBSTRING's secretKeyRefs are removed below,
+          # nothing replaces them yet (Amber's provisioning still in
+          # progress — see api-service-issuer's own TODO comment above
+          # for why no annotation is added with a fabricated name).
+          # TODO(LT-46, blocked on Amber): goose reads its DSN from an
+          # env var deliberately (not argv, to keep it out of `ps`), but
+          # Vault Agent Injector's default mode writes secret material
+          # to FILES, not container env vars — this container's
+          # `command` will need to `source` a Vault-rendered env file
+          # (e.g. `. /vault/secrets/goose-env && goose ...`) before each
+          # goose invocation, once real paths/role exist. Same class of
+          # file-vs-env mismatch as decisions/vault-migration-postgres-env-vars.md.
           env:
-            # GOOSE_DBSTRING, not an argv/positional argument: goose's own
-            # env-var support means the DSN (which contains a password)
-            # never appears in `ps` output inside this pod's PID
-            # namespace — per review, api-service already does the
-            # stronger file-based equivalent (DB_DSN_FILE) and this
-            # should match that discipline, not fall back to argv.
             - name: GOOSE_DRIVER
               value: postgres
-            - name: GOOSE_DBSTRING
-              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: dsn}}
-            - name: ISSUER_GOOSE_DBSTRING
-              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: dsn}}
           command:
             - sh
             - -c
