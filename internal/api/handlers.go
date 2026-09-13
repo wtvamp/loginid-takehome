@@ -28,6 +28,16 @@ const (
 	maxPageSize     = 50
 	readRateLimit   = 60 // req/min, read:own and read:any
 	searchRateLimit = 10 // req/min, profile:search
+
+	// TouchCapPerWindow and TouchCapWindow are the cumulative
+	// distinct-record-touch cap's real values — ruled by Marcus Ilori
+	// (02) since handoff-03-auth.md names the mechanism ("a rolling 24h
+	// window") but not a number: 2,000 distinct records per caller per
+	// rolling 24h, same figure for both profile:search and
+	// profile:read:any. Explicitly tunable, not protocol-fixed — see
+	// handoff-03-auth.md's v5 addendum for the reasoning.
+	TouchCapPerWindow = 2000
+	TouchCapWindow    = 24 * time.Hour
 )
 
 type searchRequest struct {
