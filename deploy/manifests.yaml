@@ -970,16 +970,23 @@ spec:
         # a genuinely dead sweep. Reads the always-up api-service's own
         # gauge, never the CronJob pod directly (Amber's finding: a
         # short-lived pod can't be reliably scraped at all).
+        # retention_sweep_last_finished_timestamp_seconds (renamed from
+        # my earlier ...last_success... by Renata's (03) re-read of
+        # Naomi's ruling): deliberately UNGATED on Drained — a run that
+        # died mid-sweep (never drained) still updates this timestamp,
+        # so it still counts as "reporting" for this rule's purposes.
+        # Only oldest_surviving_row_age_seconds (rule 2) stays
+        # Drained-only, per the batching note in observability.md.
         - alert: RetentionSweepNotReporting
-          expr: time() - retention_sweep_last_success_timestamp_seconds{class="direct"} > 172800
+          expr: time() - retention_sweep_last_finished_timestamp_seconds{class="direct"} > 172800
           labels: {severity: warning, class: direct}
           annotations: {summary: "retention sweep has not reported a successful run for class=direct in over 2 intervals"}
         - alert: RetentionSweepNotReporting
-          expr: time() - retention_sweep_last_success_timestamp_seconds{class="idp_cache"} > 172800
+          expr: time() - retention_sweep_last_finished_timestamp_seconds{class="idp_cache"} > 172800
           labels: {severity: warning, class: idp_cache}
           annotations: {summary: "retention sweep has not reported a successful run for class=idp_cache in over 2 intervals"}
         - alert: RetentionSweepNotReporting
-          expr: time() - retention_sweep_last_success_timestamp_seconds{class="idp_cache_orphan"} > 172800
+          expr: time() - retention_sweep_last_finished_timestamp_seconds{class="idp_cache_orphan"} > 172800
           labels: {severity: warning, class: idp_cache_orphan}
           annotations: {summary: "retention sweep has not reported a successful run for class=idp_cache_orphan in over 2 intervals"}
 
@@ -1020,17 +1027,23 @@ spec:
         # finding); info here would mean this alert can never actually
         # be delivered.
         #
-        # 7I = 7 * 86400 = 604800 (7d). >= 2 per Priya's ruling.
+        # retention_sweep_missed_slots{class} (renamed from my earlier
+        # ...skipped_total by Renata's re-read of Naomi's ruling): the
+        # LATEST run's own missed-slots count only, not a pre-summed
+        # running total — the app reports what one run observed since
+        # its own last success, and the 7I windowing lives entirely in
+        # this PromQL (sum_over_time), not in app-side state. 7I =
+        # 7 * 86400 = 604800 (7d). >= 2 per Priya's ruling.
         - alert: RetentionSweepSkipping
-          expr: increase(retention_sweep_skipped_total{class="direct"}[7d]) >= 2
+          expr: sum_over_time(retention_sweep_missed_slots{class="direct"}[7d]) >= 2
           labels: {severity: warning, class: direct}
           annotations: {summary: "retention sweep for class=direct has skipped 2 or more runs over the trailing 7 intervals"}
         - alert: RetentionSweepSkipping
-          expr: increase(retention_sweep_skipped_total{class="idp_cache"}[7d]) >= 2
+          expr: sum_over_time(retention_sweep_missed_slots{class="idp_cache"}[7d]) >= 2
           labels: {severity: warning, class: idp_cache}
           annotations: {summary: "retention sweep for class=idp_cache has skipped 2 or more runs over the trailing 7 intervals"}
         - alert: RetentionSweepSkipping
-          expr: increase(retention_sweep_skipped_total{class="idp_cache_orphan"}[7d]) >= 2
+          expr: sum_over_time(retention_sweep_missed_slots{class="idp_cache_orphan"}[7d]) >= 2
           labels: {severity: warning, class: idp_cache_orphan}
           annotations: {summary: "retention sweep for class=idp_cache_orphan has skipped 2 or more runs over the trailing 7 intervals"}
 
