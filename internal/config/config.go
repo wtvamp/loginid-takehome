@@ -159,8 +159,8 @@ func Load() (Config, error) {
 	if appMode == "" {
 		appMode = "verifier"
 	}
-	if appMode != "verifier" && appMode != "issuer" {
-		return Config{}, fmt.Errorf("config: APP_MODE %q is not one of \"verifier\", \"issuer\"", appMode)
+	if appMode != "verifier" && appMode != "issuer" && appMode != "sweep" {
+		return Config{}, fmt.Errorf("config: APP_MODE %q is not one of \"verifier\", \"issuer\", \"sweep\"", appMode)
 	}
 
 	signingKeyPath, err := resolveSigningKeyPath(appMode)
@@ -317,6 +317,16 @@ func RequiredAuthEnvVars(service, mode string) (required []string, recognized bo
 		// variable it has no use for (validateAuthConfig's own doc
 		// comment states this same reasoning).
 		return []string{"AUTH_JWT_ISSUER"}, true
+	case service == "api-service" && mode == "sweep":
+		// LT-44's retention sweep never verifies or issues a JWT — it
+		// runs once, calls the DAO directly, and exits — so it has no
+		// legitimate use for any of the AUTH_* variables the other two
+		// modes require. Recognized (not the default nil/false case)
+		// specifically so a typo'd APP_MODE never gets silently
+		// swallowed into "requires nothing" for the wrong reason —
+		// this IS the mode that requires nothing, and says so
+		// explicitly.
+		return nil, true
 	case service == "idp-connector":
 		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}, true
 	default:

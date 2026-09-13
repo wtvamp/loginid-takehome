@@ -5,17 +5,22 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"loginid-takehome/internal/api"
 	"loginid-takehome/internal/app"
 	"loginid-takehome/internal/config"
 	"loginid-takehome/internal/dao"
 	"loginid-takehome/internal/onboarding"
+	"loginid-takehome/internal/sweep"
 
 	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
 	// registers the "pgx" database/sql driver this file uses directly
@@ -125,6 +130,50 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
 	return &onboarding.Service{Tokens: tokens, Connector: connectorClient}, nil
 }
 
+// runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
+// sweep exactly once against the real database and exit — never starts
+// an HTTP server, never builds a router. ctx is derived from
+// signal.NotifyContext, not context.Background() alone, so a CronJob
+// pod termination (SIGTERM, the normal way Kubernetes asks a Job's pod
+// to stop) cancels cleanly through the same path a genuinely-expired
+// deadline would, rather than the process being killed mid-batch with
+// no chance for internal/sweep's own per-batch loop to notice. This is
+// the sweep's own job/scheduler context, never a request-scoped one —
+// there is no HTTP request anywhere in this invocation to derive one
+// from in the first place.
+//
+// Exits non-zero if any class's sweep ended in error (not merely
+// "still had rows to examine" — internal/sweep.runClass's own loop
+// already keeps calling DeleteExpired until Drained or an error, so by
+// the time Run returns, every class either drained successfully or hit
+// a real error) — a non-zero exit is what makes a failed sweep show up
+// as a failed Kubernetes Job, not a silently-succeeding one.
+func runSweepMode(cfg config.Config) {
+	repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+	if err != nil {
+		log.Fatalf("api-service: sweep: opening DAO repository: %v", err)
+	}
+	defer func() { _ = repo.Close() }()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	results := sweep.Run(ctx, repo, time.Now(), sweep.StdoutMetricEmitter{})
+
+	failed := false
+	for _, r := range results {
+		if r.Err != nil {
+			failed = true
+			log.Printf("api-service: sweep: class %q failed after examining %d row(s), deleting %d: %v", r.Class, r.RowsExamined, r.RowsDeleted, r.Err)
+			continue
+		}
+		log.Printf("api-service: sweep: class %q drained, examined %d row(s), deleted %d", r.Class, r.RowsExamined, r.RowsDeleted)
+	}
+	if failed {
+		os.Exit(1)
+	}
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -132,6 +181,13 @@ func main() {
 	}
 	if err := validateAuthConfig(app.Mode(cfg.AppMode)); err != nil {
 		log.Fatalf("api-service: %v", err)
+	}
+
+	if app.Mode(cfg.AppMode) == app.ModeSweep {
+		// Short-circuits before any of the HTTP-serving setup below —
+		// APP_MODE=sweep never builds a router or listens on a port.
+		runSweepMode(cfg)
+		return
 	}
 
 	addr := cfg.HTTPAddr
