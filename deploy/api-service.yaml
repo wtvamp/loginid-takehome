@@ -70,6 +70,8 @@ spec:
         # Kubernetes computes for quota purposes — verified by hand for
         # every injected workload in this hotfix's PR body, not assumed.
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-auto-auth-exit-on-err: "true"
+        vault.hashicorp.com/auth-max-backoff: "10s"
         vault.hashicorp.com/agent-pre-populate-only: "true"
         vault.hashicorp.com/agent-requests-cpu: "10m"
         vault.hashicorp.com/agent-limits-cpu: "100m"

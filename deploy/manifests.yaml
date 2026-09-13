@@ -181,6 +181,8 @@ spec:
         # values, no sidecar needed, and the injector's 250m/64Mi default
         # request was what pushed the namespace over its requests.cpu quota.
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-auto-auth-exit-on-err: "true"
+        vault.hashicorp.com/auth-max-backoff: "10s"
         vault.hashicorp.com/agent-pre-populate-only: "true"
         vault.hashicorp.com/agent-requests-cpu: "10m"
         vault.hashicorp.com/agent-limits-cpu: "100m"
@@ -394,6 +396,8 @@ spec:
         # corrected (agent-extra-secret mounts at /vault/custom/ directly,
         # not /vault/custom/<secret-name>/).
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-auto-auth-exit-on-err: "true"
+        vault.hashicorp.com/auth-max-backoff: "10s"
         vault.hashicorp.com/agent-pre-populate-only: "true"
         vault.hashicorp.com/agent-requests-cpu: "10m"
         vault.hashicorp.com/agent-limits-cpu: "100m"
@@ -548,6 +552,8 @@ spec:
         # path corrected (agent-extra-secret mounts at /vault/custom/
         # directly, not /vault/custom/<secret-name>/).
         vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-auto-auth-exit-on-err: "true"
+        vault.hashicorp.com/auth-max-backoff: "10s"
         vault.hashicorp.com/agent-requests-cpu: "10m"
         vault.hashicorp.com/agent-limits-cpu: "100m"
         vault.hashicorp.com/agent-requests-mem: "16Mi"
@@ -810,6 +816,8 @@ spec:
             # per-secret-name subdirectory), single-line template (the
             # trailing-newline trap).
             vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-auto-auth-exit-on-err: "true"
+            vault.hashicorp.com/auth-max-backoff: "10s"
             vault.hashicorp.com/agent-pre-populate-only: "true"
             vault.hashicorp.com/agent-requests-cpu: "10m"
             vault.hashicorp.com/agent-limits-cpu: "100m"
