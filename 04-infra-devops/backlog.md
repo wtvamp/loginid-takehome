@@ -219,3 +219,25 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Model/effort:** Sonnet, low (this track's part is just tracking/re-verifying; the fix itself is 03's).
 **Type:** Bug.
 **Labels:** `track-04`, `track-03`.
+
+---
+
+## Story 12 — Three follow-ups from the PM's review of PRs #50/#51
+
+**Status: new** — none blocking, all flagged by the PM on #50/#51's review.
+
+**Description:** Three independent small items:
+1. **Pin and verify the gitleaks tarball's sha256** in both `pr-check.yml` and `gitleaks-full-history.yml`'s "Install gitleaks" step, currently fetched by version number alone (`curl` a fixed URL, no integrity check) — same standard already held for container images (digest-pinned where it matters), not currently held for this binary download.
+2. **Add a `.gitleaks.toml` allowlist entry** scoped to `internal/api/tokenhandler.go`'s specific fingerprint (the `generic-api-key` false positive on its `"...RecordFailure/RecordSuccess..."` doc-comment text, found while building PR #51), rather than relying on the v8.21.2 version pin alone to keep it invisible — a future version bump should be a documented no-op, not a surprise red build. Coordinate the exact fingerprint with Renata (03), since it names her file; do not add an allowlist entry without her confirming it matches the current line/commit.
+3. **Add the "Who did the work" section to future PRs from this track at open time**, not patched in after the fact — #50 and #51 both shipped without it, missing the attribution rule's explicit PR requirement (root `CLAUDE.md`). #51 was fixed in place before merge; #50 already merged, so its Work-By trailer is the record for that one.
+
+**Acceptance criteria:**
+- [ ] Both gitleaks-install steps verify a pinned sha256 before `mv`-ing the binary into place, failing loudly (not silently) on a mismatch.
+- [ ] `.gitleaks.toml` allowlists the exact fingerprint Renata confirms, with a comment naming the false positive and the file/line it covers.
+- [ ] A full-history gitleaks run at a newer gitleaks version (spot-checked, not necessarily every future release) stays clean against that same doc comment, confirming the allowlist entry — not merely the version pin — is what's holding.
+- [ ] This track's own PR-opening habit includes the "Who did the work" section going forward — no process artifact needed beyond remembering it, per the root rule already stating the requirement.
+
+**Depends on:** none for (1) and (3); (2) depends on Renata confirming the fingerprint.
+**Model/effort:** Sonnet, low.
+**Type:** Task.
+**Labels:** `track-04`, `track-03` (item 2 only).
