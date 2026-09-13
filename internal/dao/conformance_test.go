@@ -293,22 +293,67 @@ func TestConformance_SentinelSetIsExactlyTheFrozenSeven(t *testing.T) {
 
 // ---- Drift detection on the doc side ----
 
-// expectedContractChecksum is the SHA-256 of multi-db-strategy.md's exact
-// §1–§4 text (from the start of "## 1. The factory and the composite" up
-// to, not including, "## 5. Field-level schema"), frozen at the time the
-// expected* declarations above were transcribed. Computed with:
+// expectedContractChecksum is the SHA-256 of the concatenated content of
+// every ```go fenced code block inside multi-db-strategy.md's §1–§4 (from
+// the start of "## 1. The factory and the composite" up to, not including,
+// "## 5. Field-level schema"), joined with "\n", frozen at the time the
+// expected* declarations above were transcribed.
+//
+// NARROWED SCOPE (this test's second false-positive round; the first
+// hashed all of §1–§4's prose too, and broke on every wording change
+// whether or not a Go shape moved — see PR history). What this freezes:
+// the five ```go blocks — §1's factory/Repository, §2's domain types, §3's
+// sub-interfaces/ProfileQuery, §3c's RetentionClass/SweepResult, §4's
+// sentinel var block — which is the signature surface seam 13 (the
+// assertions above) actually protects. What this deliberately ignores:
+// everything else in §1–§4 — headings, rulings, rationale, the amendment
+// prose (A4's identifier-validation subsection is pure prose with no code
+// fence and no longer trips this test), the §3a method-summary table. A
+// prose-only edit to that material no longer breaks CI; a change to any of
+// the five code blocks still does, because that's what "the doc's side
+// changed" needs to mean for this specific check. The PO review script
+// remains the only check on prose accuracy — this test was never a
+// substitute for a human reading the document, only for a human noticing a
+// Go-shape drift.
+//
+// Computed with:
 //
 //	python3 -c 'import hashlib; c=open("05-data-ops/multi-db-strategy.md").read(); \
 //	s=c.index("## 1. The factory and the composite"); e=c.index("## 5. Field-level schema"); \
-//	print(hashlib.sha256(c[s:e].encode()).hexdigest())'
-const expectedContractChecksum = "8c6551c5fe08f108f07ace1b76785104146dd96eb911156d53185d953bfd6dd3"
+//	section=c[s:e]; parts=section.split("```go"); \
+//	blocks=[p[:p.index("```")] for p in parts[1:]]; \
+//	print(hashlib.sha256("\n".join(blocks).encode()).hexdigest())'
+const expectedContractChecksum = "f03c31895ba3644ef0d576fa7e20b757c4137c9e5988fa291b1a7bd72e1f5bfb"
 
 const contractSectionStartMarker = "## 1. The factory and the composite"
 const contractSectionEndMarker = "## 5. Field-level schema"
+const contractCodeFenceMarker = "```go"
+const contractCodeFenceEnd = "```"
 
 // contractDocPath is relative to this package's directory (internal/dao),
 // which is also `go test`'s working directory for this package.
 const contractDocPath = "../../05-data-ops/multi-db-strategy.md"
+
+// extractGoCodeBlocks returns the content of every ```go fenced block in
+// section, in order, joined with "\n" — the same extraction the checksum
+// above was computed with, kept in sync deliberately rather than
+// re-implemented at review time.
+func extractGoCodeBlocks(t *testing.T, section string) string {
+	t.Helper()
+	parts := strings.Split(section, contractCodeFenceMarker)
+	if len(parts) < 2 {
+		t.Fatalf("found no %q fenced blocks in the §1–§4 section — 05's contract structure changed enough that this test can no longer find the code fences it's supposed to check", contractCodeFenceMarker)
+	}
+	blocks := make([]string, 0, len(parts)-1)
+	for _, p := range parts[1:] {
+		end := strings.Index(p, contractCodeFenceEnd)
+		if end == -1 {
+			t.Fatalf("a %q fence in §1–§4 was never closed with %q", contractCodeFenceMarker, contractCodeFenceEnd)
+		}
+		blocks = append(blocks, p[:end])
+	}
+	return strings.Join(blocks, "\n")
+}
 
 func TestContractChecksumUpToDate(t *testing.T) {
 	raw, err := os.ReadFile(contractDocPath)
@@ -323,15 +368,17 @@ func TestContractChecksumUpToDate(t *testing.T) {
 		t.Fatalf("could not locate §1–§4 markers in %s (start found=%v, end found=%v) — 05's contract structure changed enough that this test can no longer even find the section it's supposed to check", contractDocPath, start != -1, end != -1)
 	}
 
-	section := content[start:end]
-	got := sha256Hex(section)
+	codeBlocks := extractGoCodeBlocks(t, content[start:end])
+	got := sha256Hex(codeBlocks)
 	if got != expectedContractChecksum {
 		t.Fatalf(
-			"05-data-ops/multi-db-strategy.md §1–§4 has changed since this test's expected* "+
-				"declarations were transcribed (checksum got %s, want %s). This test is FAILING "+
-				"LOUDLY rather than silently passing against a stale copy of the contract: a human "+
-				"must re-read the current §1–§4, update the expected* types/messages in this file, "+
-				"and refresh expectedContractChecksum to match.",
+			"one of multi-db-strategy.md §1–§4's Go code fences has changed since this "+
+				"test's expected* declarations were transcribed (checksum got %s, want %s). "+
+				"This test is FAILING LOUDLY rather than silently passing against a stale copy "+
+				"of the contract: a human must re-read the current §1–§4 code fences, update "+
+				"the expected* types/messages in this file, and refresh expectedContractChecksum "+
+				"to match. (This checksum covers only the ```go fenced blocks, not surrounding "+
+				"prose — see the comment above expectedContractChecksum.)",
 			got, expectedContractChecksum)
 	}
 }
