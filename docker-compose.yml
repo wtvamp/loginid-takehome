@@ -1,0 +1,143 @@
+# Local dev-loop (LT-48). Committed counterpart to 04-infra-devops/local-dev-loop.md's
+# sketch, with two deviations from that sketch found while actually implementing it
+# against the real code, not assumed from the design doc — see the idp-connector
+# section below and this file's own PR for why.
+#
+# Quick start:
+#   ./scripts/dev-secrets-init.sh          # once, writes placeholder dev credentials
+#   docker compose --profile sqlite up     # zero-dependency path, fastest inner loop
+#   docker compose --profile postgres up   # exercises the shared postgres-package code path
+#   docker compose --profile dev up        # hot-reload (air) against SQLite, rebuilds on save
+#
+# DB_DRIVER values this file actually wires: sqlite (default) or postgres — the same
+# two values 03's own config surface accepts pass-through, no external doc required.
+# Shared api-service config, factored out as a YAML anchor rather than
+# compose's own `extends` — found live, not assumed: `extends` MERGES
+# list-type fields (including `profiles`) instead of overriding them, so
+# `api-service-pg: {extends: {service: api-service}, profiles: [postgres]}`
+# actually resolves to `profiles: [sqlite, postgres]` (`docker compose
+# config` proves it), which then makes `--profile sqlite` alone try to
+# start api-service-pg too, and fail validating its `depends_on: postgres`
+# since postgres isn't active in that profile set. A YAML anchor/merge
+# key (`<<: *api-service-common`) is a plain top-level-key override
+# instead — verified this actually produces two disjoint profile sets
+# via `docker compose --profile sqlite config` / `--profile postgres
+# config` before trusting it.
+x-api-service-common: &api-service-common
+  build: {context: ., dockerfile: cmd/api-service/Dockerfile}
+  ports: ["8080:8080"]
+  secrets: [db_dsn]
+
+services:
+  api-service:
+    <<: *api-service-common
+    environment:
+      APP_MODE: verifier
+      DB_DRIVER: sqlite
+      DB_DSN_FILE: /run/secrets/db_dsn
+      HTTP_ADDR: ":8080"
+    # Bind mount, not a named volume — found by reading
+    # cmd/api-service/Dockerfile directly, not assumed: the production
+    # image (gcr.io/distroless/static-debian12:nonroot) never creates a
+    # /data directory before switching to USER nonroot, so a fresh named
+    # volume mounted at /data would be created root-owned by Docker,
+    # and the nonroot container couldn't write its own SQLite file
+    # there — a permission-denied error on first run, not a hypothetical.
+    # ./.dev-data (world-writable, created by scripts/dev-secrets-init.sh)
+    # sidesteps this: a host directory's permissions apply regardless of
+    # which UID the container runs as, and world-writable is a
+    # non-concern for throwaway local dev data.
+    volumes: ["./.dev-data:/data"]
+    profiles: ["sqlite"]
+
+  api-service-pg:
+    <<: *api-service-common
+    environment:
+      APP_MODE: verifier
+      DB_DRIVER: postgres
+      DB_DSN_FILE: /run/secrets/db_dsn
+      HTTP_ADDR: ":8080"
+    depends_on:
+      postgres: {condition: service_healthy}
+    profiles: ["postgres"]
+
+  # Non-default host port (55432, not 5432): a developer with their own local
+  # Postgres already running on 5432 shouldn't lose an afternoon to a silent
+  # port collision (LT-48's own AC6 — the same *category* of "worked in
+  # isolation, collided in combination" as the LT-46 quota incident).
+  # Override with POSTGRES_HOST_PORT if 55432 is also taken.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_DB: loginid_dev
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    ports: ["${POSTGRES_HOST_PORT:-55432}:5432"]
+    secrets: [postgres_password]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Named volume, not anonymous — Tobias's (01) LT-48 review note: an
+    # anonymous/no volume means `docker compose down` silently drops dev
+    # data. Low-severity, but free to fix while writing this file for real.
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    profiles: ["postgres"]
+
+  # Hot-reload, dev-profile only, zero production-image impact (LT-48's
+  # explicit criterion). air runs as its own separate compose service from
+  # an UNMODIFIED upstream image — never a build-stage variant of
+  # cmd/api-service/Dockerfile, which stays byte-identical to what this
+  # story started with (checked via `git diff` on the Dockerfile, not by
+  # inspection — see this PR's own diff, which touches no Dockerfile at
+  # all). air rebuilds cmd/api-service from the bind-mounted source and
+  # restarts it on every save.
+  api-service-dev:
+    image: cosmtrek/air:latest
+    working_dir: /app
+    volumes:
+      - ".:/app"
+      - "./.dev-data:/data"
+    environment:
+      APP_MODE: verifier
+      DB_DRIVER: ${DB_DRIVER:-sqlite}
+      DB_DSN_FILE: /run/secrets/db_dsn
+      HTTP_ADDR: ":8080"
+    ports: ["8080:8080"]
+    secrets: [db_dsn]
+    profiles: ["dev"]
+
+  # Deviation from local-dev-loop.md's sketch, found implementing it against
+  # the real code rather than copied from the design doc: the sketch wired
+  # idp_abc_client_id/idp_abc_client_secret as compose file-secrets and
+  # pointed IDP_ABC_BASE_URL at a "mock-idp" service — but
+  # internal/config.Config has no IDP_ABC_CLIENT_ID_FILE/
+  # IDP_ABC_CLIENT_SECRET_FILE equivalent (unlike DB_DSN_FILE/
+  # POSTGRES_PASSWORD_FILE), so compose's file-based secrets mechanism
+  # never actually reaches those two values as written — cmd/idp-connector
+  # only reads them as plain env vars, and NewHTTPVendorClient doesn't even
+  # take them as arguments today (dead config surface, confirmed by reading
+  # cmd/idp-connector/main.go directly). And "mock-idp" was never defined
+  # as a compose service at all. Rather than commit a file secret mechanism
+  # that silently does nothing, or invent a mock-idp service this repo
+  # doesn't have: IDP_ABC_BASE_URL is left UNSET here, which is the real,
+  # already-built local-dev path — cmd/idp-connector/main.go's own fallback
+  # to StubVendorClient (seeded with one demo identity, in-process, no
+  # network call) when IDP_ABC_BASE_URL is unset, exactly matching LT-41's
+  # own stated non-goal ("no real vendor integration" needed for this
+  # take-home). No dev secrets needed for the vendor side at all.
+  idp-connector:
+    build: {context: ., dockerfile: cmd/idp-connector/Dockerfile}
+    environment:
+      HTTP_ADDR: ":8081"
+      CONNECTOR_JWT_AUDIENCE: idp-connector-service
+    ports: ["8081:8081"]
+    profiles: ["sqlite", "postgres"]
+
+secrets:
+  db_dsn: {file: ./.dev-secrets/db_dsn}
+  postgres_password: {file: ./.dev-secrets/postgres_password}
+
+volumes:
+  postgres-data:
