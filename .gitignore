@@ -8,3 +8,10 @@ scripts/portrait-queue.log
 
 # OS noise
 .DS_Store
+
+# LT-48: local dev-loop credentials (docker-compose.yml's `secrets:`) —
+# placeholder, local-only values, never the real secrets mechanism
+# (04-infra-devops/secrets-delivery.md). Never committed.
+.dev-secrets/
+.dev-data/
+tmp/
