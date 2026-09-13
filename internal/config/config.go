@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -274,4 +275,68 @@ func RequiredAuthEnvVars(service, mode string) (required []string, recognized bo
 	default:
 		return nil, false
 	}
+}
+
+// urlShapedEnvVars is the narrow set RequiredAuthEnvVars callers also
+// check for URL shape, not just presence — Ingrid Solano's review of PR
+// #53 (an env var can be non-empty garbage and still pass a bare
+// presence check) and Marcus Ilori's (02) ruling narrowing the fix to
+// exactly these two: AUTH_JWKS_URL and AUTH_JWT_ISSUER are the two
+// values this project's own live incidents actually broke on (empty
+// string, "unsupported protocol scheme \"\""), and both are meant to be
+// absolute URLs the verifier/connector dial or compare against directly.
+// Deliberately not extended to every other env var (client IDs, audience
+// strings, etc. have no comparable "must be a URL" shape to check) —
+// Marcus's ruling: "presence-plus-URL-shape is the control, don't extend
+// it further."
+var urlShapedEnvVars = map[string]bool{
+	"AUTH_JWKS_URL":   true,
+	"AUTH_JWT_ISSUER": true,
+}
+
+// ValidateEnvVarValue rejects a structurally implausible value for env
+// vars in urlShapedEnvVars — value already known non-empty (presence is
+// each RequiredAuthEnvVars caller's own, separate check); this only
+// catches the "non-empty but garbage" case a bare presence check can't.
+// A no-op for every other env var name.
+func ValidateEnvVarValue(name, value string) error {
+	if !urlShapedEnvVars[name] {
+		return nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("%s=%q does not look like a valid absolute URL (a scheme and host are required)", name, value)
+	}
+	return nil
+}
+
+// OptionalEnvVars is every env var config.Load reads that is NOT gated
+// by RequiredAuthEnvVars, paired with the one-line reason it's exempt —
+// Marcus Ilori's (02) ruling on Ingrid Solano's second PR #53 objection:
+// a hand-maintained required-list with nothing checking it against the
+// code's own env reads is a convention, not a control, since a future
+// AUTH_*-prefixed field added straight to Load() (or read directly by
+// some other code, bypassing this package entirely) would silently
+// never be enforced by either the startup checks or the manifest test.
+// internal/config's own TestConfigGoEnvVarsAreClassified scans
+// config.go's source for every env-var-shaped string literal and
+// requires each one to appear either in some RequiredAuthEnvVars
+// (service, mode) result or here — an unclassified new read fails that
+// test, not just an unenforced one.
+var OptionalEnvVars = map[string]string{
+	"APP_MODE":                    "validated by config.Load's own dedicated check (must be \"verifier\" or \"issuer\"), not by RequiredAuthEnvVars",
+	"JWT_SIGNING_KEY_FILE":        "validated by resolveSigningKeyPath's own issuer-mode-only check, not by RequiredAuthEnvVars",
+	"HTTP_ADDR":                   "listen address; no auth-enforcement concern",
+	"DB_DRIVER":                   "database driver selector; no auth-enforcement concern",
+	"DB_DSN":                      "database DSN fallback; no auth-enforcement concern",
+	"DB_DSN_FILE":                 "database DSN source; no auth-enforcement concern",
+	"ISSUER_DB_DSN":               "issuer database DSN fallback; no auth-enforcement concern",
+	"ISSUER_DB_DSN_FILE":          "issuer database DSN source; no auth-enforcement concern",
+	"AUTHZ_QA_SUB":                "QA stopgap-authorizer seed, intentionally optional — empty means deny-by-default, per StopgapAuthorizer's own doc comment",
+	"AUTHZ_QA_ALLOWED_PROFILE_ID": "QA stopgap-authorizer seed, intentionally optional — empty means deny-by-default, per StopgapAuthorizer's own doc comment",
+	"CONNECTOR_CLIENT_ID":         "consumed by LT-33's outbound connector client (in progress) — add to RequiredAuthEnvVars and remove this entry when LT-33 lands",
+	"CONNECTOR_CLIENT_SECRET":     "consumed by LT-33's outbound connector client (in progress) — add to RequiredAuthEnvVars and remove this entry when LT-33 lands",
+	"IDP_ABC_BASE_URL":            "optional real-vendor base URL; unset selects the stub vendor client by design (LT-41 non-goal: no real vendor exists for this take-home)",
+	"IDP_ABC_CLIENT_ID":           "vendor's own credential surface, not this project's own auth surface",
+	"IDP_ABC_CLIENT_SECRET":       "vendor's own credential surface, not this project's own auth surface",
 }

@@ -78,8 +78,12 @@ func validateAuthConfig(mode app.Mode) error {
 		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for api-service mode %q", mode)
 	}
 	for _, name := range required {
-		if os.Getenv(name) == "" {
+		value := os.Getenv(name)
+		if value == "" {
 			return fmt.Errorf("%s must be set in %s mode", name, mode)
+		}
+		if err := config.ValidateEnvVarValue(name, value); err != nil {
+			return err
 		}
 	}
 	return nil

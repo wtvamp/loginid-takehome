@@ -27,6 +27,7 @@ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
 	cases := []struct {
 		name          string
 		unset         string // one var to blank out after allSet, "" for the all-set case
+		garbage       string // one var to overwrite with a non-URL value after allSet, "" to skip
 		wantErr       bool
 		wantErrSubstr string
 	}{
@@ -34,12 +35,21 @@ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
 		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
 		{name: "audience missing", unset: "AUTH_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "AUTH_JWT_AUDIENCE"},
 		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
+		// Ingrid Solano's PR #53 review: a non-empty value that isn't a
+		// valid URL must fail too, not just an empty one — Marcus
+		// Ilori's (02) ruling narrowed the fix to AUTH_JWKS_URL and
+		// AUTH_JWT_ISSUER specifically.
+		{name: "jwks url garbage value", garbage: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
+		{name: "issuer garbage value", garbage: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			allSet(t)
 			if c.unset != "" {
 				t.Setenv(c.unset, "")
+			}
+			if c.garbage != "" {
+				t.Setenv(c.garbage, "not-a-url")
 			}
 			err := validateAuthConfig(app.ModeVerifier)
 			if c.wantErr && err == nil {
