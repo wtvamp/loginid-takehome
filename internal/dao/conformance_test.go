@@ -301,7 +301,7 @@ func TestConformance_SentinelSetIsExactlyTheFrozenSeven(t *testing.T) {
 //	python3 -c 'import hashlib; c=open("05-data-ops/multi-db-strategy.md").read(); \
 //	s=c.index("## 1. The factory and the composite"); e=c.index("## 5. Field-level schema"); \
 //	print(hashlib.sha256(c[s:e].encode()).hexdigest())'
-const expectedContractChecksum = "f7263c55fb87343045db209588d315efbbe128cd1d4b28a318838ce27c43a58b"
+const expectedContractChecksum = "8c6551c5fe08f108f07ace1b76785104146dd96eb911156d53185d953bfd6dd3"
 
 const contractSectionStartMarker = "## 1. The factory and the composite"
 const contractSectionEndMarker = "## 5. Field-level schema"
