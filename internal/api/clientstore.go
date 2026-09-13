@@ -113,10 +113,17 @@ func parsePHC(encoded string) (parsedPHC, error) {
 		return parsedPHC{}, fmt.Errorf("api: not a recognized argon2id PHC string")
 	}
 
-	var version int
-	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
-		return parsedPHC{}, fmt.Errorf("api: parsing PHC version field %q: %w", parts[2], err)
+	// parsePHCParam, not fmt.Sscanf: Sscanf doesn't require consuming the
+	// whole input, so "v=19x" would silently parse as version 19 with
+	// "x" discarded — inconsistent with parsePHCParam's own stricter,
+	// whole-field parsing below, and the same "malformed-but-plausible"
+	// gap this function otherwise guards against (Oren Castellan, PR #39
+	// review).
+	versionU64, err := parsePHCParam(parts[2], "v")
+	if err != nil {
+		return parsedPHC{}, err
 	}
+	version := int(versionU64)
 	if version != phcVersion {
 		return parsedPHC{}, fmt.Errorf("api: PHC string names argon2 version %d, this package verifies version %d", version, phcVersion)
 	}
@@ -126,7 +133,6 @@ func parsePHC(encoded string) (parsedPHC, error) {
 		return parsedPHC{}, fmt.Errorf("api: PHC parameter field %q does not have exactly 3 comma-separated parameters", parts[3])
 	}
 	var memory, timeCost, threads uint64
-	var err error
 	if memory, err = parsePHCParam(params[0], "m"); err != nil {
 		return parsedPHC{}, err
 	}
@@ -389,13 +395,13 @@ func (s *PostgresClientStore) UpdateSecretHash(ctx context.Context, clientID, ne
 		return fmt.Errorf("api: updating oauth_client secret hash: %w", err)
 	}
 	if n, err := result.RowsAffected(); err == nil && n == 0 {
-		// Not an error: the row could have been disabled/revoked between
-		// the successful Get+verify and this call (a narrow race,
-		// harmless either way — a revoked row rehashing its old secret
-		// would be pointless, and a genuinely absent row can't happen
-		// since Get just found it moments before). Logged by the caller
-		// (tokenhandler.go), not here — this package doesn't hold a
-		// logger.
+		// Returned as an error so the caller (tokenhandler.go) logs
+		// it, but this is a benign, expected race rather than a
+		// genuine failure: the row could have been disabled/revoked
+		// between the successful Get+verify and this call — harmless
+		// either way, since rehashing a revoked row's old secret
+		// would be pointless, and a genuinely absent row can't
+		// happen here (Get just found it moments before).
 		return fmt.Errorf("api: oauth_client row %q no longer has secret_state='set'", clientID)
 	}
 	return nil
