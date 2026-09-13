@@ -18,11 +18,25 @@
 #     -f deploy/runner-set-values.yaml
 #
 # Requires the namespace's githubConfigSecret (see below) to already exist
-# — provisioned by Amber/OpenClaw per the PM's coordination, containing a
-# fine-grained GitHub PAT scoped to wtvamp/loginid-takehome only.
+# — provisioned by Amber/OpenClaw per the PM's coordination. ARC's chart
+# accepts either auth shape in this same Secret name/key set; which one is
+# provisioned is Warren's call, pending confirmation:
+#
+#   PAT:        key `github_token` (a fine-grained PAT scoped to this repo)
+#   GitHub App: keys `github_app_id`, `github_app_installation_id`,
+#               `github_app_private_key`
+#
+# Preference: GitHub App auth, for the reasons Amber gave — installed on
+# this single repo only, revocable/auditable from Warren's own GitHub
+# settings independent of any personal account token, and no standing
+# credential with broader-than-needed scope (a fine-grained PAT still
+# needs an `Administration:RW`-shaped permission for runner registration
+# that this deploy doesn't otherwise need). Nothing below changes based on
+# which is chosen — the chart reads whichever key set is present in the
+# Secret named here.
 
 githubConfigUrl: https://github.com/wtvamp/loginid-takehome
-githubConfigSecret: loginid-takehome-github-pat # key: github_token
+githubConfigSecret: loginid-takehome-github-auth
 
 runnerScaleSetName: loginid-takehome
 minRunners: 0 # scales to zero between deploys — this repo doesn't need a warm runner
