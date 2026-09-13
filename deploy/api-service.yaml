@@ -37,6 +37,15 @@ spec:
     spec:
       serviceAccountName: api-service
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
+      # LT-46 DRAFT (Vault re-scope), NOT YET LIVE — see
+      # api-service-issuer's own TODO comment in deploy/manifests.yaml
+      # for the full explanation. DB_DSN_FILE below is UNCHANGED
+      # (still /secrets/db/dsn); only the Kubernetes-Secret-backed
+      # volume that used to fill it is removed.
+      # TODO(LT-46, blocked on Amber): add vault.hashicorp.com/agent-inject
+      # (+ role, + path/template annotations rendering to
+      # /secrets/db/dsn) once real KV paths and the api-service Vault
+      # role exist.
       containers:
         - name: api-service
           image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
@@ -72,13 +81,8 @@ spec:
             # profile ids. Placeholder until real per-token authz lands.
             - {name: AUTHZ_QA_SUB, value: qa-review-read-own}
             - {name: AUTHZ_QA_ALLOWED_PROFILE_ID, value: "00000000-0000-4000-8000-000000000001"}
-          volumeMounts:
-            - {name: db-runtime-credential, mountPath: /secrets/db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
-      volumes:
-        - name: db-runtime-credential
-          secret: {secretName: db-runtime-credential}
 ---
 apiVersion: v1
 kind: Service
