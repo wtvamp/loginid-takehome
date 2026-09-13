@@ -1,14 +1,15 @@
 -- +goose Up
--- Real PostgreSQL DDL per 05-data-ops/multi-db-strategy.md §5. Split from
--- CockroachDB (migrations/cockroachdb/) under amendment A5 after
--- discovering COLLATE "C" is invalid syntax on CockroachDB — the internal/
--- dao/postgres Go PACKAGE still serves both engines (query construction
--- and dialect are genuinely shared; only the retry seam and, now, this
--- one DDL clause differ), this is purely a migration-directory split.
--- Every constraint is named — error translation matches on SQLSTATE plus
--- constraint name, never message text (contract §4; ddl-review-checklist.md B).
--- Names must match migrations/cockroachdb/ and migrations/sqlite/ exactly
--- so all three migrations stay diffable against each other.
+-- CockroachDB DDL per 05-data-ops/multi-db-strategy.md §5 and amendment A5
+-- (split from a shared postgres/cockroachdb directory after discovering
+-- COLLATE "C" is invalid syntax on CockroachDB — SQLSTATE 42601,
+-- "invalid locale C: language: tag is not well-formed"). Differs from
+-- migrations/postgres/ in exactly one place: no COLLATE clause on
+-- user_profile.name, because CockroachDB's UNCOLLATED default already
+-- produces byte-order comparison (verified empirically: sorting
+-- 'alice','Bob','Aaron','bob' with no COLLATE gives Aaron, Bob, alice,
+-- bob — the same order "C" gives on Postgres). Every constraint name is
+-- otherwise identical to migrations/postgres/ and migrations/sqlite/ so
+-- all three stay diffable against each other.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -24,7 +25,7 @@ CREATE TABLE auth_method (
 
 CREATE TABLE user_profile (
 	id UUID DEFAULT gen_random_uuid(),
-	name TEXT COLLATE "C" NOT NULL,
+	name TEXT NOT NULL,
 	phone TEXT,
 	street_address TEXT,
 	locality TEXT,
