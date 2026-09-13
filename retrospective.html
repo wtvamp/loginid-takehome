@@ -151,6 +151,46 @@ th.num{text-align:right;padding-right:0}
 .lessons div{padding:18px 0 0;border-top:2px solid var(--ink)}
 .lessons b{display:block;font-family:var(--display);font-size:18px;margin-bottom:6px}
 .lessons p{font-size:15px;color:var(--ink2);margin:0}
+
+/* motion */
+@media (prefers-reduced-motion:no-preference){
+  .grow{transform-box:fill-box;transform-origin:left center;animation:grow .9s cubic-bezier(.2,.7,.2,1) both}
+  .growv{transform-box:fill-box;transform-origin:center bottom;animation:grow .9s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes grow{from{transform:scaleX(.12)}to{transform:scaleX(1)}}
+  .growv{animation-name:growv}@keyframes growv{from{transform:scaleY(.1)}to{transform:scaleY(1)}}
+  .tl-row .body{transition:transform .5s ease,opacity .5s ease}
+  .tl-row.pre .body{opacity:.55;transform:translateX(10px)}
+  .donut circle.seg{transition:stroke-dasharray 1.1s cubic-bezier(.2,.7,.2,1)}
+}
+/* cost */
+.cost-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:stretch}
+@media (max-width:860px){.cost-hero{grid-template-columns:1fr}}
+.money{font-family:var(--display);font-weight:800;font-size:clamp(56px,8vw,112px);line-height:.95;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.money small{font-size:.32em;font-weight:600;color:var(--ink3);letter-spacing:0;margin-left:10px}
+.unit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:22px}
+.unit{border-top:2px solid var(--rule);padding-top:10px}
+.unit .n{font-family:var(--display);font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.unit .l{font-size:13px;color:var(--ink2);line-height:1.35}
+.donut{display:grid;grid-template-columns:200px minmax(0,1fr);gap:18px;align-items:center}
+@media (max-width:520px){.donut{grid-template-columns:1fr}}
+.donut ul{list-style:none;margin:0;padding:0;font-size:14px}
+.donut li{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dashed var(--rule)}
+.donut li .sw{flex:none;position:relative;top:1px}
+.donut li b{font-family:var(--mono);font-weight:500;margin-left:auto;font-variant-numeric:tabular-nums}
+.prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.price{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;background:var(--bg)}
+.price b{display:block;font-family:var(--display);font-size:15px;margin-bottom:6px}
+.price label{display:grid;grid-template-columns:1fr 84px;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2);padding:3px 0}
+.price input{font-family:var(--mono);font-size:13px;padding:4px 6px;border:1px solid var(--rule);border-radius:4px;background:var(--panel);color:var(--ink);width:100%}
+.price .assume{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--deploy);margin-top:6px}
+.price .pub{color:var(--ok)}
+.replay{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 14px}
+.replay button{font-family:var(--mono);font-size:12.5px;padding:8px 14px;border:1px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--bg);cursor:pointer}
+.replay button:hover{opacity:.85}
+.replay .clock{font-family:var(--mono);font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.replay .clock b{color:var(--ink);font-weight:600}
+.spark{display:flex;gap:6px;align-items:flex-end;height:44px}
+
 footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-size:14px;color:var(--ink3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 :focus-visible{outline:2px solid var(--agent);outline-offset:2px}
 @media (prefers-reduced-motion:no-preference){.live .dot{animation:pulse 2.4s ease-in-out infinite}}
@@ -166,7 +206,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
   <div class="hero">
     <div>
       <h1>Thirty hours, one human, twenty-four agents.</h1>
-      <p class="lede">A Go DAO, a secured REST API, and an identity-provider connector were designed, debated, built, deployed to a real cluster, and reviewed live by a product owner. This is the flight recorder: what was built, who did it, when, and where the human sat in the loop.</p>
+      <p class="lede">A Go DAO, a secured REST API, and an identity-provider connector were designed, debated, built, deployed to a real cluster, and reviewed live by a product owner. This is the flight recorder: what was built, who did it, when, what it cost, and where the human sat in the loop.</p>
       <a class="live" href="https://loginid-takehome.uplifttech.org/healthz"><span class="dot"></span>loginid-takehome.uplifttech.org · build fb8b9d1 · db: ok</a>
       <div class="legend">
         <span><i class="sw" style="background:var(--agent)"></i>agent action</span>
@@ -178,14 +218,14 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
       </div>
     </div>
     <div class="hero-meta">
-      <div><div class="k">Stories Done</div><div class="v">42 / 42</div><div class="s">18 planning, 24 implementation</div></div>
+      <div><div class="k">Stories Done</div><div class="v"><span data-count="42">42</span> / 42</div><div class="s">18 planning, 24 implementation</div></div>
       <div><div class="k">Wall clock</div><div class="v">30.0 h</div><div class="s">first commit 09-12 11:02 → last 09-13 15:05</div></div>
-      <div><div class="k">Pull requests</div><div class="v">75</div><div class="s">73 merged, 2 superseded</div></div>
-      <div><div class="k">Commits</div><div class="v">289</div><div class="s">19,444 lines of Go · 11,033 of Markdown</div></div>
-      <div><div class="k">Tokens generated</div><div class="v">6.53 M</div><div class="s">9,402 assistant turns · 9,967 tool calls</div></div>
-      <div><div class="k">Tokens read</div><div class="v">4.15 B</div><div class="s">99.1% served from prompt cache</div></div>
-      <div><div class="k">Human decisions</div><div class="v">27</div><div class="s">rulings, approvals, corrections</div></div>
-      <div><div class="k">Live-review failures</div><div class="v">19</div><div class="s">before the 24 implementation passes</div></div>
+      <div><div class="k">Pull requests</div><div class="v" data-count="75">75</div><div class="s">73 merged, 2 superseded</div></div>
+      <div><div class="k">Commits</div><div class="v" data-count="289">289</div><div class="s">19,444 lines of Go · 11,033 of Markdown</div></div>
+      <div><div class="k">Tokens generated</div><div class="v" data-count="6532377" data-fmt="tok">6.53 M</div><div class="s">9,402 assistant turns · 9,967 tool calls</div></div>
+      <div><div class="k">Estimated spend</div><div class="v" id="heroCost">$—</div><div class="s">at list price; 99.1% of input from cache</div></div>
+      <div><div class="k">Human decisions</div><div class="v" data-count="27">27</div><div class="s">rulings, approvals, corrections</div></div>
+      <div><div class="k">Live-review failures</div><div class="v" data-count="19">19</div><div class="s">before the 24 implementation passes</div></div>
     </div>
   </div>
 </header>
@@ -245,22 +285,61 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
   </div>
 </section>
 
+<!-- ================= COST ================= -->
+<section id="cost">
+  <div class="sec-head">
+    <div><span class="eyebrow">Tokens → dollars</span><h2>What thirty hours cost</h2></div>
+    <p>Every session's transcript records its token usage per turn, split into fresh input, cache reads, cache writes, and output. Multiply by list price per model and you get the bill. Haiku's prices are published; Sonnet 5, Opus 5, and Fable 5.1 are assumptions, marked as such, and every price below is editable so the figures recompute live.</p>
+  </div>
+  <div class="cost-hero">
+    <div class="panel">
+      <div class="eyebrow">Estimated total at the prices below</div>
+      <div class="money" id="bigCost">$0<small>USD</small></div>
+      <div class="unit-grid">
+        <div class="unit"><div class="n" id="uStory">$—</div><div class="l">per implementation story (24), each deployed and PO‑reviewed</div></div>
+        <div class="unit"><div class="n" id="uPR">$—</div><div class="l">per merged pull request (73)</div></div>
+        <div class="unit"><div class="n" id="uLoc">$—</div><div class="l">per line of Go in the repo (19,444)</div></div>
+        <div class="unit"><div class="n" id="uHour">$—</div><div class="l">per wall‑clock hour, pauses included (30.0)</div></div>
+        <div class="unit"><div class="n" id="uHuman">$—</div><div class="l">of agent spend per human decision (27)</div></div>
+        <div class="unit"><div class="n" id="uCache">—</div><div class="l">saved by the prompt cache versus paying full input price</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Spend by role</h3><p class="sub">Leads carried the context; the orchestrator's model is the priciest per token.</p>
+      <div class="donut"><svg viewBox="0 0 200 200" id="donut" role="img" aria-label="Spend by role"></svg><ul id="donutLegend"></ul></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:28px">
+    <div class="replay"><button type="button" id="replayBtn">▶ Replay the 30 hours</button><span class="clock">clock <b id="clock">Fri 09:00</b> · spent so far <b id="clockCost">$0</b> · stories Done <b id="clockDone">0</b></span></div>
+    <div id="costHour"></div>
+    <p class="note">Bars: dollars per hour, stacked by role (PM, leads, hires, research). Line: cumulative stories Done. Empty hours are usage pauses, when every session waited for the window to reset.</p>
+  </div>
+  <div class="grid2" style="margin-top:28px">
+    <div class="panel"><h3>Spend by model</h3><p class="sub">Input dominates the bill, and cache reads dominate input.</p><div id="costModel"></div></div>
+    <div class="panel"><h3>Spend by persona</h3><p class="sub">Leads and PM as bars; each track's hires aggregated.</p><div id="costPersona"></div></div>
+  </div>
+  <div class="panel" style="margin-top:28px">
+    <h3>Prices, USD per million tokens</h3><p class="sub">Edit any field; the page recomputes. Cache read is normally a tenth of the input price; cache write 1.25×.</p>
+    <div class="prices" id="prices"></div>
+  </div>
+</section>
+
 <!-- ================= CONTRIBUTION ================= -->
 <section id="contrib">
   <div class="sec-head">
     <div><span class="eyebrow">Contribution</span><h2>Who did what, in tokens</h2></div>
-    <p>Every Claude Code session writes its transcript to disk with per-turn token usage, so these are measured, not estimated: 120 transcripts, deduplicated by message id, timestamps converted to Pacific. "Read" counts every input token the model processed, 99.1% of it served from the prompt cache; "generated" is what the models wrote.</p>
+    <p>Measured from 120 transcripts, deduplicated by message id, timestamps converted to Pacific. "Read" is every input token the model processed; "generated" is what it wrote. Leads generated 68% of all output; the PM 20%; eighteen hires 11% between them.</p>
   </div>
   <div class="grid2">
-    <div class="panel"><h3>Tokens generated, by role</h3><p class="sub">Output tokens across all sessions. Leads wrote the most; the PM's share is coordination, rulings, and the log.</p><div id="tokrole"></div></div>
-    <div class="panel"><h3>Tokens read, by role</h3><p class="sub">Input tokens processed. Long-lived lead sessions re-read their whole context on every turn, which is where the billions come from.</p><div id="tokread"></div></div>
-    <div class="panel"><h3>Generated tokens per hour, by role</h3><p class="sub">Stacked: PM, leads, hires, research subagents. Quiet hours are usage pauses.</p><div id="tokhour"></div></div>
-    <div class="panel"><h3>By model</h3><p class="sub">Model was pinned per seat: Fable 5.1 for the orchestrator, Sonnet 5 for four leads and all hires, Opus 5 for the data-ops lead, Haiku for three throwaway lookups.</p><div id="tokmodel"></div>
-      <p class="note">The <span class="mono">&lt;synthetic&gt;</span> model label on 42 turns is Claude Code's placeholder for tool-result relays with no model call; it carries no tokens.</p></div>
+    <div class="panel"><h3>Tokens generated, by role</h3><p class="sub">Output tokens across all sessions.</p><div id="tokrole"></div></div>
+    <div class="panel"><h3>Tokens read, by role</h3><p class="sub">Long-lived lead sessions re-read their whole context each turn; that is where the billions come from.</p><div id="tokread"></div></div>
+    <div class="panel"><h3>Generated tokens per hour, by role</h3><p class="sub">Stacked: PM, leads, hires, research subagents.</p><div id="tokhour"></div></div>
+    <div class="panel"><h3>By model</h3><p class="sub">Pinned per seat: Fable 5.1 orchestrator, Sonnet 5 for four leads and all hires, Opus 5 for data ops, Haiku for three lookups.</p><div id="tokmodel"></div>
+      <p class="note">Claude Code labels 42 tool-result relays <span class="mono">&lt;synthetic&gt;</span>; they carry no tokens and are excluded.</p></div>
   </div>
   <div class="grid2" style="margin-top:28px">
-    <div class="panel"><h3>Generated tokens by persona</h3><p class="sub">Leads and PM as bars; hires aggregated per track below them. Renata's 1.89 M is the Go and its tests.</p><div id="tokpersona"></div></div>
-    <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label). Tokens and lines track each other for the code‑writing leads; the PM's tokens went to messages and rulings, not files.</p><div id="authors"></div></div>
+    <div class="panel"><h3>Generated tokens by persona</h3><p class="sub">Renata's 1.89 M is the Go and its tests; Dana's 1.31 M is coordination, rulings, and the log.</p><div id="tokpersona"></div></div>
+    <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label).</p><div id="authors"></div></div>
   </div>
   <div class="panel" style="margin-top:28px">
     <h3>Hires who changed an outcome</h3><p class="sub">Eighteen hires generated 695 thousand tokens between them, about a tenth of the total, and never wrote a file; they returned prose to their leads. These findings from them altered what shipped.</p>
@@ -451,7 +530,7 @@ function hourBars(target,data,color,yLabel){
   const W=560,H=250,L=36,R=8,T=14,B=40;const n=data.length;const max=Math.max(...data.map(d=>d[1]));const step=max>20?10:5;const ymax=Math.ceil(max/step)*step;
   const s=svg(W,H);const pw=W-L-R,ph=H-T-B;const bw=pw/n;
   for(let y=0;y<=ymax;y+=step){const yy=T+ph-(y/ymax)*ph;s.appendChild(el("line",{x1:L,x2:W-R,y1:yy,y2:yy,stroke:"var(--grid)"}));s.appendChild(el("text",{x:L-6,y:yy+4,"text-anchor":"end","font-size":11},y))}
-  data.forEach((d,i)=>{const h=(d[1]/ymax)*ph;const x=L+i*bw+1.5;s.appendChild(el("rect",{x,y:T+ph-h,width:Math.max(bw-3,2),height:h,fill:d[1]?color:"transparent",rx:1.5}));
+  data.forEach((d,i)=>{const h=(d[1]/ymax)*ph;const x=L+i*bw+1.5;s.appendChild(el("rect",{x,y:T+ph-h,width:Math.max(bw-3,2),height:h,fill:d[1]?color:"transparent",rx:1.5,class:"growv"}));
     if(i%3===0||i===n-1){s.appendChild(el("text",{x:L+i*bw+bw/2,y:H-B+16,"text-anchor":"middle","font-size":10},d[0]))}});
   s.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"day·hour (PDT)"));
   if(yLabel)s.appendChild(el("text",{x:L,y:10,"font-size":10,fill:"var(--ink3)"},yLabel));
@@ -507,7 +586,7 @@ hourBars($("#prs"),prsPerHour,"var(--deploy)","merges");
   const W=560,H=data.length*40+40,L=170,R=90;const s=svg(W,H);const pw=W-L-R;const max=Math.max(...data.map(d=>d[1]));
   data.forEach((d,i)=>{const y=8+i*40;const w=Math.max((d[1]/max)*pw,2);
     s.appendChild(el("text",{x:L-10,y:y+17,"text-anchor":"end","font-size":12,fill:"var(--ink)"},d[0]));
-    s.appendChild(el("rect",{x:L,y,width:w,height:24,fill:"var(--agent)",rx:2}));
+    s.appendChild(el("rect",{x:L,y,width:w,height:24,fill:"var(--agent)",rx:2,class:"grow"}));
     s.appendChild(el("text",{x:L+w+8,y:y+17,"font-size":12},`${d[1].toLocaleString()} lines · ${d[2]} commits`));
   });
   s.appendChild(el("text",{x:L,y:H-8,"font-size":10,fill:"var(--ink3)"},"plus 74 merge commits by the PM under Warren's GitHub identity and 12 pre-rule commits as wtvamp (8,437 lines)"));
@@ -526,7 +605,7 @@ function hbars(target,data,color,labelFn,leftW){
   const W=560,L=leftW||190,R=96,rowH=34,H=data.length*rowH+12;const s=svg(W,H);const pw=W-L-R;const max=Math.max(...data.map(d=>d[1]));
   data.forEach((d,i)=>{const y=6+i*rowH;const w=Math.max((d[1]/max)*pw,2);
     s.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},d[0]));
-    s.appendChild(el("rect",{x:L,y,width:w,height:22,fill:typeof color==="function"?color(d,i):color,rx:2}));
+    s.appendChild(el("rect",{x:L,y,width:w,height:22,fill:typeof color==="function"?color(d,i):color,rx:2,class:"grow"}));
     s.appendChild(el("text",{x:L+w+8,y:y+16,"font-size":12},labelFn?labelFn(d):fmt(d[1])));});
   target.appendChild(s);
 }
@@ -545,6 +624,90 @@ hbars($("#tokpersona"),personaOut,d=>d[0].includes("hires")?"var(--ink3)":"var(-
   s.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"day·hour (PDT) · bottom to top: PM, leads, hires, research"));
   $("#tokhour").appendChild(s);
 })();
+
+// ---------- measured token dataset ----------
+const TOK={"byModel":{"sonnet-5":{"in":15713,"cr":3435114617,"cw":28780624,"out":4799352,"turns":7858,"tools":7976},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":42,"tools":0},"opus-5":{"in":860,"cr":171112682,"cw":5957352,"out":515558,"turns":430,"tools":379},"fable-5.1":{"in":18734,"cr":508127601,"cw":5687182,"out":1221374,"turns":1052,"tools":1585},"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34}},"byRole":{"hire:01":{"sonnet-5":{"in":534,"cr":36774834,"cw":2766012,"out":171530,"turns":267,"tools":258},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"lead:01":{"sonnet-5":{"in":2272,"cr":526616052,"cw":3997797,"out":592532,"turns":1137,"tools":1088},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"fable-5.1":{"in":668,"cr":4403486,"cw":136152,"out":55157,"turns":29,"tools":49}},"hire:02":{"sonnet-5":{"in":318,"cr":12723819,"cw":1286300,"out":129128,"turns":159,"tools":124}},"lead:02":{"sonnet-5":{"in":1094,"cr":252720337,"cw":4539799,"out":409069,"turns":547,"tools":516},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":924,"cr":5418899,"cw":242822,"out":78481,"turns":35,"tools":81}},"hire:03":{"sonnet-5":{"in":992,"cr":25131824,"cw":3158035,"out":325144,"turns":496,"tools":666}},"lead:03":{"sonnet-5":{"in":6116,"cr":1557224812,"cw":6153008,"out":1893083,"turns":3058,"tools":3023},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0}},"lead:04":{"sonnet-5":{"in":3635,"cr":964294851,"cw":4049500,"out":922536,"turns":1818,"tools":1684},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"hire:04":{"sonnet-5":{"in":82,"cr":1084521,"cw":364308,"out":17291,"turns":41,"tools":46},"fable-5.1":{"in":114,"cr":85829,"cw":41486,"out":1548,"turns":9,"tools":3}},"hire:05":{"opus-5":{"in":102,"cr":1238421,"cw":607469,"out":43994,"turns":51,"tools":40},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0},"sonnet-5":{"in":18,"cr":375583,"cw":116580,"out":5884,"turns":9,"tools":19}},"lead:05":{"opus-5":{"in":744,"cr":169697924,"cw":5307055,"out":466347,"turns":372,"tools":323},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"sonnet-5":{"in":100,"cr":3697332,"cw":92540,"out":25732,"turns":50,"tools":50}},"pm":{"fable-5.1":{"in":16898,"cr":498096830,"cw":5217749,"out":1074975,"turns":974,"tools":1440},"sonnet-5":{"in":450,"cr":52137974,"cw":1953620,"out":247376,"turns":225,"tools":409},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":16,"tools":0}},"research":{"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34},"sonnet-5":{"in":102,"cr":2332678,"cw":303125,"out":60047,"turns":51,"tools":93},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"fable-5.1":{"in":130,"cr":122557,"cw":48973,"out":11213,"turns":5,"tools":12}}},"byHour":{"12-09":{"sonnet-5":{"in":566,"cr":29409516,"cw":828730,"out":213822,"turns":284,"tools":317}},"12-10":{"sonnet-5":{"in":260,"cr":16162415,"cw":215548,"out":57572,"turns":130,"tools":115},"fable-5.1":{"in":996,"cr":10953047,"cw":601609,"out":98007,"turns":50,"tools":78},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"haiku-4.5":{"in":92,"cr":301481,"cw":99569,"out":5697,"turns":11,"tools":15}},"12-11":{"sonnet-5":{"in":918,"cr":42429290,"cw":1505262,"out":266875,"turns":459,"tools":492},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":10,"tools":0},"opus-5":{"in":96,"cr":3868423,"cw":253007,"out":49879,"turns":48,"tools":62},"fable-5.1":{"in":2322,"cr":35305316,"cw":490085,"out":227274,"turns":106,"tools":236},"haiku-4.5":{"in":124,"cr":568996,"cw":47338,"out":4396,"turns":15,"tools":19}},"12-14":{"sonnet-5":{"in":450,"cr":33658843,"cw":1675607,"out":212254,"turns":225,"tools":249},"opus-5":{"in":166,"cr":17626222,"cw":465202,"out":141838,"turns":83,"tools":63},"fable-5.1":{"in":790,"cr":21705935,"cw":1114687,"out":93557,"turns":42,"tools":112}},"12-15":{"sonnet-5":{"in":592,"cr":91379485,"cw":774387,"out":263158,"turns":296,"tools":427},"opus-5":{"in":86,"cr":15998338,"cw":76398,"out":47916,"turns":43,"tools":36},"fable-5.1":{"in":1120,"cr":49888405,"cw":279255,"out":107227,"turns":68,"tools":96}},"12-16":{"sonnet-5":{"in":636,"cr":105916378,"cw":1449806,"out":221729,"turns":318,"tools":329},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0},"opus-5":{"in":44,"cr":8127167,"cw":455089,"out":23994,"turns":22,"tools":16},"fable-5.1":{"in":484,"cr":30736422,"cw":72466,"out":48943,"turns":33,"tools":63}},"12-17":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"12-19":{"sonnet-5":{"in":782,"cr":196000515,"cw":2992938,"out":247700,"turns":391,"tools":402},"opus-5":{"in":82,"cr":18654134,"cw":463506,"out":44015,"turns":41,"tools":33},"fable-5.1":{"in":1254,"cr":11240942,"cw":451869,"out":51682,"turns":73,"tools":111},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"12-20":{"sonnet-5":{"in":1124,"cr":284116511,"cw":1647302,"out":257456,"turns":562,"tools":526},"opus-5":{"in":42,"cr":9314022,"cw":87910,"out":29109,"turns":21,"tools":18},"fable-5.1":{"in":1772,"cr":34674091,"cw":174415,"out":68370,"turns":114,"tools":127}},"12-21":{"sonnet-5":{"in":1153,"cr":214840855,"cw":1652970,"out":361337,"turns":577,"tools":564},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":8,"tools":0},"opus-5":{"in":62,"cr":12264700,"cw":747767,"out":28178,"turns":31,"tools":25},"fable-5.1":{"in":1240,"cr":35206582,"cw":118643,"out":46858,"turns":79,"tools":81}},"12-22":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-04":{"sonnet-5":{"in":1284,"cr":370646006,"cw":3699452,"out":440696,"turns":642,"tools":629},"opus-5":{"in":50,"cr":13826794,"cw":558792,"out":22478,"turns":25,"tools":21},"fable-5.1":{"in":1040,"cr":37261622,"cw":615900,"out":46876,"turns":65,"tools":81}},"13-05":{"sonnet-5":{"in":1150,"cr":277768067,"cw":980512,"out":351580,"turns":575,"tools":571},"opus-5":{"in":84,"cr":26406014,"cw":66281,"out":50458,"turns":42,"tools":33},"fable-5.1":{"in":1764,"cr":73346468,"cw":166306,"out":70509,"turns":100,"tools":111}},"13-06":{"sonnet-5":{"in":1184,"cr":310600134,"cw":1267394,"out":348582,"turns":592,"tools":623},"opus-5":{"in":16,"cr":5295513,"cw":8760,"out":5402,"turns":8,"tools":7},"fable-5.1":{"in":1248,"cr":56578725,"cw":122904,"out":55250,"turns":65,"tools":80}},"13-07":{"sonnet-5":{"in":672,"cr":181638880,"cw":878732,"out":173332,"turns":336,"tools":337},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":642,"cr":8507805,"cw":147954,"out":33203,"turns":32,"tools":62}},"13-08":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-09":{"sonnet-5":{"in":1180,"cr":276967520,"cw":3617503,"out":361068,"turns":590,"tools":563},"opus-5":{"in":12,"cr":3389572,"cw":645898,"out":7337,"turns":6,"tools":5},"fable-5.1":{"in":868,"cr":11890037,"cw":268786,"out":52350,"turns":51,"tools":88}},"13-10":{"sonnet-5":{"in":1188,"cr":250458245,"cw":1162298,"out":373141,"turns":594,"tools":587},"opus-5":{"in":26,"cr":8321635,"cw":669097,"out":16458,"turns":13,"tools":11},"fable-5.1":{"in":890,"cr":17690296,"cw":115658,"out":48683,"turns":50,"tools":62}},"13-11":{"sonnet-5":{"in":1108,"cr":297277662,"cw":1492213,"out":281733,"turns":554,"tools":541},"opus-5":{"in":10,"cr":2858771,"cw":680039,"out":10101,"turns":5,"tools":4},"fable-5.1":{"in":652,"cr":17493565,"cw":121626,"out":54977,"turns":37,"tools":71}},"13-12":{"sonnet-5":{"in":1058,"cr":349589181,"cw":675084,"out":295963,"turns":529,"tools":514},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"opus-5":{"in":18,"cr":6462914,"cw":13679,"out":11797,"turns":9,"tools":7},"fable-5.1":{"in":510,"cr":19642795,"cw":75816,"out":31373,"turns":34,"tools":49}},"13-13":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-14":{"sonnet-5":{"in":266,"cr":74118010,"cw":2220452,"out":49348,"turns":133,"tools":125},"opus-5":{"in":48,"cr":17017742,"cw":720476,"out":20436,"turns":24,"tools":21},"fable-5.1":{"in":316,"cr":12288223,"cw":636052,"out":23831,"turns":20,"tools":34}},"13-15":{"sonnet-5":{"in":142,"cr":32137104,"cw":44434,"out":22006,"turns":71,"tools":65},"opus-5":{"in":4,"cr":1504384,"cw":2623,"out":945,"turns":2,"tools":1},"fable-5.1":{"in":824,"cr":22937598,"cw":112464,"out":58382,"turns":32,"tools":42}},"13-16":{"fable-5.1":{"in":2,"cr":779727,"cw":687,"out":4022,"turns":1,"tools":1}}},"byPersona":{"hires:01":{"sonnet-5":{"in":534,"cr":36774834,"cw":2766012,"out":171530,"turns":267,"tools":258},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"naomi-voss":{"sonnet-5":{"in":2272,"cr":526616052,"cw":3997797,"out":592532,"turns":1137,"tools":1088},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"fable-5.1":{"in":668,"cr":4403486,"cw":136152,"out":55157,"turns":29,"tools":49}},"hires:02":{"sonnet-5":{"in":318,"cr":12723819,"cw":1286300,"out":129128,"turns":159,"tools":124}},"marcus-ilori":{"sonnet-5":{"in":1094,"cr":252720337,"cw":4539799,"out":409069,"turns":547,"tools":516},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":924,"cr":5418899,"cw":242822,"out":78481,"turns":35,"tools":81}},"hires:03":{"sonnet-5":{"in":992,"cr":25131824,"cw":3158035,"out":325144,"turns":496,"tools":666}},"renata-cole":{"sonnet-5":{"in":6116,"cr":1557224812,"cw":6153008,"out":1893083,"turns":3058,"tools":3023},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0}},"theo-bergman":{"sonnet-5":{"in":3635,"cr":964294851,"cw":4049500,"out":922536,"turns":1818,"tools":1684},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"hires:04":{"sonnet-5":{"in":82,"cr":1084521,"cw":364308,"out":17291,"turns":41,"tools":46},"fable-5.1":{"in":114,"cr":85829,"cw":41486,"out":1548,"turns":9,"tools":3}},"hires:05":{"opus-5":{"in":102,"cr":1238421,"cw":607469,"out":43994,"turns":51,"tools":40},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0},"sonnet-5":{"in":18,"cr":375583,"cw":116580,"out":5884,"turns":9,"tools":19}},"priya-nandakumar":{"opus-5":{"in":744,"cr":169697924,"cw":5307055,"out":466347,"turns":372,"tools":323},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"sonnet-5":{"in":100,"cr":3697332,"cw":92540,"out":25732,"turns":50,"tools":50}},"dana-whitfield":{"fable-5.1":{"in":16898,"cr":498096830,"cw":5217749,"out":1074975,"turns":974,"tools":1440},"sonnet-5":{"in":450,"cr":52137974,"cw":1953620,"out":247376,"turns":225,"tools":409},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":16,"tools":0}},"research":{"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34},"sonnet-5":{"in":102,"cr":2332678,"cw":303125,"out":60047,"turns":51,"tools":93},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"fable-5.1":{"in":130,"cr":122557,"cw":48973,"out":11213,"turns":5,"tools":12}}}}
+;
+const PRICES={"sonnet-5":{name:"Claude Sonnet 5",in:3,cr:0.30,cw:3.75,out:15,pub:false},"opus-5":{name:"Claude Opus 5",in:5,cr:0.50,cw:6.25,out:25,pub:false},"fable-5.1":{name:"Claude Fable 5.1",in:15,cr:1.50,cw:18.75,out:75,pub:false},"haiku-4.5":{name:"Claude Haiku 4.5",in:1,cr:0.10,cw:1.25,out:5,pub:true}};
+const usd=n=>n>=1000?"$"+Math.round(n).toLocaleString():n>=100?"$"+n.toFixed(0):n>=10?"$"+n.toFixed(1):"$"+n.toFixed(2);
+const cost=rec=>{let t=0;for(const m in rec){const p=PRICES[m];if(!p)continue;const r=rec[m];t+=(r.in*p.in+r.cr*p.cr+r.cw*p.cw+r.out*p.out)/1e6}return t};
+const costOf=(r,m)=>{const p=PRICES[m];return p?(r.in*p.in+r.cr*p.cr+r.cw*p.cw+r.out*p.out)/1e6:0};
+const roleGroup=k=>k==="pm"?"PM":k.startsWith("lead")?"Leads":k.startsWith("hire")?"Hires":"Research";
+const roleCol={PM:"var(--agent)",Leads:"color-mix(in srgb,var(--agent) 55%,var(--bg))",Hires:"var(--ink3)",Research:"var(--sec)"};
+const HOURS=(()=>{const out=[];for(let d=12;d<=13;d++)for(let h=(d===12?9:0);h<=(d===13?15:23);h++)out.push(`${d}-${String(h).padStart(2,"0")}`);return out})();
+const doneHours=doneTimes.map(t=>t); // decimal hours from 09-12 00:00
+function hourIndexToDecimal(label){const [d,h]=label.split("-").map(Number);return (d-12)*24+h}
+let anim=null;
+function recompute(){
+  // totals
+  const total=cost(TOK.byModel);
+  const fullInput=Object.entries(TOK.byModel).reduce((a,[m,r])=>{const p=PRICES[m];return p?a+((r.in+r.cr+r.cw)*p.in+r.out*p.out)/1e6:a},0);
+  $("#bigCost").innerHTML=usd(total)+"<small>USD</small>";$("#heroCost").textContent=usd(total);
+  $("#uStory").textContent=usd(total/24);$("#uPR").textContent=usd(total/73);$("#uLoc").textContent=usd(total/19444);$("#uHour").textContent=usd(total/30);$("#uHuman").textContent=usd(total/27);
+  $("#uCache").textContent=usd(fullInput-total)+" ("+Math.round((1-total/fullInput)*100)+"%)";
+  // donut by role group
+  const groups={};for(const k in TOK.byRole){const g=roleGroup(k);groups[g]=(groups[g]||0)+cost(TOK.byRole[k])}
+  const order=["Leads","PM","Hires","Research"];const dn=$("#donut");dn.innerHTML="";const C=2*Math.PI*70;let off=0;
+  order.forEach(g=>{const v=groups[g]||0;const len=C*v/total;const c=el("circle",{cx:100,cy:100,r:70,fill:"none",stroke:roleCol[g],"stroke-width":26,"stroke-dasharray":`${len} ${C-len}`,"stroke-dashoffset":-off,transform:"rotate(-90 100 100)",class:"seg"});dn.appendChild(c);off+=len});
+  dn.appendChild(el("text",{x:100,y:96,"text-anchor":"middle","font-size":22,fill:"var(--ink)",style:"font-family:var(--display);font-weight:700"},usd(total)));
+  dn.appendChild(el("text",{x:100,y:116,"text-anchor":"middle","font-size":10},"at list price"));
+  $("#donutLegend").innerHTML=order.map(g=>`<li><i class="sw" style="background:${roleCol[g]}"></i>${g}<b>${usd(groups[g]||0)} · ${Math.round(100*(groups[g]||0)/total)}%</b></li>`).join("");
+  // by model bars
+  const bm=$("#costModel");bm.innerHTML="";
+  const models=Object.keys(TOK.byModel).filter(m=>PRICES[m]).map(m=>{const r=TOK.byModel[m];const p=PRICES[m];return [PRICES[m].name,costOf(r,m),{cr:r.cr*p.cr/1e6,cw:r.cw*p.cw/1e6,out:r.out*p.out/1e6,in:r.in*p.in/1e6}]}).sort((a,b)=>b[1]-a[1]);
+  (function(){const W=560,L=150,R=90,rowH=44,H=models.length*rowH+30;const sv=svg(W,H);const pw=W-L-R;const max=models[0][1];
+    models.forEach((d,i)=>{const y=6+i*rowH;let x=L;const parts=[["cr","var(--agent)"],["cw","color-mix(in srgb,var(--agent) 55%,var(--bg))"],["out","var(--deploy)"],["in","var(--ink3)"]];
+      sv.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},d[0]));
+      parts.forEach(([k,c])=>{const w=(d[2][k]/max)*pw;if(w>0){sv.appendChild(el("rect",{x,y,width:Math.max(w,.5),height:22,fill:c,class:"grow"}));x+=w}});
+      sv.appendChild(el("text",{x:x+8,y:y+16,"font-size":12},usd(d[1])));});
+    sv.appendChild(el("text",{x:L,y:H-8,"font-size":10,fill:"var(--ink3)"},"segments: cache read · cache write · output · fresh input"));bm.appendChild(sv)})();
+  // by persona
+  const bp=$("#costPersona");bp.innerHTML="";
+  const names={"renata-cole":"Renata Cole · 03 lead","dana-whitfield":"Dana Whitfield · PM","theo-bergman":"Theo Bergman · 04 lead","naomi-voss":"Naomi Voss · 01 lead","priya-nandakumar":"Priya Nandakumar · 05 lead","marcus-ilori":"Marcus Ilori · 02 lead","hires:01":"01 hires","hires:02":"02 hires","hires:03":"03 hires","hires:04":"04 hires","hires:05":"05 hires","research":"Research subagents"};
+  const pers=Object.keys(TOK.byPersona).filter(k=>names[k]).map(k=>[names[k],cost(TOK.byPersona[k]),k]).sort((a,b)=>b[1]-a[1]);
+  hbars(bp,pers,d=>d[2].startsWith("hires")||d[2]==="research"?"var(--ink3)":"var(--agent)",d=>usd(d[1]),190);
+  // hourly cost chart
+  drawCostHour();
+}
+let costHourState={progress:HOURS.length};
+function drawCostHour(){
+  const box=$("#costHour");box.innerHTML="";const W=680,H=300,L=46,R=44,T=16,B=40;const sv=svg(W,H);const pw=W-L-R,ph=H-T-B;const n=HOURS.length;const bw=pw/n;
+  const perHour=HOURS.map(h=>{const rec=TOK.byHour[h]||{};const g={PM:0,Leads:0,Hires:0,Research:0};return g});
+  // roles per hour need role split: approximate by role share of that hour's model tokens is not available; use byHour by model x role share overall
+  const shareByRole={};let tot=0;for(const k in TOK.byRole){const g=roleGroup(k);shareByRole[g]=(shareByRole[g]||0)+cost(TOK.byRole[k]);tot+=cost(TOK.byRole[k])}
+  const hourCost=HOURS.map(h=>cost(TOK.byHour[h]||{}));
+  const max=Math.max(...hourCost);const step=max>150?50:25;const ymax=Math.ceil(max/step)*step||step;
+  for(let y=0;y<=ymax;y+=step){const yy=T+ph-(y/ymax)*ph;sv.appendChild(el("line",{x1:L,x2:W-R,y1:yy,y2:yy,stroke:"var(--grid)"}));sv.appendChild(el("text",{x:L-6,y:yy+4,"text-anchor":"end","font-size":10},"$"+y))}
+  // right axis stories
+  for(let y=0;y<=42;y+=14){const yy=T+ph-(y/42)*ph;sv.appendChild(el("text",{x:W-R+8,y:yy+4,"font-size":10,fill:"var(--ok)"},y))}
+  const order=["PM","Leads","Hires","Research"];
+  HOURS.forEach((h,i)=>{if(i>=costHourState.progress)return;const c=hourCost[i];if(!c)return;let acc=0;const x=L+i*bw+1.5;
+    order.forEach(g=>{const v=c*(shareByRole[g]/tot);const hh=(v/ymax)*ph;const y=T+ph-((acc+v)/ymax)*ph;sv.appendChild(el("rect",{x,y,width:Math.max(bw-3,2),height:hh,fill:roleCol[g]}));acc+=v});});
+  HOURS.forEach((h,i)=>{if(i%3===0||i===n-1)sv.appendChild(el("text",{x:L+i*bw+bw/2,y:H-B+16,"text-anchor":"middle","font-size":10},h.replace("-","\u00b7")))});
+  // burn-up line up to progress
+  const limit=hourIndexToDecimal(HOURS[Math.min(costHourState.progress,n)-1]||HOURS[0])+1;
+  const xs=v=>L+((v-9)/(40-9))*pw;const ys=v=>T+ph-(v/42)*ph;let d=`M${xs(9)} ${ys(0)}`;let cnt=0;
+  doneHours.forEach(t=>{if(t<=limit){d+=` H${xs(t)} V${ys(++cnt)}`}});d+=` H${xs(Math.min(limit,40))}`;
+  sv.appendChild(el("path",{d,fill:"none",stroke:"var(--ok)","stroke-width":2.2}));
+  if(costHourState.progress<n){const cx=L+costHourState.progress*bw;sv.appendChild(el("line",{x1:cx,x2:cx,y1:T,y2:T+ph,stroke:"var(--human)","stroke-width":1.5,"stroke-dasharray":"3 3"}))}
+  sv.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"day·hour (PDT) · bars $ by role · green line = stories Done (right axis)"));
+  box.appendChild(sv);
+  // clock
+  const idx=Math.min(costHourState.progress,n)-1;const spent=hourCost.slice(0,idx+1).reduce((a,b)=>a+b,0);
+  const lab=HOURS[Math.max(idx,0)];const [dd,hh]=lab.split("-");$("#clock").textContent=(dd==="12"?"Fri ":"Sat ")+hh+":00";$("#clockCost").textContent=usd(spent);
+  const lim2=hourIndexToDecimal(lab)+1;$("#clockDone").textContent=doneHours.filter(t=>t<=lim2).length;
+}
+$("#replayBtn").addEventListener("click",()=>{if(anim)clearInterval(anim);costHourState.progress=0;drawCostHour();const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;const stepMs=reduce?0:260;
+  anim=setInterval(()=>{costHourState.progress++;drawCostHour();if(costHourState.progress>=HOURS.length){clearInterval(anim);anim=null}},stepMs||1)});
+// price editor
+(function(){const box=$("#prices");Object.entries(PRICES).forEach(([m,p])=>{const d=document.createElement("div");d.className="price";d.innerHTML=`<b>${p.name}</b>`+[["in","fresh input"],["cr","cache read"],["cw","cache write"],["out","output"]].map(([k,l])=>`<label for="price-${m}-${k}">${l}<input id="price-${m}-${k}" type="number" step="0.01" min="0" value="${p[k]}" data-m="${m}" data-k="${k}"></label>`).join("")+`<div class="assume ${p.pub?"pub":""}">${p.pub?"published list price":"assumed · edit to your rate"}</div>`;box.appendChild(d)});
+  box.addEventListener("input",e=>{const t=e.target;if(t.dataset.m){PRICES[t.dataset.m][t.dataset.k]=parseFloat(t.value)||0;recompute()}})})();
+recompute();
+// ---------- count-up ----------
+(function(){const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;document.querySelectorAll("[data-count]").forEach(n=>{const target=+n.dataset.count;const fmt=n.dataset.fmt==="tok"?(v=>(v/1e6).toFixed(2)+" M"):(v=>Math.round(v).toLocaleString());if(reduce){n.textContent=fmt(target);return}const start=target*0.6,t0=performance.now(),dur=900;const tick=t=>{const k=Math.min(1,(t-t0)/dur);const e=1-Math.pow(1-k,3);n.textContent=fmt(start+(target-start)*e);if(k<1)requestAnimationFrame(tick)};requestAnimationFrame(tick)})})();
+// ---------- timeline reveal ----------
+(function(){if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;const rows=document.querySelectorAll(".tl-row");rows.forEach(r=>r.classList.add("pre"));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.remove("pre");io.unobserve(e.target)}}),{rootMargin:"0px 0px -10% 0px"});rows.forEach(r=>io.observe(r))})();
+
 // ---------- leads ----------
 (function(){
   const root=$("#leads");
