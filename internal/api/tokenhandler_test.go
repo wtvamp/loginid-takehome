@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -306,6 +307,43 @@ func TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess(t *testing.T) 
 	}
 	if !verifySecret("s3cr3t", newHash) {
 		t.Errorf("rehashed value doesn't verify against the same secret")
+	}
+}
+
+// TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds is the
+// best-effort half of the rehash design (Helena Marsh's review, PR #39):
+// the caller already proved they hold the correct secret, so a failure
+// to WRITE the rehashed value must never turn an earned 200 into an
+// error — the grant response is already fully determined before the
+// rehash is even attempted.
+func TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds(t *testing.T) {
+	salt := []byte("0123456789abcdef")
+	const oldTime = 2 // deliberately not this package's current argon2Time (1)
+	oldHash := argon2.IDKey([]byte("s3cr3t"), salt, oldTime, argon2Memory, argon2Threads, argon2KeyLen)
+	driftedEncoded := encodePHC(argon2Memory, oldTime, argon2Threads, salt, oldHash)
+
+	store := &fakeClientStore{
+		records: map[string]ClientRecord{
+			"drifted-client": {ClientID: "drifted-client", Name: "Drifted", ClientSecretHash: driftedEncoded, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+		},
+		updateHashErr: fmt.Errorf("simulated issuer database write failure"),
+	}
+	limiter := &fakeGrantLimiter{allow: true}
+	h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+
+	form := url.Values{"grant_type": {"client_credentials"}}
+	resp := postToken(t, h, form, "drifted-client", "s3cr3t", true)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200 even when the rehash persist write fails — the secret was already correctly verified before the rehash was attempted, body=%s", resp.StatusCode, body)
+	}
+	if len(store.updateHashCalls) != 1 {
+		t.Errorf("UpdateSecretHash calls = %v, want exactly one attempt even though it fails", store.updateHashCalls)
+	}
+	// The stored hash must be unchanged, since the write failed — the
+	// row still verifies with its original (drifted) hash next time.
+	if store.records["drifted-client"].ClientSecretHash != driftedEncoded {
+		t.Errorf("stored hash changed despite UpdateSecretHash returning an error")
 	}
 }
 
