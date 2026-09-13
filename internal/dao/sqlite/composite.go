@@ -33,7 +33,7 @@ func (r *repository) CreateProfileWithCredential(ctx context.Context, p *model.U
 	if err != nil {
 		return nil, nil, translateError(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	profileID := uuid.NewString()
 	now := time.Now().UTC().Format(timeLayout)
@@ -96,7 +96,7 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 	if err != nil {
 		return dao.SweepResult{}, translateError(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	cutoff := olderThan.UTC().Format(timeLayout)
 	rows, err := tx.QueryContext(ctx,
@@ -109,12 +109,12 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return dao.SweepResult{}, translateError(err)
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return dao.SweepResult{}, translateError(err)
 	}
@@ -173,7 +173,7 @@ func (r *repository) DeleteProfile(ctx context.Context, id string, externalRef *
 	if err != nil {
 		return translateError(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var source string
 	if err := tx.QueryRowContext(ctx, "SELECT source FROM user_profile WHERE id = ?", id).Scan(&source); err != nil {
