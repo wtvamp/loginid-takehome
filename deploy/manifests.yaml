@@ -1,16 +1,9 @@
-# Walking-skeleton deploy manifests for LT-34/LT-45/LT-47's vertical slice.
-#
-# Deliberately narrower than 04-infra-devops/containerization-design.md's
-# full design: no api-service-issuer Deployment, no JWT signing key mount,
-# no migration Job, no DB_DSN secret. Those all wire up real Secrets for
-# config the current code (internal/app, internal/config) doesn't use yet
-# — config.Load() never errors on an unset DB_DSN/DB_DSN_FILE, and
-# NewRouter only serves /healthz. Applying the full manifest set today
-# would mean mounting Secrets nothing reads, or inventing placeholder
-# Secrets that represent nothing real — worse than deploying what the code
-# actually needs. This file grows to match the full design (issuer
-# Deployment, migration Job, DB/JWT secrets) exactly when 03 lands the
-# DAO/JWT wiring those need, per 04-infra-devops/decisions/deploy-path.md.
+# Deploy manifests for LT-34/LT-45/LT-47's vertical slice, extended in
+# LT-32 for the issuer Deployment split (F13's fix). Still deliberately
+# narrower than 04-infra-devops/containerization-design.md's full design:
+# no migration Job, no DB_DSN secret — those wire up config the current
+# code doesn't use yet (config.Load() never errors on an unset
+# DB_DSN/DB_DSN_FILE). This file grows to match once 03 lands DAO wiring.
 #
 # No Namespace object here, deliberately: the scoped loginid-takehome-deployer
 # ServiceAccount's RBAC (deploy/rbac.yaml) is namespace-scoped to
@@ -19,6 +12,22 @@
 # The namespace itself is created once, out of band, by whoever runs the
 # initial cluster bootstrap (deploy/rbac.yaml also creates
 # loginid-takehome-runners for the same reason).
+#
+# No Secret object here either, and none ever will be for the JWT signing
+# key specifically: deploy/rbac.yaml's Role grants nothing on `secrets` at
+# all, so an attempt to apply one here would fail Forbidden, the same way
+# Namespace did. The signing-key Secret is created out-of-band — see
+# deploy/issuer-secret-bootstrap.yaml — per Tobias's (01) accepted
+# objection on LT-32's refinement: the CI-applied manifest set must never
+# be the thing that can read or write that key.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: api-service, namespace: loginid-takehome}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: api-service-issuer, namespace: loginid-takehome}
+---
 apiVersion: v1
 kind: ResourceQuota
 metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
@@ -41,6 +50,7 @@ spec:
   template:
     metadata: {labels: {app: api-service}}
     spec:
+      serviceAccountName: api-service
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
       containers:
         - name: api-service
@@ -51,6 +61,7 @@ spec:
             limits: {cpu: "500m", memory: "256Mi"}
           env:
             - {name: HTTP_ADDR, value: ":8080"}
+            - {name: APP_MODE, value: verifier}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
 ---
@@ -59,6 +70,49 @@ kind: Service
 metadata: {name: api-service, namespace: loginid-takehome}
 spec:
   selector: {app: api-service}
+  ports: [{port: 443, targetPort: 8080}]
+---
+# api-service-issuer: the ONLY Deployment that mounts the JWT signing key
+# (F13's fix, per handoff-04-secrets.md row #2 and
+# containerization-design.md's "Why two Deployments of one image, not RBAC
+# on one"). Same image as api-service, mode selected by APP_MODE.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service-issuer
+  namespace: loginid-takehome
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: api-service-issuer}}
+  template:
+    metadata: {labels: {app: api-service-issuer}}
+    spec:
+      serviceAccountName: api-service-issuer
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
+      containers:
+        - name: api-service
+          image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
+          securityContext: {readOnlyRootFilesystem: true}
+          resources:
+            requests: {cpu: "100m", memory: "128Mi"}
+            limits: {cpu: "500m", memory: "256Mi"}
+          env:
+            - {name: HTTP_ADDR, value: ":8080"}
+            - {name: APP_MODE, value: issuer}
+            - {name: JWT_SIGNING_KEY_FILE, value: /secrets/jwt/signing-key}
+          volumeMounts:
+            - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
+      volumes:
+        - name: jwt-signing-key
+          secret: {secretName: api-service-jwt-signing-key}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: api-service-issuer, namespace: loginid-takehome}
+spec:
+  selector: {app: api-service-issuer}
   ports: [{port: 443, targetPort: 8080}]
 ---
 apiVersion: apps/v1
@@ -120,3 +174,4 @@ spec:
       http:
         paths:
           - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
+          - {path: /auth/token, pathType: Exact, backend: {service: {name: api-service-issuer, port: {number: 443}}}}
