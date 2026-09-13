@@ -544,3 +544,125 @@ func TestJWKSCache_UnknownKidReservationCapsDistinctKids(t *testing.T) {
 		t.Errorf("a flood of %d distinct garbage kids triggered %d extra fetches, want at most %d (the cap)", jwksMaxTrackedUnknownKids+20, extraFetches, jwksMaxTrackedUnknownKids)
 	}
 }
+
+// TestJWKSCache_ColdStartFailure_WrapsErrJWKSUnreachable is the live
+// review's own finding: a fetch failure with NO cache populated yet
+// (cold start — e.g. the issuer's JWKS Service is misconfigured from
+// the very first request) must be distinguishable from an ordinary bad
+// token. Previously this path returned the raw fetch error, unwrapped
+// by anything logAuthnFailure checked for, so it was miscategorized as
+// AuditAuthnFailure instead of AuditJWKSUnavailable.
+func TestJWKSCache_ColdStartFailure_WrapsErrJWKSUnreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+	_, err := cache.KeyForKid(context.Background(), "any-kid")
+	if err == nil {
+		t.Fatalf("expected an error against an unreachable issuer with no cache yet")
+	}
+	if !errors.Is(err, ErrJWKSUnreachable) {
+		t.Errorf("err = %v, want it to wrap ErrJWKSUnreachable", err)
+	}
+	if errors.Is(err, ErrJWKSStale) {
+		t.Errorf("cold-start failure must not be ErrJWKSStale — no cache ever existed to go stale")
+	}
+}
+
+// TestLogAuthnFailure_ColdStartJWKSFailure_IsAuditJWKSUnavailable proves
+// the middleware-level fix directly: an ErrJWKSUnreachable-wrapped error
+// must produce AuditJWKSUnavailable, not the default AuditAuthnFailure.
+func TestLogAuthnFailure_ColdStartJWKSFailure_IsAuditJWKSUnavailable(t *testing.T) {
+	audit := &fakeAuditLogger{}
+
+	wrapped := fmt.Errorf("api: fetching JWKS from https://issuer.internal: connection refused: %w", ErrJWKSUnreachable)
+	logAuthnFailure(context.Background(), audit, wrapped)
+
+	if len(audit.events) != 1 {
+		t.Fatalf("audit events = %d, want 1", len(audit.events))
+	}
+	if audit.events[0].Kind != AuditJWKSUnavailable {
+		t.Errorf("audit kind = %q, want %q", audit.events[0].Kind, AuditJWKSUnavailable)
+	}
+}
+
+func TestJWKSURLHost(t *testing.T) {
+	cases := map[string]string{
+		"http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json": "api-service-issuer.loginid-takehome.svc.cluster.local",
+		"http://127.0.0.1:8080/.well-known/jwks.json":                                        "127.0.0.1:8080",
+		"not-a-url": "not-a-url",
+	}
+	for raw, want := range cases {
+		if got := jwksURLHost(raw); got != want {
+			t.Errorf("jwksURLHost(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+func TestClassifyJWKSFetchError(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("api: fetching JWKS from http://x: status 503"), "http_status_error"},
+		{fmt.Errorf("api: fetching JWKS from http://x: dial tcp: connection refused"), "network_error"},
+		{fmt.Errorf("api: parsing JWKS: unexpected end of JSON input"), "response_parse_error"},
+		{fmt.Errorf("api: reading JWKS response: unexpected EOF"), "response_read_error"},
+		{fmt.Errorf("api: building JWKS request for http://x: invalid URL"), "request_build_error"},
+		{fmt.Errorf("something else entirely"), "unknown"},
+	}
+	for _, c := range cases {
+		if got := classifyJWKSFetchError(c.err); got != c.want {
+			t.Errorf("classifyJWKSFetchError(%q) = %q, want %q", c.err, got, c.want)
+		}
+	}
+}
+
+// TestJWKSCache_RecoveryAfterFailureStreak_ResetsFailureCount confirms
+// the recovery path (logged once, per refresh()'s own "once per streak"
+// discipline) actually clears consecutiveFailures/staleAlerted, not just
+// that a subsequent successful KeyForKid call succeeds — the whole point
+// of tracking a "streak" is that the counters genuinely reset, so the
+// NEXT failure streak logs again rather than staying silent forever
+// after the first one.
+func TestJWKSCache_RecoveryAfterFailureStreak_ResetsFailureCount(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	body := jwksBody(t, "key-1", &key.PublicKey)
+	var failing atomic.Bool
+	failing.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failing.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	cache := NewJWKSCache(srv.URL, time.Minute, nil)
+	ctx := context.Background()
+
+	// Fails with no cache yet — cold start.
+	if _, err := cache.KeyForKid(ctx, "key-1"); !errors.Is(err, ErrJWKSUnreachable) {
+		t.Fatalf("first (failing) attempt: err = %v, want ErrJWKSUnreachable", err)
+	}
+	if cache.consecutiveFailures != 1 {
+		t.Fatalf("consecutiveFailures = %d, want 1 after the first failure", cache.consecutiveFailures)
+	}
+
+	// Recovers.
+	failing.Store(false)
+	cache.lastAttempt = time.Time{} // bypass jwksMinRefreshRetryInterval for this test
+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+		t.Fatalf("recovery attempt: %v", err)
+	}
+	if cache.consecutiveFailures != 0 {
+		t.Errorf("consecutiveFailures = %d, want 0 after a successful fetch", cache.consecutiveFailures)
+	}
+}
