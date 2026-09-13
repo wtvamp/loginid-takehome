@@ -199,3 +199,23 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Model/effort:** Sonnet, low.
 **Type:** Task.
 **Labels:** `track-04`.
+
+---
+
+## Story 11 — Conformance/postgres test packages race on the shared CI database (PR #47 follow-up)
+
+**Status: assigned to Renata (03), not this track** — recorded here because it surfaced through this track's CI change (PR #47, LT-38's real-database gate) and is a live example of why the real-runner run, not the local reproduction, was the actual verification.
+
+**Description:** PR #47 (`pr-check.yml`'s `services:`/CockroachDB-container change) was verified locally before pushing — `internal/dao/conformance`, `internal/dao/postgres`, and `internal/api` were all run by hand against the identical containers/DSNs the workflow uses, and all passed, including `TestConformance_CockroachDB_RealSerializationRetry`. The real GitHub Actions run (34761945847) still surfaced a failure the local run didn't: `internal/dao/postgres` failed 5 tests with `duplicate key value violates unique constraint "pg_extension_name_index"` / `operator class "gin_trgm_ops" does not exist`. Root cause per the PM: `go test`'s package-level parallelism runs `internal/dao/conformance` and `internal/dao/postgres` concurrently against the *same* Postgres database (one `TEST_POSTGRES_DSN`, one instance), and both independently run `CREATE EXTENSION IF NOT EXISTS pg_trgm` against it — a race between two packages, not a bug in either package's own logic, and not something a serial local run (or a run of just one package at a time) would ever reproduce. This is why local verification here was necessary-but-not-sufficient: it proved the containers and DSNs were reachable and correctly wired, but package-to-package interference only shows up when the full `go test ./...` matrix actually runs in the shared CI environment, in parallel, the way the workflow runs it.
+
+**Fix (Renata's, not this track's):** each test package gets its own throwaway database/schema rather than sharing the one Postgres instance's default database — fixture-ownership scope, not a CI config change. Per the PM's explicit ruling: **do not work around this in `pr-check.yml` with `go test -p 1`** (that would silence the race by serializing everything, masking the same class of bug in the app's own future test additions rather than fixing the actual isolation gap).
+
+**Acceptance criteria:**
+- [ ] Renata's fixture-isolation change merges (each package provisions its own database/schema against the shared instance, not a shared default database).
+- [ ] PR #47 rebased or re-run against that change, green on a real GitHub Actions run — not just local reproduction.
+- [ ] `pr-check.yml` itself unchanged by this fix (no `-p 1`, no other serialization workaround added here).
+
+**Depends on:** Renata's DAO test fixture isolation fix.
+**Model/effort:** Sonnet, low (this track's part is just tracking/re-verifying; the fix itself is 03's).
+**Type:** Bug.
+**Labels:** `track-04`, `track-03`.
