@@ -66,6 +66,21 @@ func TestLoad_AppModeRejectsUnknownValue(t *testing.T) {
 	}
 }
 
+// TestLoad_AppModeAcceptsSweep confirms LT-44's third mode value is a
+// real, accepted APP_MODE — not a typo this validation should be
+// rejecting alongside "verifyer" above.
+func TestLoad_AppModeAcceptsSweep(t *testing.T) {
+	t.Setenv("APP_MODE", "sweep")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error for APP_MODE=sweep: %v", err)
+	}
+	if cfg.AppMode != "sweep" {
+		t.Errorf("AppMode = %q, want %q", cfg.AppMode, "sweep")
+	}
+}
+
 // TestLoad_IssuerModeRequiresSigningKeyFile is LT-32's core enforcement
 // site for "the api-service (verifying) Deployment holds only the public
 // key material needed to verify, never the private key, regardless of
