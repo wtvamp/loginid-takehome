@@ -156,6 +156,47 @@ func TestPostgresClientStore_Get_DisabledStatus(t *testing.T) {
 	}
 }
 
+// TestPostgresClientStore_UpdateSecretHash is the opportunistic-rehash
+// mechanism's own storage-layer test (handoff-03-auth.md v7) — a real
+// UPDATE against a real row, confirmed by re-reading it back, not just
+// asserted from the SQL text.
+func TestPostgresClientStore_UpdateSecretHash(t *testing.T) {
+	db := setupIssuerDB(t)
+	oldHash, err := hashSecret("s3cr3t")
+	if err != nil {
+		t.Fatalf("hashing secret: %v", err)
+	}
+	insertOAuthClient(t, db, "rehash-client", "Rehash Test", &oldHash, "set", []string{"profile:search"}, "aud", "active")
+
+	newHash, err := hashSecret("s3cr3t")
+	if err != nil {
+		t.Fatalf("hashing secret: %v", err)
+	}
+	store := NewPostgresClientStore(db)
+	if err := store.UpdateSecretHash(context.Background(), "rehash-client", newHash); err != nil {
+		t.Fatalf("UpdateSecretHash: %v", err)
+	}
+
+	rec, ok, err := store.Get(context.Background(), "rehash-client")
+	if err != nil || !ok {
+		t.Fatalf("Get after UpdateSecretHash: ok=%v err=%v", ok, err)
+	}
+	if rec.ClientSecretHash != newHash {
+		t.Errorf("stored hash = %q, want the new hash %q", rec.ClientSecretHash, newHash)
+	}
+	if !verifySecret("s3cr3t", rec.ClientSecretHash) {
+		t.Errorf("updated hash doesn't verify against the secret it was set to")
+	}
+}
+
+func TestPostgresClientStore_UpdateSecretHash_NoSuchClient(t *testing.T) {
+	db := setupIssuerDB(t)
+	store := NewPostgresClientStore(db)
+	if err := store.UpdateSecretHash(context.Background(), "does-not-exist", "irrelevant"); err == nil {
+		t.Errorf("UpdateSecretHash against a nonexistent client_id returned nil error, want an error")
+	}
+}
+
 // TestOAuthClient_SchemaConstraints exercises the migration's own CHECK
 // constraints directly against a real Postgres — the DDL is the actual
 // enforcement site for these invariants, not application code, so the
