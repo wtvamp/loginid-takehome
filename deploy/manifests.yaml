@@ -880,3 +880,9 @@ spec:
                 - {name: APP_MODE, value: sweep}
                 - {name: DB_DRIVER, value: postgres}
                 - {name: DB_DSN_FILE, value: /secrets/db/dsn}
+                # Purely descriptive (PR #64, 03) — echoed in the
+                # startup log line, never read by internal/sweep's own
+                # logic. Matches this CronJob's own schedule (17 3 * *
+                # *, I = 24h) so the log says the real interval instead
+                # of "unset".
+                - {name: SWEEP_INTERVAL_SECONDS, value: "86400"}
