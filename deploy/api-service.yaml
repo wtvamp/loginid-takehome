@@ -27,6 +27,7 @@ spec:
             - {name: APP_MODE, value: verifier}
             - {name: DB_DRIVER, value: postgres}
             - {name: DB_DSN_FILE, value: /secrets/db/dsn}
+            - {name: AUTH_JWKS_URL, value: http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json}
           volumeMounts:
             - {name: db-runtime-credential, mountPath: /secrets/db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
