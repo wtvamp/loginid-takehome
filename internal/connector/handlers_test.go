@@ -84,6 +84,60 @@ func TestNewAuthHandler_VendorRejects_GenericFailure(t *testing.T) {
 	}
 }
 
+// TestNewAuthHandler_IdentityLimiter_WiredThroughCorrectly proves the
+// handler-level wiring, not just the identityRateLimiter component in
+// isolation: repeated failures against ONE attempted vendor username
+// eventually block further attempts against THAT username specifically,
+// while a request attempting a DIFFERENT username under the same caller
+// is unaffected — attack-tree leaf 5's per-identity dimension actually
+// reaches the handler, not just the component's own unit tests.
+func TestNewAuthHandler_IdentityLimiter_WiredThroughCorrectly(t *testing.T) {
+	vendor := &fakeVendorClient{
+		authFn: func(context.Context, string, string) (string, error) { return "", ErrVendorAuthFailed },
+	}
+	limiter := api.NewInProcessGrantLimiter(time.Millisecond, time.Hour, 1000, nil) // caller-level: high threshold, not what's under test
+	identityLimiter := NewIdentityRateLimiter()
+	h := NewAuthHandler(Deps{Vendor: vendor, Limiter: limiter, IdentityLimiter: identityLimiter, AuditLog: api.StdoutAuditLogger{}})
+
+	post := func(username string) int {
+		req := withAuthContext("caller-1")(httptest.NewRequest(http.MethodPost, "/auth",
+			strings.NewReader(`{"username":"`+username+`","password":"wrong"}`)))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	blockedAfter := -1
+	for i := 0; i < 10; i++ {
+		code := post("victim-username")
+		if code == http.StatusTooManyRequests {
+			blockedAfter = i
+			break
+		}
+		if code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status = %d, want 401 or 429", i, code)
+		}
+	}
+	if blockedAfter == -1 {
+		t.Fatalf("repeated failures against the same username were never rate-limited (429) — identity-level wiring did not engage")
+	}
+
+	// Let the CALLER-level limiter's own (short, 1ms-base) backoff decay
+	// — this test's caller-level limiter is deliberately permissive so
+	// the identity dimension is what's under test, but it still applies
+	// its own brief backoff after each failure; the identity-level
+	// limiter's backoff (a full second, unaffected by this sleep) is
+	// what should still be blocking "victim-username" specifically.
+	time.Sleep(10 * time.Millisecond)
+
+	// A DIFFERENT username under the same caller must still be reachable
+	// (401 for the wrong password, not 429) — proving the block is
+	// per-identity, not per-caller, at the handler level.
+	if code := post("a-different-username"); code != http.StatusUnauthorized {
+		t.Errorf("a different username was blocked (status %d) by an unrelated username's failures under the same caller", code)
+	}
+}
+
 // TestNewIdentityHandler_ThreeFailureBranches_ContentIdenticalAndTimingClose
 // is the enforcement site for both F3 (content) and Marcus Ilori's
 // ~100ms floor ruling (timing) — refinement/LT-41.md's own named test

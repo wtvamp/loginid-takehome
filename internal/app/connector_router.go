@@ -34,15 +34,20 @@ const (
 // api-service's audience, so a profile:*-scoped api-service token
 // cannot be replayed against this connector and vice versa).
 //
+// Builds its own JWKSCache from cfg.AuthJWKSURL (same pattern as
+// NewVerifierRouter) rather than taking one as a parameter — both
+// binaries verify tokens minted by the same issuer, at the same TTL.
+//
 // vendor is the outbound seam to the third-party IDP — either a real
 // (HTTPVendorClient) or stub (StubVendorClient) implementation;
 // cmd/idp-connector/main.go decides which based on whether
 // IDP_ABC_BASE_URL is configured.
-func NewConnectorRouter(cfg config.Config, keys api.KeySource, vendor connector.VendorClient) http.Handler {
+func NewConnectorRouter(cfg config.Config, vendor connector.VendorClient) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler("idp-connector"))
 
 	auditLog := api.StdoutAuditLogger{}
+	keys := api.NewJWKSCache(cfg.AuthJWKSURL, connectorJWKSCacheTTL, nil)
 	authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.ConnectorJWTAudience, auditLog)
 	protect := func(h http.Handler) http.Handler {
 		return api.NewDeadlineMiddleware(authMiddleware(h))
@@ -61,7 +66,12 @@ func NewConnectorRouter(cfg config.Config, keys api.KeySource, vendor connector.
 		},
 	)
 
-	deps := connector.Deps{Vendor: vendor, Limiter: limiter, AuditLog: auditLog}
+	// The second, per-(caller, attempted identity) dimension leaf 5
+	// actually specifies — see internal/connector/identitylimiter.go's
+	// own doc comment (Tomasz Wrede's cold review of PR #40).
+	identityLimiter := connector.NewIdentityRateLimiter()
+
+	deps := connector.Deps{Vendor: vendor, Limiter: limiter, IdentityLimiter: identityLimiter, AuditLog: auditLog}
 	mux.Handle("POST /auth", protect(connector.NewAuthHandler(deps)))
 	mux.Handle("POST /identity", protect(connector.NewIdentityHandler(deps)))
 

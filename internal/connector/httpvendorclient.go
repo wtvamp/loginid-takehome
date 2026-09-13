@@ -167,13 +167,9 @@ func (c *HTTPVendorClient) FetchIdentity(ctx context.Context, accessToken, phone
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
 		return Identity{}, ErrVendorIdentityNotFound
 	}
-	return Identity{
-		Name:          body.Name,
-		Phone:         body.Phone,
-		StreetAddress: body.StreetAddress,
-		Locality:      body.Locality,
-		Region:        body.Region,
-		PostalCode:    body.PostalCode,
-		Country:       body.Country,
-	}, nil
+	// vendorIdentityResponse's fields are identical in name/order/type to
+	// Identity (only the json tags differ), so a direct type conversion
+	// is both valid and clearer than restating every field (staticcheck
+	// S1016).
+	return Identity(body), nil
 }
