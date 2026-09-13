@@ -2,29 +2,42 @@
 -- Postgres/CockroachDB DDL per 05-data-ops/multi-db-strategy.md §5.
 -- Every constraint is named — error translation matches on SQLSTATE plus
 -- constraint name, never message text (contract §4; ddl-review-checklist.md B).
+-- Names must match migrations/sqlite/00001_initial_schema.sql exactly so
+-- the two migrations stay diffable against each other.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE auth_method (
-	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-	name TEXT NOT NULL UNIQUE,
+	id UUID DEFAULT gen_random_uuid(),
+	name TEXT NOT NULL,
 	requires_secret BOOLEAN NOT NULL,
 	is_active BOOLEAN NOT NULL,
-	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	CONSTRAINT pk_auth_method PRIMARY KEY (id),
+	CONSTRAINT uq_auth_method_name UNIQUE (name)
 );
 
 CREATE TABLE user_profile (
-	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-	name TEXT COLLATE "C" NOT NULL CHECK (length(trim(name)) > 0),
-	phone TEXT CONSTRAINT ck_user_profile_phone_e164 CHECK (phone IS NULL OR phone ~ '^\+[1-9][0-9]{1,14}$'),
-	street_address TEXT CONSTRAINT ck_user_profile_street_address_nonempty CHECK (street_address IS NULL OR length(trim(street_address)) > 0),
-	locality TEXT CONSTRAINT ck_user_profile_locality_nonempty CHECK (locality IS NULL OR length(trim(locality)) > 0),
-	region TEXT CONSTRAINT ck_user_profile_region_nonempty CHECK (region IS NULL OR length(trim(region)) > 0),
-	postal_code TEXT CONSTRAINT ck_user_profile_postal_code_nonempty CHECK (postal_code IS NULL OR length(trim(postal_code)) > 0),
-	country TEXT CHECK (country IS NULL OR (country = upper(country) AND length(country) = 2)),
-	source TEXT NOT NULL CHECK (source IN ('direct','idp_cache')),
+	id UUID DEFAULT gen_random_uuid(),
+	name TEXT COLLATE "C" NOT NULL,
+	phone TEXT,
+	street_address TEXT,
+	locality TEXT,
+	region TEXT,
+	postal_code TEXT,
+	country TEXT,
+	source TEXT NOT NULL,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	CONSTRAINT pk_user_profile PRIMARY KEY (id),
+	CONSTRAINT ck_user_profile_name_nonempty CHECK (length(trim(name)) > 0),
+	CONSTRAINT ck_user_profile_phone_e164 CHECK (phone IS NULL OR phone ~ '^\+[1-9][0-9]{1,14}$'),
+	CONSTRAINT ck_user_profile_street_address_nonempty CHECK (street_address IS NULL OR length(trim(street_address)) > 0),
+	CONSTRAINT ck_user_profile_locality_nonempty CHECK (locality IS NULL OR length(trim(locality)) > 0),
+	CONSTRAINT ck_user_profile_region_nonempty CHECK (region IS NULL OR length(trim(region)) > 0),
+	CONSTRAINT ck_user_profile_postal_code_nonempty CHECK (postal_code IS NULL OR length(trim(postal_code)) > 0),
+	CONSTRAINT ck_user_profile_country_alpha2 CHECK (country IS NULL OR (country = upper(country) AND length(country) = 2)),
+	CONSTRAINT ck_user_profile_source CHECK (source IN ('direct','idp_cache'))
 );
 
 -- Expression index on LOWER(name), not the bare column — a GIN index on
@@ -33,16 +46,20 @@ CREATE INDEX idx_user_profile_name_trgm ON user_profile USING GIN (LOWER(name) g
 CREATE INDEX idx_user_profile_phone ON user_profile (phone);
 
 CREATE TABLE user_credential (
-	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-	user_id UUID NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
+	id UUID DEFAULT gen_random_uuid(),
+	user_id UUID NOT NULL,
 	username TEXT NOT NULL,
-	method_id UUID NOT NULL CONSTRAINT fk_user_credential_method REFERENCES auth_method(id),
+	method_id UUID NOT NULL,
 	secret BYTEA,
-	secret_state TEXT NOT NULL CHECK (secret_state IN ('none','set','revoked')),
+	secret_state TEXT NOT NULL,
 	hash_algo TEXT,
 	hash_cost INTEGER,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	CONSTRAINT pk_user_credential PRIMARY KEY (id),
+	CONSTRAINT fk_user_credential_profile FOREIGN KEY (user_id) REFERENCES user_profile(id) ON DELETE CASCADE,
+	CONSTRAINT fk_user_credential_method FOREIGN KEY (method_id) REFERENCES auth_method(id),
+	CONSTRAINT ck_user_credential_secret_state_enum CHECK (secret_state IN ('none','set','revoked')),
 	CONSTRAINT ck_user_credential_secret_state CHECK (
 		(secret_state = 'set'  AND secret IS NOT NULL AND hash_algo IS NOT NULL AND hash_cost IS NOT NULL)
 		OR
@@ -55,13 +72,15 @@ CREATE INDEX idx_user_credential_user_id ON user_credential (user_id);
 CREATE INDEX idx_user_credential_method_id ON user_credential (method_id);
 
 CREATE TABLE deletion_log (
-	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id UUID DEFAULT gen_random_uuid(),
 	profile_id UUID NOT NULL,
 	source TEXT NOT NULL,
-	reason TEXT NOT NULL CONSTRAINT ck_deletion_log_reason CHECK (reason IN ('retention_sweep','subject_request')),
+	reason TEXT NOT NULL,
 	external_ref TEXT,
 	job_run_id TEXT,
-	deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	deleted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	CONSTRAINT pk_deletion_log PRIMARY KEY (id),
+	CONSTRAINT ck_deletion_log_reason CHECK (reason IN ('retention_sweep','subject_request'))
 );
 -- No name, phone, address, username or secret column — contract §6.11,
 -- checklist item 17.

@@ -78,7 +78,7 @@ func (pr profileRepo) Search(ctx context.Context, q dao.ProfileQuery) ([]model.U
 	if err != nil {
 		return nil, 0, translateError(err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []model.UserProfile
 	for rows.Next() {
