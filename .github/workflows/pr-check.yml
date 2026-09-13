@@ -28,7 +28,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.1.6 # built against Go >= 1.27; keep in step with go-version above
 
       - name: Test (race)
         run: go test ./... -race -v
@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks needs full history, not a shallow clone
 
       - uses: actions/setup-go@v5
         with:
