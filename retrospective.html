@@ -182,6 +182,8 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
       <div><div class="k">Wall clock</div><div class="v">30.0 h</div><div class="s">first commit 09-12 11:02 → last 09-13 15:05</div></div>
       <div><div class="k">Pull requests</div><div class="v">75</div><div class="s">73 merged, 2 superseded</div></div>
       <div><div class="k">Commits</div><div class="v">289</div><div class="s">19,444 lines of Go · 11,033 of Markdown</div></div>
+      <div><div class="k">Tokens generated</div><div class="v">6.53 M</div><div class="s">9,402 assistant turns · 9,967 tool calls</div></div>
+      <div><div class="k">Tokens read</div><div class="v">4.15 B</div><div class="s">99.1% served from prompt cache</div></div>
       <div><div class="k">Human decisions</div><div class="v">27</div><div class="s">rulings, approvals, corrections</div></div>
       <div><div class="k">Live-review failures</div><div class="v">19</div><div class="s">before the 24 implementation passes</div></div>
     </div>
@@ -246,15 +248,22 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
 <!-- ================= CONTRIBUTION ================= -->
 <section id="contrib">
   <div class="sec-head">
-    <div><span class="eyebrow">Contribution</span><h2>Who did what, by persona</h2></div>
-    <p>Per-session token counts were not instrumented, so contribution is shown by what the record can count: commits, lines, and how often a persona's work is named in the project log. The one instrumented data point is Amber's Vault run: 7.2 million cached input tokens read, 49 thousand generated, fifty tool calls.</p>
+    <div><span class="eyebrow">Contribution</span><h2>Who did what, in tokens</h2></div>
+    <p>Every Claude Code session writes its transcript to disk with per-turn token usage, so these are measured, not estimated: 120 transcripts, deduplicated by message id, timestamps converted to Pacific. "Read" counts every input token the model processed, 99.1% of it served from the prompt cache; "generated" is what the models wrote.</p>
   </div>
   <div class="grid2">
-    <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label). Renata's 21,831 lines are the Go; Theo's are manifests and workflows.</p><div id="authors"></div></div>
-    <div class="panel"><h3>Named in the log</h3><p class="sub">Mentions in LOG.md, a proxy for how often a persona's judgement mattered enough to record.</p><div id="mentions"></div></div>
+    <div class="panel"><h3>Tokens generated, by role</h3><p class="sub">Output tokens across all sessions. Leads wrote the most; the PM's share is coordination, rulings, and the log.</p><div id="tokrole"></div></div>
+    <div class="panel"><h3>Tokens read, by role</h3><p class="sub">Input tokens processed. Long-lived lead sessions re-read their whole context on every turn, which is where the billions come from.</p><div id="tokread"></div></div>
+    <div class="panel"><h3>Generated tokens per hour, by role</h3><p class="sub">Stacked: PM, leads, hires, research subagents. Quiet hours are usage pauses.</p><div id="tokhour"></div></div>
+    <div class="panel"><h3>By model</h3><p class="sub">Model was pinned per seat: Fable 5.1 for the orchestrator, Sonnet 5 for four leads and all hires, Opus 5 for the data-ops lead, Haiku for three throwaway lookups.</p><div id="tokmodel"></div>
+      <p class="note">The <span class="mono">&lt;synthetic&gt;</span> model label on 42 turns is Claude Code's placeholder for tool-result relays with no model call; it carries no tokens.</p></div>
+  </div>
+  <div class="grid2" style="margin-top:28px">
+    <div class="panel"><h3>Generated tokens by persona</h3><p class="sub">Leads and PM as bars; hires aggregated per track below them. Renata's 1.89 M is the Go and its tests.</p><div id="tokpersona"></div></div>
+    <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label). Tokens and lines track each other for the code‑writing leads; the PM's tokens went to messages and rulings, not files.</p><div id="authors"></div></div>
   </div>
   <div class="panel" style="margin-top:28px">
-    <h3>Hires who changed an outcome</h3><p class="sub">Eighteen hires never wrote a file; they returned prose to their leads. These findings from them altered what shipped.</p>
+    <h3>Hires who changed an outcome</h3><p class="sub">Eighteen hires generated 695 thousand tokens between them, about a tenth of the total, and never wrote a file; they returned prose to their leads. These findings from them altered what shipped.</p>
     <div class="tblwrap"><table>
       <thead><tr><th>Hire</th><th>Archetype · track</th><th>Finding that changed the build</th></tr></thead>
       <tbody>
@@ -505,19 +514,37 @@ hourBars($("#prs"),prsPerHour,"var(--deploy)","merges");
   $("#authors").appendChild(s);
 })();
 
-// ---------- mentions ----------
+// ---------- tokens ----------
+const roleOut=[["Leads (5)",4442937],["PM (Dana)",1311186],["Hires (18)",694519],["Research subagents",86570]];
+const roleIn=[["Leads (5)",3508607919],["PM (Dana)",553539145],["Hires (18)",85757181],["Research subagents",4044344]];
+const modelTok=[["claude-sonnet-5",4799352,3463910954,7858],["claude-fable-5-1",1210209,509949141,1047],["claude-opus-5",515558,177070894,430],["claude-haiku-4-5",10093,1017600,26]];
+const personaOut=[["Renata Cole · 03 lead",1893083],["Dana Whitfield · PM",1311186],["Theo Bergman · 04 lead",922536],["Naomi Voss · 01 lead",647689],["Priya Nandakumar · 05 lead",492079],["Marcus Ilori · 02 lead",487550],["03 hires (Oren, Nolan, Marisol, Ines)",325144],["01 hires (Desmond, Tobias, Imogen)",171530],["02 hires (Tomasz, Helena, Ingrid, Felix)",129128],["05 hires (Beatriz, Anders, Yusuf, Saoirse)",49878],["04 hires (Wesley, Bree, Callum)",18839]];
+// hour, pm, lead, hire, research (output tokens, PDT)
+const tokHour=[["12·09",83357,70418,0,60047],["12·10",93628,50738,0,22127],["12·11",110232,359899,73897,4396],["12·12",0,0,0,0],["12·13",0,0,0,0],["12·14",121943,256684,69022,0],["12·15",205666,208988,3647,0],["12·16",58530,178593,57543,0],["12·17",0,0,0,0],["12·18",0,0,0,0],["12·19",54311,257525,31561,0],["12·20",68370,270597,15968,0],["12·21",46858,300171,89344,0],["12·22",0,0,0,0],["12·23",0,0,0,0],["13·00",0,0,0,0],["13·01",0,0,0,0],["13·02",0,0,0,0],["13·03",0,0,0,0],["13·04",46876,382780,80394,0],["13·05",70509,359920,42118,0],["13·06",55250,264206,89778,0],["13·07",33203,139325,34007,0],["13·08",0,0,0,0],["13·09",52350,329390,39015,0],["13·10",48683,357831,31768,0],["13·11",54977,274002,17832,0],["13·12",31373,289135,18625,0],["13·13",0,0,0,0],["13·14",23831,69784,0,0],["13·15",51239,22951,0,0]];
+const fmt=n=>n>=1e9?(n/1e9).toFixed(2)+" B":n>=1e6?(n/1e6).toFixed(2)+" M":n>=1e3?Math.round(n/1e3)+" k":String(n);
+function hbars(target,data,color,labelFn,leftW){
+  const W=560,L=leftW||190,R=96,rowH=34,H=data.length*rowH+12;const s=svg(W,H);const pw=W-L-R;const max=Math.max(...data.map(d=>d[1]));
+  data.forEach((d,i)=>{const y=6+i*rowH;const w=Math.max((d[1]/max)*pw,2);
+    s.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},d[0]));
+    s.appendChild(el("rect",{x:L,y,width:w,height:22,fill:typeof color==="function"?color(d,i):color,rx:2}));
+    s.appendChild(el("text",{x:L+w+8,y:y+16,"font-size":12},labelFn?labelFn(d):fmt(d[1])));});
+  target.appendChild(s);
+}
+const roleColor=(d)=>d[0].startsWith("PM")?"var(--agent)":d[0].startsWith("Leads")?"var(--agent)":d[0].startsWith("Hires")?"var(--ink3)":"var(--sec)";
+hbars($("#tokrole"),roleOut,roleColor,null,150);
+hbars($("#tokread"),roleIn,roleColor,null,150);
+hbars($("#tokmodel"),modelTok,"var(--agent)",d=>`${fmt(d[1])} generated · ${fmt(d[2])} read · ${d[3].toLocaleString()} turns`,150);
+hbars($("#tokpersona"),personaOut,d=>d[0].includes("hires")?"var(--ink3)":"var(--agent)",null,250);
 (function(){
-  const W=560,H=mentions.length*24+24,L=90,R=40;const s=svg(W,H);const pw=W-L-R;const max=mentions[0][1];
-  const human=new Set(["Warren"]);const hire=new Set(["Tobias","Oren","Desmond","Tomasz","Nolan","Helena","Wesley","Ingrid","Saoirse"]);const op=new Set(["Amber"]);
-  mentions.forEach((m,i)=>{const y=6+i*24;const w=Math.max((m[1]/max)*pw,2);const col=human.has(m[0])?"var(--human)":op.has(m[0])?"var(--sec)":hire.has(m[0])?"var(--ink3)":"var(--agent)";
-    s.appendChild(el("text",{x:L-10,y:y+13,"text-anchor":"end","font-size":12,fill:"var(--ink)"},m[0]));
-    s.appendChild(el("rect",{x:L,y,width:w,height:16,fill:col,rx:2}));
-    s.appendChild(el("text",{x:L+w+6,y:y+13,"font-size":11},m[1]));
-  });
-  $("#mentions").appendChild(s);
-  const n=document.createElement("p");n.className="note";n.innerHTML='Teal: leads. Grey: hires. Coral: the human. Violet: Amber. The PM wrote the log and names herself rarely (4).';$("#mentions").appendChild(n);
+  const W=560,H=270,L=44,R=8,T=14,B=40;const s=svg(W,H);const pw=W-L-R,ph=H-T-B;const n=tokHour.length;const bw=pw/n;
+  const max=Math.max(...tokHour.map(r=>r[1]+r[2]+r[3]+r[4]));const ymax=Math.ceil(max/100000)*100000;
+  for(let y=0;y<=ymax;y+=100000){const yy=T+ph-(y/ymax)*ph;s.appendChild(el("line",{x1:L,x2:W-R,y1:yy,y2:yy,stroke:"var(--grid)"}));s.appendChild(el("text",{x:L-6,y:yy+4,"text-anchor":"end","font-size":10},y?fmt(y):"0"))}
+  const cols=["var(--agent)","color-mix(in srgb,var(--agent) 55%,var(--bg))","var(--ink3)","var(--sec)"];
+  tokHour.forEach((r,i)=>{let acc=0;const x=L+i*bw+1.5;[1,2,3,4].forEach((k,j)=>{const v=r[k];if(!v)return;const h=(v/ymax)*ph;const y=T+ph-((acc+v)/ymax)*ph;s.appendChild(el("rect",{x,y,width:Math.max(bw-3,2),height:h,fill:cols[j]}));acc+=v});
+    if(i%3===0||i===n-1)s.appendChild(el("text",{x:L+i*bw+bw/2,y:H-B+16,"text-anchor":"middle","font-size":10},r[0]))});
+  s.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"day·hour (PDT) · bottom to top: PM, leads, hires, research"));
+  $("#tokhour").appendChild(s);
 })();
-
 // ---------- leads ----------
 (function(){
   const root=$("#leads");
