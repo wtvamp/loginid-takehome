@@ -96,7 +96,9 @@ Checked against `origin/main` rather than against this document's own intentions
 - The retention sweep runs as a `CronJob` at **`17 3 * * *`** (03:17 UTC daily) with `concurrencyPolicy: Forbid`, invoking one `DeleteExpired` per class per run.
 - The audit-log retention floor is filed with the logging owner as an ILM policy request.
 
-**Specified but not yet merged:** the `retention_sweep_run` table and the `/metrics` endpoint that reads it (contract amendment A7, `multi-db-strategy.md` §3d) are in PR #71, **open at the time of writing**. Until it merges, the sweep executes and deletes correctly but **its result is not persisted and the alert rules have nothing to read** — the deletion control is live, the *observability* of that control is not. That is the honest state, and it is the one thing in this note that would be wrong to describe in the past tense.
+- **The observability of the deletion control is live too**, as of 2026-09-13: `retention_sweep_run` shipped in all three per-backend migrations (`e289c38`) with its tying CHECK `ck_retention_sweep_run_drained` intact, `api-service` exposes `/metrics` from it, and the `ServiceMonitor`/`PrometheusRule` carrying the four alert rules deployed (`5a0f841`), confirmed live in the namespace. The sweep's result is persisted and the rules have something to read. **SQLite stores its timestamps as RFC3339 UTC with a `Z` suffix**, which is what keeps "latest run" ordering identical on the one backend that sorts timestamps as text.
+
+Every control this note describes is now delivered, not planned.
 
 **Not modelled at all:** derived data (below), and a window for the `deletion_log` table itself.
 
