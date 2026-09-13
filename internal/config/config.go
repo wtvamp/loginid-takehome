@@ -47,6 +47,30 @@ type Config struct {
 	AuthzQASub              string
 	AuthzQAAllowedProfileID string
 
+	// IssuerDBDSN is the token issuer's own database connection string —
+	// a separate PostgreSQL database (`issuer`, per Priya Nandakumar's
+	// (05) ruling on LT-51: same instance as the main DAO's database, but
+	// a distinct database so a cross-database join to user_profile is
+	// structurally impossible), holding only oauth_client. Resolved the
+	// same way DBDSN is (ISSUER_DB_DSN_FILE takes precedence over
+	// ISSUER_DB_DSN), matching handoff-04-secrets.md's discipline. Only
+	// meaningful in issuer mode — empty in verifier mode, which has no
+	// legitimate use for it. There is no ISSUER_DB_DRIVER: the issuer
+	// database is always PostgreSQL (no SQLite/CockroachDB peer was ever
+	// specified for oauth_client), so internal/api's client store dials
+	// it directly via the "pgx" driver rather than routing through
+	// dao.New's multi-backend factory.
+	IssuerDBDSN string
+
+	// QA client credential seeding is out-of-band (a runbook 04 owns
+	// against the real oauth_client table), never application code or a
+	// migration — Priya's explicit ruling on this story. There is
+	// deliberately no QAClientID/QAClientSecretFile/etc. config surface
+	// here for auto-seeding a client at startup; AuthzQASub above is the
+	// only piece of QA-review config this track owns, and it's set to
+	// match whatever client_id the runbook seeds, not the other way
+	// around.
+
 	ConnectorJWTAudience  string
 	ConnectorClientID     string
 	ConnectorClientSecret string
@@ -76,7 +100,12 @@ type Config struct {
 // this still fails startup rather than serving traffic in a half-issuer
 // state with no actual path to the private key.
 func Load() (Config, error) {
-	dsn, err := resolveDSN()
+	dsn, err := resolveDSNFrom("DB_DSN_FILE", "DB_DSN")
+	if err != nil {
+		return Config{}, err
+	}
+
+	issuerDSN, err := resolveDSNFrom("ISSUER_DB_DSN_FILE", "ISSUER_DB_DSN")
 	if err != nil {
 		return Config{}, err
 	}
@@ -101,6 +130,8 @@ func Load() (Config, error) {
 
 		DBDriver: os.Getenv("DB_DRIVER"),
 		DBDSN:    dsn,
+
+		IssuerDBDSN: issuerDSN,
 
 		AuthJWTIssuer:   os.Getenv("AUTH_JWT_ISSUER"),
 		AuthJWTAudience: os.Getenv("AUTH_JWT_AUDIENCE"),
@@ -174,13 +205,16 @@ func resolveSigningKeyPath(appMode string) (string, error) {
 	return path, nil
 }
 
-func resolveDSN() (string, error) {
-	if path := os.Getenv("DB_DSN_FILE"); path != "" {
+// resolveDSNFrom implements the DB_DSN_FILE-takes-precedence-over-DB_DSN
+// pattern generically, parameterized by env var name so it serves both
+// the main DAO's DSN and IssuerDBDSN without duplicating the logic.
+func resolveDSNFrom(fileEnv, plainEnv string) (string, error) {
+	if path := os.Getenv(fileEnv); path != "" {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("config: reading DB_DSN_FILE %q: %w", path, err)
+			return "", fmt.Errorf("config: reading %s %q: %w", fileEnv, path, err)
 		}
 		return strings.TrimSpace(string(b)), nil
 	}
-	return os.Getenv("DB_DSN"), nil
+	return os.Getenv(plainEnv), nil
 }
