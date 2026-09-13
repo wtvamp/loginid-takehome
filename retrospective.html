@@ -1,0 +1,527 @@
+<title>LoginID Flight Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Literata:ital,opsz,wght@0,7..72,300..700;1,7..72,300..700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#F2F4F7; --bg2:#E8ECF1; --panel:#FFFFFF; --ink:#141B27; --ink2:#3E4959; --ink3:#6B7687; --rule:#CBD3DE;
+  --agent:#2A9D8F; --agent-soft:#D5EDEA; --human:#D4674F; --human-soft:#F6DED7; --deploy:#E0A33A; --deploy-soft:#F7E9CB;
+  --sec:#6F6BD1; --sec-soft:#E1E0F5; --inc:#B8453A; --ok:#3E8E5E; --grid:#DCE2EA;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif; --body:"Literata",Georgia,"Times New Roman",serif; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111826; --bg2:#182131; --panel:#1B2536; --ink:#EEF2F7; --ink2:#B9C3D1; --ink3:#8590A3; --rule:#2E3A4E;
+  --agent:#4FC1B3; --agent-soft:#173B3A; --human:#E98A73; --human-soft:#4A2A25; --deploy:#F0BC5A; --deploy-soft:#4A3A1A;
+  --sec:#9A96E8; --sec-soft:#2E2C55; --inc:#E0675A; --ok:#5DBB82; --grid:#25314A;
+}}
+:root[data-theme="dark"]{
+  --bg:#111826; --bg2:#182131; --panel:#1B2536; --ink:#EEF2F7; --ink2:#B9C3D1; --ink3:#8590A3; --rule:#2E3A4E;
+  --agent:#4FC1B3; --agent-soft:#173B3A; --human:#E98A73; --human-soft:#4A2A25; --deploy:#F0BC5A; --deploy-soft:#4A3A1A;
+  --sec:#9A96E8; --sec-soft:#2E2C55; --inc:#E0675A; --ok:#5DBB82; --grid:#25314A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.55;padding-block:0 96px;padding-inline:clamp(16px,4vw,48px)}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:-0.01em}
+h1{font-size:clamp(40px,6.5vw,88px);font-weight:800;line-height:.98;font-variation-settings:"opsz" 96}
+h2{font-size:clamp(28px,3.4vw,42px);font-weight:700;line-height:1.05}
+h3{font-size:20px;font-weight:600}
+p{max-width:66ch}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:500}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.lede{font-size:clamp(19px,2vw,23px);line-height:1.45;color:var(--ink2);max-width:60ch}
+section{padding-block:72px 0}
+.sec-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:24px 48px;align-items:end;margin-bottom:32px}
+.sec-head p{margin:8px 0 0;color:var(--ink2)}
+@media (max-width:760px){.sec-head{grid-template-columns:1fr}}
+
+/* header */
+header{padding-block:56px 24px;border-bottom:1px solid var(--rule)}
+.masthead{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:40px}
+.masthead .eyebrow a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.hero{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:32px 56px;align-items:start}
+@media (max-width:860px){.hero{grid-template-columns:1fr}}
+.hero-meta{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px;border-left:1px solid var(--rule);padding-left:24px}
+.hero-meta div{min-width:0}
+.hero-meta .k{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.hero-meta .v{font-family:var(--display);font-size:30px;font-weight:700;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
+.hero-meta .s{font-size:14px;color:var(--ink2);margin-top:2px}
+.live{display:inline-flex;align-items:center;gap:10px;margin-top:26px;padding:10px 14px;border:1px solid var(--rule);border-radius:999px;font-family:var(--mono);font-size:13px;text-decoration:none}
+.live .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 25%,transparent)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--ink2);margin-top:18px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:11px;height:11px;border-radius:2px;display:inline-block}
+
+/* timeline */
+.tl{position:relative;margin-top:8px}
+.tl-day{position:sticky;top:0;background:var(--bg);z-index:2;padding:10px 0 8px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.tl-day h3{font-size:16px;letter-spacing:.02em}
+.tl-day .eyebrow{color:var(--ink3)}
+.tl-row{display:grid;grid-template-columns:70px 28px minmax(0,1fr);gap:0 14px;position:relative}
+.tl-row .t{font-family:var(--mono);font-size:12px;color:var(--ink3);padding-top:16px;text-align:right;font-variant-numeric:tabular-nums}
+.tl-row .spine{position:relative}
+.tl-row .spine::before{content:"";position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--rule)}
+.tl-row:last-child .spine::before{bottom:auto;height:24px}
+.tl-row .node{position:absolute;left:7px;top:18px;width:14px;height:14px;border-radius:50%;background:var(--agent);border:3px solid var(--bg)}
+.tl-row.human .node{background:var(--human)}
+.tl-row.deploy .node{background:var(--deploy);border-radius:2px;transform:rotate(45deg)}
+.tl-row.incident .node{background:var(--inc)}
+.tl-row.done .node{background:var(--ok)}
+.tl-row.sec .node{background:var(--sec)}
+.tl-row .body{padding:12px 0 18px;border-bottom:1px dashed var(--rule)}
+.tl-row .body b{font-family:var(--display);font-weight:600;font-size:17px}
+.tl-row .body p{margin:4px 0 0;color:var(--ink2);font-size:15.5px;max-width:72ch}
+.tag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px;margin-left:8px;vertical-align:middle}
+.tag.h{background:var(--human-soft);color:var(--human)}
+.tag.d{background:var(--deploy-soft);color:var(--deploy)}
+.tag.i{background:color-mix(in srgb,var(--inc) 18%,transparent);color:var(--inc)}
+.tag.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.tag.s{background:var(--sec-soft);color:var(--sec)}
+.tl-gap{display:grid;grid-template-columns:70px 28px 1fr;gap:0 14px}
+.tl-gap .spine{position:relative}
+.tl-gap .spine::before{content:"";position:absolute;left:13px;top:0;bottom:0;width:2px;background:repeating-linear-gradient(to bottom,var(--rule) 0 4px,transparent 4px 9px)}
+.tl-gap .body{padding:14px 0;font-family:var(--mono);font-size:12px;color:var(--ink3)}
+@media (max-width:560px){.tl-row,.tl-gap{grid-template-columns:52px 24px minmax(0,1fr)} .tl-row .t{font-size:11px}}
+
+/* panels & charts */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:20px 22px 18px;min-width:0}
+.panel h3{margin-bottom:4px}
+.panel .sub{font-size:14px;color:var(--ink3);margin:0 0 14px}
+.panel .note{font-size:13px;color:var(--ink3);margin:12px 0 0;line-height:1.45}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:var(--mono);fill:var(--ink2)}
+.axis line,.axis path{stroke:var(--grid)}
+.big{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px;margin-top:8px}
+.big .n{font-family:var(--display);font-size:44px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.big .l{font-size:13.5px;color:var(--ink2);margin-top:6px}
+.split{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px}
+@media (max-width:820px){.split{grid-template-columns:1fr}}
+.stack{height:22px;display:flex;border-radius:3px;overflow:hidden;margin:10px 0 6px}
+.stack div{height:100%}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--rule);font-weight:500}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;padding-right:0}
+th.num{text-align:right;padding-right:0}
+.tblwrap{overflow-x:auto}
+
+/* org */
+.org{display:grid;gap:22px}
+.org-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.org-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.org-row{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;min-width:0}
+.card .who{font-family:var(--display);font-weight:700;font-size:17px;line-height:1.15}
+.card .role{font-size:13px;color:var(--ink2);margin-top:2px}
+.card .model{font-family:var(--mono);font-size:11px;color:var(--ink3);margin-top:8px;letter-spacing:.04em}
+.card ul{list-style:none;margin:10px 0 0;padding:0;font-size:13.5px;color:var(--ink2)}
+.card li{padding:3px 0;border-top:1px dashed var(--rule)}
+.card li i{font-style:normal;color:var(--ink3);font-family:var(--mono);font-size:11px;margin-left:6px}
+.pm{border-color:var(--agent);background:color-mix(in srgb,var(--agent-soft) 70%,var(--panel))}
+.humanbox{border-color:var(--human);background:color-mix(in srgb,var(--human-soft) 60%,var(--panel))}
+.orgline{height:22px;width:2px;background:var(--rule);margin:-4px auto}
+.pattern{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px}
+.pattern div{border-top:2px solid var(--sec);padding-top:10px;font-size:14px;color:var(--ink2)}
+.pattern b{display:block;font-family:var(--display);color:var(--ink);font-size:16px;margin-bottom:2px}
+
+/* architecture */
+.arch{overflow-x:auto}
+.arch svg{min-width:720px}
+.arch .box{fill:var(--panel);stroke:var(--rule);stroke-width:1.2}
+.arch .box.hot{stroke:var(--agent);stroke-width:1.6}
+.arch .box.secb{stroke:var(--sec);stroke-width:1.6}
+.arch .lbl{font-family:var(--display);font-weight:600;font-size:14px;fill:var(--ink)}
+.arch .sm{font-size:11px;fill:var(--ink3)}
+.arch .flow{stroke:var(--ink3);stroke-width:1.3;fill:none;marker-end:url(#arr)}
+.arch .flow.sec{stroke:var(--sec)}
+.arch .flow.deny{stroke:var(--inc);stroke-dasharray:4 4}
+.lessons{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px;counter-reset:l}
+.lessons div{padding:18px 0 0;border-top:2px solid var(--ink)}
+.lessons b{display:block;font-family:var(--display);font-size:18px;margin-bottom:6px}
+.lessons p{font-size:15px;color:var(--ink2);margin:0}
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-size:14px;color:var(--ink3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){.live .dot{animation:pulse 2.4s ease-in-out infinite}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 25%,transparent)}50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--ok) 8%,transparent)}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="masthead">
+    <span class="eyebrow">LoginID take-home · uplift-kub · 2026-09-12 → 2026-09-13</span>
+    <span class="eyebrow"><a href="https://github.com/wtvamp/loginid-takehome">github.com/wtvamp/loginid-takehome</a></span>
+  </div>
+  <div class="hero">
+    <div>
+      <h1>Thirty hours, one human, twenty‑four agents.</h1>
+      <p class="lede">A Go DAO, a secured REST API, and an identity‑provider connector were designed, debated, built, deployed to a real cluster, and reviewed live by a product owner. This is the flight recorder: what was built, who did it, when, and where the human sat in the loop.</p>
+      <a class="live" href="https://loginid-takehome.uplifttech.org/healthz"><span class="dot"></span>loginid-takehome.uplifttech.org · build fb8b9d1 · db: ok</a>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--agent)"></i>agent action</span>
+        <span><i class="sw" style="background:var(--human)"></i>human decision</span>
+        <span><i class="sw" style="background:var(--deploy)"></i>deployment</span>
+        <span><i class="sw" style="background:var(--ok)"></i>story Done</span>
+        <span><i class="sw" style="background:var(--inc)"></i>incident</span>
+        <span><i class="sw" style="background:var(--sec)"></i>security ruling</span>
+      </div>
+    </div>
+    <div class="hero-meta">
+      <div><div class="k">Stories Done</div><div class="v">42 / 42</div><div class="s">18 planning, 24 implementation</div></div>
+      <div><div class="k">Wall clock</div><div class="v">30.0 h</div><div class="s">first commit 09-12 11:02 → last 09-13 15:05</div></div>
+      <div><div class="k">Pull requests</div><div class="v">75</div><div class="s">73 merged, 2 superseded</div></div>
+      <div><div class="k">Commits</div><div class="v">289</div><div class="s">19,444 lines of Go · 11,033 of Markdown</div></div>
+      <div><div class="k">Human decisions</div><div class="v">27</div><div class="s">rulings, approvals, corrections</div></div>
+      <div><div class="k">Live‑review failures</div><div class="v">19</div><div class="s">before the 24 implementation passes</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= HUMAN IN THE LOOP ================= -->
+<section id="loop">
+  <div class="sec-head">
+    <div><span class="eyebrow">Human in the loop</span><h2>Where the human actually sat</h2></div>
+    <p>Warren made twenty‑seven recorded decisions across thirty hours and wrote no code. Everything else was agents: designing, debating, implementing, reviewing, deploying, and failing each other's work. The ratio below is counted from LOG.md, Jira, and the session record, not estimated.</p>
+  </div>
+  <div class="split">
+    <div class="panel">
+      <h3>Actions by origin</h3>
+      <p class="sub">One bar per kind of action; the coral slice is the human's share.</p>
+      <div id="hil"></div>
+      <p class="note">Merge commits carry Warren's GitHub identity because the PM merged through his authenticated <span class="mono">gh</span> session; they are counted as agent actions here, which is what they were. Twelve early commits under the <span class="mono">wtvamp</span> identity predate the persona‑author rule and are likewise agent work.</p>
+    </div>
+    <div class="panel">
+      <h3>The twenty‑seven decisions</h3>
+      <p class="sub">What only the human could decide, grouped.</p>
+      <div class="tblwrap"><table>
+        <thead><tr><th>Kind</th><th class="num">Count</th><th>Examples</th></tr></thead>
+        <tbody>
+          <tr><td>Direction</td><td class="num">6</td><td>code go‑ahead as an agile loop; real cluster over a lab; attribution rule; org topology; teardown timing; "ask Amber what the cluster already has"</td></tr>
+          <tr><td>Rulings</td><td class="num">4</td><td>Vault instead of etcd encryption; audit‑log RBAC as an accepted residual; Filebeat drop‑filter fix; LT‑20 disposition (pending)</td></tr>
+          <tr><td>Permission grants</td><td class="num">9</td><td>Amber provisioning Vault; two deployer Role updates; deleting six Kubernetes Secrets; classifier approvals for cluster‑mutating commands</td></tr>
+          <tr><td>Routing</td><td class="num">3</td><td>DNS and GitHub credentials to Amber; Vault access via Amber; "she is logged in and can drive"</td></tr>
+          <tr><td>Cadence</td><td class="num">5</td><td>"usage has reset, keep going" ×5, each relayed to all five leads</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note">Every ruling reached the tracks through the PM and was written into LOG.md and the root CLAUDE.md so no lead re‑asked a settled question. Two leads' sessions were blocked once each on a permission prompt they correctly declined to route around.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TIMELINE ================= -->
+<section id="timeline">
+  <div class="sec-head">
+    <div><span class="eyebrow">Timeline</span><h2>The tape</h2></div>
+    <p>Sixty‑eight LOG entries compressed to the moments that changed something. Times are Pacific. The dashed gaps are usage pauses, when every session waited for the window to reset.</p>
+  </div>
+  <div class="tl" id="tl"></div>
+</section>
+
+<!-- ================= THROUGHPUT ================= -->
+<section id="throughput">
+  <div class="sec-head">
+    <div><span class="eyebrow">Throughput</span><h2>Work over time</h2></div>
+    <p>Commits landed in every waking hour of the window, PR merges clustered around the product owner's review sessions, and the story burn‑up shows the eighteen planning stories closing in one afternoon while the twenty‑four implementation stories took the full loop.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel"><h3>Commits per hour</h3><p class="sub">289 commits, all authors, by hour of commit.</p><div id="commits"></div></div>
+    <div class="panel"><h3>Story burn‑up</h3><p class="sub">Cumulative Jira stories Done, by resolution time.</p><div id="burnup"></div></div>
+    <div class="panel"><h3>PR merges per hour</h3><p class="sub">73 merged pull requests, by merge time (UTC converted to PDT).</p><div id="prs"></div></div>
+    <div class="panel"><h3>Pipeline outcomes</h3><p class="sub">GitHub Actions runs on the repo‑scoped ARC runner.</p><div id="ci"></div>
+      <p class="note">Thirteen cancelled deploys are the concurrency group superseding an in‑flight run when the next merge landed, by design after PR #15. The five deploy failures each taught something recorded in the timeline.</p></div>
+  </div>
+</section>
+
+<!-- ================= CONTRIBUTION ================= -->
+<section id="contrib">
+  <div class="sec-head">
+    <div><span class="eyebrow">Contribution</span><h2>Who did what, by persona</h2></div>
+    <p>Per‑session token counts were not instrumented, so contribution is shown by what the record can count: commits, lines, and how often a persona's work is named in the project log. The one instrumented data point is Amber's Vault run: 7.2 million cached input tokens read, 49 thousand generated, fifty tool calls.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel"><h3>Lines and commits by author</h3><p class="sub">Additions (bar) and commit count (label). Renata's 21,831 lines are the Go; Theo's are manifests and workflows.</p><div id="authors"></div></div>
+    <div class="panel"><h3>Named in the log</h3><p class="sub">Mentions in LOG.md, a proxy for how often a persona's judgement mattered enough to record.</p><div id="mentions"></div></div>
+  </div>
+  <div class="panel" style="margin-top:28px">
+    <h3>Hires who changed an outcome</h3><p class="sub">Eighteen hires never wrote a file; they returned prose to their leads. These findings from them altered what shipped.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Hire</th><th>Archetype · track</th><th>Finding that changed the build</th></tr></thead>
+      <tbody>
+        <tr><td>Tobias Lindqvist</td><td>Designated Skeptic · 01</td><td>One replica still runs two pods during a RollingUpdate; Recreate strategy. Sweep CronJob needs concurrencyPolicy Forbid. Vault unreachable at pod start must fail loud.</td></tr>
+        <tr><td>Oren Castellan</td><td>Detail Hawk · 03</td><td>Shared‑database race between test packages reproduced both ways; misleading "ready" log; silent‑zero in the required‑env function; timestamp precision contract.</td></tr>
+        <tr><td>Desmond Okafor</td><td>Spreadsheet · 01</td><td>The "fake updated in the same PR" rule had no artifact; retention sweep missing from the stubbed list; never‑log list said nine items, was eleven.</td></tr>
+        <tr><td>Helena Marsh</td><td>Principled Architect · 02</td><td>The Vault denial matrix never tested api‑service against the issuer role, the exact split the architecture exists for.</td></tr>
+        <tr><td>Ingrid Solano</td><td>Designated Skeptic · 02</td><td>Required‑env list must be structurally tied to config reads; URL‑shape validation on the two URL variables.</td></tr>
+        <tr><td>Tomasz Wrede</td><td>Adversary · 02</td><td>Three attack‑tree rounds on the connector; the failure‑ratio limiter that later fired live in review.</td></tr>
+        <tr><td>Wesley Okonkwo</td><td>Newcomer · 04</td><td>Cold read of the README: four limiter mechanisms named without saying whether they were one or four; claims with no reproduction path.</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= AI ARCHITECTURE ================= -->
+<section id="org">
+  <div class="sec-head">
+    <div><span class="eyebrow">AI architecture</span><h2>The org that built it</h2></div>
+    <p>One product manager session orchestrated five track‑lead sessions, each a top‑level Claude Code process in its own tmux window with its own persona and CLAUDE.md. Each lead hired three or four specialist agents with deliberately varied temperaments. Hires returned prose; leads wrote files; the PM alone merged to main and wrote Jira. A separate OpenClaw agent on another machine held cluster and Vault credentials.</p>
+  </div>
+  <div class="org">
+    <div class="org-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="card humanbox"><div class="who">Warren Thompson</div><div class="role">Human · owner of the cluster, the decisions, and the permission prompts</div><div class="model">27 decisions · 0 lines of code</div></div>
+      <div class="card"><div class="who">Amber</div><div class="role">OpenClaw Kubernetes agent on the Mac mini · DNS, GitHub App, Vault, Filebeat</div><div class="model">claude-opus-4-7 · acts only on Warren's authorization</div></div>
+    </div>
+    <div class="orgline"></div>
+    <div class="card pm" style="max-width:520px;margin:0 auto"><div class="who">Dana Whitfield · Project Manager</div><div class="role">Orchestrator, single Jira writer, only merger to main, keeper of LOG.md and the rulings</div><div class="model">claude-fable-5-1 · high effort · 48 commits + 74 merges</div></div>
+    <div class="orgline"></div>
+    <div class="org-row" id="leads"></div>
+    <div class="pattern">
+      <div><b>Adversarial pair</b>Proposer drafts, skeptic numbers objections, lead rules. Used on search authorization scoping and the Search() query shape.</div>
+      <div><b>Red team / blue team</b>Adversary writes an attack tree, architect answers each leaf. Used once, on the connector token lifecycle; three live rounds.</div>
+      <div><b>Three hats</b>Optimist, pessimist, pragmatist write in parallel; lead synthesizes. Used on the multi‑database abstraction and Go layout.</div>
+      <div><b>Newcomer's question</b>A hire reads a finished hand‑off cold and lists what cannot be acted on. Highest return of any pattern; it failed the README once.</div>
+      <div><b>Rotating objection seat</b>Every refinement carried a standing objection. It caught Recreate, Forbid, fail‑loud on Vault, and a rolling‑day alert that could never fire.</div>
+      <div><b>Live PO review</b>Nothing was Done until the product owner exercised it at the public URL or inside the cluster. Nineteen stories failed that review first.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SOFTWARE ARCHITECTURE ================= -->
+<section id="arch">
+  <div class="sec-head">
+    <div><span class="eyebrow">Software architecture</span><h2>What runs in the namespace</h2></div>
+    <p>Two Go binaries built into three images. The API service runs twice: once as an OAuth2 token issuer that alone mounts the signing key, once as a verifier that only ever sees the public JWKS. Every application secret arrives from Vault as a file in memory; none is a Kubernetes Secret. Each workload has its own identity, and default‑deny network policies name who may talk to whom.</p>
+  </div>
+  <div class="panel arch">
+    <svg viewBox="0 0 1040 560" role="img" aria-label="Deployment architecture of the loginid-takehome namespace">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink3)"/></marker></defs>
+      <!-- outside -->
+      <rect x="20" y="20" width="200" height="70" rx="6" class="box"/><text x="120" y="48" text-anchor="middle" class="lbl">Client</text><text x="120" y="68" text-anchor="middle" class="sm">curl / QA clients · client‑credentials</text>
+      <rect x="20" y="130" width="200" height="70" rx="6" class="box"/><text x="120" y="158" text-anchor="middle" class="lbl">nginx Ingress + cert‑manager</text><text x="120" y="178" text-anchor="middle" class="sm">loginid-takehome.uplifttech.org</text>
+      <path class="flow" d="M120 90 V126"/>
+      <!-- namespace box -->
+      <rect x="260" y="20" width="760" height="520" rx="10" fill="none" stroke="var(--rule)" stroke-dasharray="6 5"/>
+      <text x="280" y="44" class="sm" style="font-size:12px;letter-spacing:.12em">NAMESPACE loginid-takehome · quota · default‑deny NetworkPolicies</text>
+      <!-- issuer -->
+      <rect x="300" y="70" width="230" height="96" rx="6" class="box secb"/><text x="415" y="96" text-anchor="middle" class="lbl">api-service-issuer</text><text x="415" y="116" text-anchor="middle" class="sm">APP_MODE=issuer · /auth/token · JWKS</text><text x="415" y="134" text-anchor="middle" class="sm">RS256 · per‑client aud · Argon2id PHC</text><text x="415" y="152" text-anchor="middle" class="sm">1 replica · Recreate · SA api-service-issuer</text>
+      <!-- verifier -->
+      <rect x="300" y="200" width="230" height="110" rx="6" class="box hot"/><text x="415" y="226" text-anchor="middle" class="lbl">api-service (verifier)</text><text x="415" y="246" text-anchor="middle" class="sm">/profiles/search · /profiles/{id}</text><text x="415" y="264" text-anchor="middle" class="sm">masked search · read:own / read:any</text><text x="415" y="282" text-anchor="middle" class="sm">in‑process rate + touch + grant limiters</text><text x="415" y="300" text-anchor="middle" class="sm">:9101 /metrics → Prometheus (ns monitoring)</text>
+      <!-- connector -->
+      <rect x="300" y="350" width="230" height="96" rx="6" class="box"/><text x="415" y="376" text-anchor="middle" class="lbl">idp-connector</text><text x="415" y="396" text-anchor="middle" class="sm">/auth · /identity · stub vendor</text><text x="415" y="414" text-anchor="middle" class="sm">no token cache · uniform‑timing failures</text><text x="415" y="432" text-anchor="middle" class="sm">ingress only from api-service</text>
+      <!-- postgres -->
+      <rect x="600" y="200" width="200" height="110" rx="6" class="box"/><text x="700" y="226" text-anchor="middle" class="lbl">postgres-0</text><text x="700" y="246" text-anchor="middle" class="sm">StatefulSet · TLS</text><text x="700" y="264" text-anchor="middle" class="sm">app db + issuer db</text><text x="700" y="282" text-anchor="middle" class="sm">migrator / runtime roles</text><text x="700" y="300" text-anchor="middle" class="sm">ingress: 4 named consumers</text>
+      <!-- jobs -->
+      <rect x="600" y="70" width="200" height="70" rx="6" class="box"/><text x="700" y="96" text-anchor="middle" class="lbl">db-migrate Job</text><text x="700" y="116" text-anchor="middle" class="sm">goose ×3 · waits for DNS · gates deploy</text>
+      <rect x="600" y="350" width="200" height="82" rx="6" class="box"/><text x="700" y="376" text-anchor="middle" class="lbl">retention-sweep CronJob</text><text x="700" y="396" text-anchor="middle" class="sm">17 3 * * * · Forbid · 1h deadline</text><text x="700" y="414" text-anchor="middle" class="sm">persists retention_sweep_run</text>
+      <!-- vault -->
+      <rect x="850" y="70" width="150" height="362" rx="6" class="box secb"/><text x="925" y="96" text-anchor="middle" class="lbl">Vault (ns vault)</text><text x="925" y="118" text-anchor="middle" class="sm">HA · Agent Injector</text><text x="925" y="150" text-anchor="middle" class="sm">6 roles, 1 per SA</text><text x="925" y="168" text-anchor="middle" class="sm">read‑only policies</text><text x="925" y="200" text-anchor="middle" class="sm">files in memory</text><text x="925" y="218" text-anchor="middle" class="sm">init‑only, exit on</text><text x="925" y="236" text-anchor="middle" class="sm">auth error</text><text x="925" y="270" text-anchor="middle" class="sm">CA‑verified TLS</text><text x="925" y="300" text-anchor="middle" class="sm">no app secret</text><text x="925" y="318" text-anchor="middle" class="sm">in etcd</text>
+      <!-- flows -->
+      <path class="flow" d="M220 150 H265 Q290 150 290 175 V240 H296"/>
+      <path class="flow" d="M220 165 H250 Q270 165 270 140 V118 H296"/>
+      <text x="236" y="112" class="sm">/auth/token</text>
+      <path class="flow sec" d="M415 200 V170"/><text x="428" y="188" class="sm" style="fill:var(--sec)">JWKS in‑cluster :443</text>
+      <path class="flow" d="M415 310 V346"/><text x="428" y="332" class="sm">connector‑scoped token</text>
+      <path class="flow" d="M530 255 H596"/><path class="flow" d="M530 122 H596"/><path class="flow" d="M600 105 H580 Q560 105 560 130 V240"/>
+      <path class="flow" d="M700 310 V346"/><path class="flow" d="M700 140 V196"/>
+      <path class="flow sec" d="M850 118 H804"/><path class="flow sec" d="M850 255 H804"/><path class="flow sec" d="M850 390 H804"/>
+      <path class="flow sec" d="M850 96 H575 Q545 96 545 118 H534"/>
+      <path class="flow deny" d="M220 180 H240 Q262 180 262 210 V398 H296"/><text x="236" y="470" class="sm" style="fill:var(--inc)">connector not exposed publicly</text>
+      <text x="280" y="522" class="sm">Observability: stdout → Filebeat → Elasticsearch (ns logging) · ServiceMonitor + PrometheusRule (4 rules) adopted by kube‑prometheus‑stack · Alertmanager → discord</text>
+    </svg>
+  </div>
+  <div class="grid3" style="margin-top:28px">
+    <div class="panel"><h3>Q1 · Data access</h3><p class="sub">DAO for user_profile and user_credential</p><p style="font-size:15px;color:var(--ink2);margin:0">One Repository interface, three backends (Postgres, CockroachDB, SQLite). A conformance suite runs the same assertions against real containers of all three in CI, including CockroachDB's serialization‑retry path. Sentinel errors by SQLSTATE, never by message text.</p></div>
+    <div class="panel"><h3>Q2 · REST + auth</h3><p class="sub">Search and retrieve, secured</p><p style="font-size:15px;color:var(--ink2);margin:0">OAuth2 client credentials mint RS256 tokens with per‑client audiences; the verifier checks issuer, audience, and JWKS with bounded staleness. Search returns masked PII; full reads need read:own or read:any with a closed reason‑code enum. Scope and policy denials return byte‑identical 403s.</p></div>
+    <div class="panel"><h3>Q3 · IDP connector</h3><p class="sub">/auth and /identity to a vendor</p><p style="font-size:15px;color:var(--ink2);margin:0">Vendor tokens are fetched, used once, and discarded; never cached. Failures take uniform time. Per‑identity and overflow‑bucket backoff; the failure‑ratio limiter fired live during review. Reachable only from api‑service by NetworkPolicy.</p></div>
+  </div>
+</section>
+
+<!-- ================= LESSONS ================= -->
+<section id="lessons">
+  <div class="sec-head">
+    <div><span class="eyebrow">What the record shows</span><h2>Six patterns the day kept repeating</h2></div>
+    <p>The code is the smaller artifact. These are the failure shapes that recurred, each caught by a review step and each closed with a check that makes it fail in CI or at startup instead of in production.</p>
+  </div>
+  <div class="lessons">
+    <div><b>Config named, never set</b><p>Three times a binary read an environment variable no manifest set: issuer and audience, the JWKS port, the connector's entire auth. Now every mode declares its required variables in code, refuses to start without them, and a CI test diffs the manifests against that list.</p></div>
+    <div><b>A pattern not carried forward</b><p>Five times a control established for one component was missing on a structurally identical new one: NetworkPolicy allow‑lists, Forbid on a CronJob, a ServiceAccount per workload. Each got a test that ties the new component to the rule.</p></div>
+    <div><b>Verification that skips</b><p>CI was green for hours while every Postgres and CockroachDB test silently skipped for want of a DSN. The fixtures now fail under CI, and the containers are always present.</p></div>
+    <div><b>The detector can fail too</b><p>The rule "diff against origin before declaring done" returned a false clean for untracked files, the case most likely to be lost. Five artifacts stranded; the rule now treats a <span class="mono">??</span> line as unshipped work.</p></div>
+    <div><b>Arithmetic outlives its assumption</b><p>An alert threshold of window‑plus‑one‑interval would have fired on every healthy cycle; a rolling‑day skip rate was meaningless at a daily schedule. Both were rewritten as functions of one interval constant.</p></div>
+    <div><b>Fail loud, always</b><p>Two independent retry loops in Vault Agent; one exits on failure, the other retried forever and hung a pod in Init for seven minutes. The product owner's forced‑failure test found it, and now the pod crash‑loops in thirty‑six seconds.</p></div>
+  </div>
+</section>
+
+<footer>
+  <span>Built with Claude Code: one Fable 5.1 orchestrator, four Sonnet 5 leads and one Opus 5 lead, eighteen Sonnet hires, one Opus 4.7 operator agent. Every commit, PR, and Jira transition names the persona who did the work.</span>
+  <span class="mono">LOG.md · 68 entries · 2026-09-12 09:17 → 2026-09-13 15:00 PDT</span>
+</footer>
+</div>
+
+<script>
+// ---------- data ----------
+const commitsPerHour = [["12·11",3],["12·12",0],["12·13",0],["12·14",2],["12·15",3],["12·16",10],["12·17",0],["12·18",0],["12·19",25],["12·20",26],["12·21",26],["12·22",0],["12·23",0],["13·00",0],["13·01",0],["13·02",0],["13·03",0],["13·04",20],["13·05",23],["13·06",20],["13·07",15],["13·08",0],["13·09",22],["13·10",24],["13·11",30],["13·12",19],["13·13",0],["13·14",18],["13·15",3]];
+// PR merges, converted UTC->PDT (-7h)
+const prsPerHour = [["12·16",2],["12·19",5],["12·20",8],["12·21",9],["13·04",4],["13·05",8],["13·06",4],["13·07",5],["13·09",6],["13·10",4],["13·11",8],["13·12",4],["13·14",6]];
+// story resolutions (PDT decimal hours from 09-12 00:00)
+const doneTimes = [14.92,14.92,14.92,14.95,14.95,14.97,14.97,14.97,14.97,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.28,15.38,20.92,21.5,29.38,31.1,31.1,31.42,33.42,33.55,33.55,33.55,33.55,33.55,33.55,33.63,33.7,34.3,34.4,35.72,35.73,36.67,38.47,39.0];
+const authors = [["Renata Cole (03)",21831,78,"agent"],["merges via Warren's gh identity",8437,74,"agent"],["Theo Bergman (04)",3651,55,"agent"],["Dana Whitfield (PM)",1682,48,"agent"],["wtvamp (pre‑rule identity)",8437,12,"agent"],["Priya Nandakumar (05)",306,8,"agent"],["Naomi Voss (01)",253,2,"agent"],["Marcus Ilori (02)",171,12,"agent"]];
+// fix: wtvamp lines were 8437 and "Warren Thompson" author lines were not separately reported; use commit counts as primary and lines where measured
+authors[1][1]=0; // merge commits add no lines of their own
+const mentions = [["Theo",71],["Warren",62],["Naomi",48],["Renata",41],["Priya",41],["Marcus",37],["Amber",20],["Tobias",19],["Oren",17],["Desmond",12],["Tomasz",12],["Nolan",12],["Helena",8],["Wesley",8],["Ingrid",6],["Saoirse",5]];
+const hil = [
+  ["Commits",289,0],["Pull requests merged",73,0],["Jira transitions",126,0],["LOG entries",68,0],["Refinement records",19,0],["Decision documents",22,0],["CI runs",186,0],["Human decisions",0,27]
+];
+const leads = [
+  {who:"Naomi Voss",role:"01 Product Owner · research & design",model:"claude-sonnet-5",hires:[["Imogen Hale","Storyteller"],["Desmond Okafor","Spreadsheet"],["Tobias Lindqvist","Designated Skeptic"]]},
+  {who:"Marcus Ilori",role:"02 AI & security architecture",model:"claude-sonnet-5",hires:[["Tomasz Wrede","Adversary"],["Helena Marsh","Principled Architect"],["Felix Adebayo","Tinkerer"],["Ingrid Solano","Designated Skeptic"]]},
+  {who:"Renata Cole",role:"03 Engineering & delivery (Go)",model:"claude-sonnet-5",hires:[["Oren Castellan","Detail Hawk"],["Nolan Reyes","Veteran"],["Marisol Ferran","Enthusiast"],["Ines Dabrowski","Systems Cartographer"]]},
+  {who:"Theo Bergman",role:"04 Infra & DevOps",model:"claude-sonnet-5",hires:[["Wesley Okonkwo","Newcomer"],["Bree Sandoval","Enthusiast"],["Callum Ferreira","Minimalist"]]},
+  {who:"Priya Nandakumar",role:"05 Data ops & PII governance",model:"claude-opus-5",hires:[["Anders Vogel","Systems Cartographer"],["Beatriz Achterberg","Spreadsheet"],["Yusuf Karadag","Detail Hawk"],["Saoirse Byrne","Storyteller"]]}
+];
+const events = [
+ // [day, time, kind, title, detail]
+ ["12","09:17","agent","Repository scaffolded; six research subagents fan out in parallel","Market framing, IAM and passwordless landscape, IDP aggregation, one topic each."],
+ ["12","09:50","incident","Code written prematurely is wiped","A lead started implementing before the design was settled. Rule made: no code until the go‑ahead, and the reasoning stays in the record."],
+ ["12","10:45","human","Org plan approved","Five leads as top‑level sessions, eighteen hires, a casting registry with thirteen archetypes and variance rules."],
+ ["12","~12:30","human","Deployment target: the real shared cluster","Not a throwaway lab. This decision created most of the day's security work and every one of its real findings."],
+ ["12","~13:00","human","Attribution rule","Every commit, PR, and Jira transition names the persona who did the work. Merges carry Work‑By trailers."],
+ ["12","14:55","done","Planning phase closes: 18 stories Done in Jira","Three cross‑track consistency passes, 52 findings, all addressed before code."],
+ ["12","~17:30","human","Implementation go, as an agile loop","Pull, refine, hand to engineering, QA, deploy, PO review. Show the URL on every deploy."],
+ ["12","20:45","deploy","First deployment to the public URL","Walking skeleton: two binaries, health endpoint, ARC runner, Ingress with TLS. DNS by Amber."],
+ ["12","20:55","done","LT‑34 Done: first story closed end to end","Deployed, reviewed live by the product owner, recorded."],
+ ["12","21:30","done","LT‑32 Done: issuer split into its own Deployment","Only the issuer mounts the signing key; the verifier sees the public JWKS."],
+ ["12","21:55","human","Teardown will run on Warren's word next week, unscheduled",""],
+ ["gap","22:00 → 04:15","","Usage pause",""],
+ ["13","04:50","deploy","A database behind the API","In‑namespace Postgres, migration Job gating the api‑service apply. Base64 slash in a password broke the DSN; hex fixed it."],
+ ["13","05:23","done","LT‑52 Done; LT‑40 live and failing closed",""],
+ ["13","06:30","sec","First real token minted at the URL, and what verifying it found","Issuer and audience were never set in any manifest. The verifier compared audience to an empty string. Two more config gaps followed within the hour."],
+ ["13","07:06","done","Joint live review: LT‑40 and LT‑51 Done","Masked search, full read with reason codes, byte‑identical 403s, all exercised at the URL."],
+ ["13","07:10","incident","Review finds CI has been skipping every Postgres and CockroachDB test","Green meant SQLite only. Fixtures now fail under CI; real containers added."],
+ ["13","07:30","done","LT‑39 Done: the rate limit now limits","Two replicas split a burst across independent counters. Replicas 1 plus Recreate; Tobias's catch."],
+ ["13","07:55","sec","Connector's inbound auth was never wired","Third enforcement‑site gap; startup guards and a manifest‑vs‑config test make the class fail in CI."],
+ ["13","08:00","done","LT‑41 Done: Q3 delivered","In‑cluster review; the failure‑ratio limiter fired live."],
+ ["13","09:40","done","Close‑out wave: fourteen Done, two honest reversals","LT‑42 passed then withdrawn within fourteen minutes when a rule had no artifact. LT‑46's etcd criterion found unmet on the cluster."],
+ ["13","09:55","human","Ruling: Vault, not etcd encryption","The cluster already ran HA Vault with the injector. Secrets leave etcd entirely."],
+ ["13","10:25","sec","Amber provisions Vault; finds three workloads sharing the default identity","Six roles, dedicated ServiceAccounts, denial matrix proven, a trailing‑newline template trap caught."],
+ ["13","10:44","incident","LT‑46 deploy takes the database down for sixteen minutes","Injector default CPU requests versus the namespace quota; a CA path under the wrong directory. Three people diagnosed it independently; fixed forward in the time box."],
+ ["13","11:15","sec","Forced‑failure test: a denied pod hung in Init forever","Vault Agent's auth loop retried indefinitely. Exit‑on‑error plus bounded backoff; crash‑loop in 36 seconds."],
+ ["13","11:42","human","Warren approves deleting the six Kubernetes Secrets","Namespace now holds only TLS certs, the QA client credential, and Vault's CA."],
+ ["13","11:44","done","LT‑46 Done: no application secret in etcd",""],
+ ["13","12:00","agent","Amber inventories the observability stack, read‑only","kube‑prometheus‑stack with self‑service rule adoption; Filebeat already shipping stdout; a filter dropping any line containing \"health\"."],
+ ["13","12:18","human","Warren approves the shared Filebeat fix; Amber applies it","The one change to a shared stack all day, confirmed from the cluster, not the summary."],
+ ["13","12:40","done","LT‑48 Done on the third live run","No issuer in the dev loop, then a SQLite path under the Postgres profile. Startup guards firing correctly in a new place."],
+ ["13","14:28","done","LT‑20 Done: a 90‑day floor, not a ceiling","Audit retention is a minimum driven by incident review; every other window is a maximum driven by minimization."],
+ ["13","14:52","deploy","Last hotfix: a Service with no labels had no scrape target","ServiceMonitors select Services by label, not by the pods they select."],
+ ["13","15:00","done","Backlog closed: 42 of 42","LT‑49 passes with the scrape target up, four rules loaded, a real alert reaching Alertmanager with the namespace label."]
+];
+
+// ---------- helpers ----------
+const $=s=>document.querySelector(s);
+const NS="http://www.w3.org/2000/svg";
+function el(n,a={},t){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;return e}
+function svg(w,h){const s=el("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%",role:"img"});return s}
+
+// ---------- timeline ----------
+(function(){
+  const root=$("#tl");let day=null;
+  const kinds={agent:"",human:"human",deploy:"deploy",incident:"incident",done:"done",sec:"sec"};
+  const tags={human:['h','human'],deploy:['d','deploy'],incident:['i','incident'],done:['ok','Done'],sec:['s','security']};
+  events.forEach(ev=>{
+    const [d,t,k,title,detail]=ev;
+    if(d==="gap"){const g=document.createElement("div");g.className="tl-gap";g.innerHTML=`<div></div><div class="spine"></div><div class="body">${t} · ${title}</div>`;root.appendChild(g);return}
+    if(d!==day){day=d;const h=document.createElement("div");h.className="tl-day";h.innerHTML=`<h3>Friday 12 September</h3><span class="eyebrow">PDT</span>`;if(d==="13")h.firstChild.textContent="Saturday 13 September";root.appendChild(h)}
+    const r=document.createElement("div");r.className="tl-row "+kinds[k];
+    const tag=tags[k]?`<span class="tag ${tags[k][0]}">${tags[k][1]}</span>`:"";
+    r.innerHTML=`<div class="t">${t}</div><div class="spine"><div class="node"></div></div><div class="body"><b>${title}</b>${tag}${detail?`<p>${detail}</p>`:""}</div>`;
+    root.appendChild(r);
+  });
+})();
+
+// ---------- bar chart: commits/hour ----------
+function hourBars(target,data,color,yLabel){
+  const W=560,H=250,L=36,R=8,T=14,B=40;const n=data.length;const max=Math.max(...data.map(d=>d[1]));const step=max>20?10:5;const ymax=Math.ceil(max/step)*step;
+  const s=svg(W,H);const pw=W-L-R,ph=H-T-B;const bw=pw/n;
+  for(let y=0;y<=ymax;y+=step){const yy=T+ph-(y/ymax)*ph;s.appendChild(el("line",{x1:L,x2:W-R,y1:yy,y2:yy,stroke:"var(--grid)"}));s.appendChild(el("text",{x:L-6,y:yy+4,"text-anchor":"end","font-size":11},y))}
+  data.forEach((d,i)=>{const h=(d[1]/ymax)*ph;const x=L+i*bw+1.5;s.appendChild(el("rect",{x,y:T+ph-h,width:Math.max(bw-3,2),height:h,fill:d[1]?color:"transparent",rx:1.5}));
+    if(i%3===0||i===n-1){s.appendChild(el("text",{x:L+i*bw+bw/2,y:H-B+16,"text-anchor":"middle","font-size":10},d[0]))}});
+  s.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"day·hour (PDT)"));
+  if(yLabel)s.appendChild(el("text",{x:L,y:10,"font-size":10,fill:"var(--ink3)"},yLabel));
+  target.appendChild(s);
+}
+hourBars($("#commits"),commitsPerHour,"var(--agent)","commits");
+hourBars($("#prs"),prsPerHour,"var(--deploy)","merges");
+
+// ---------- burn-up ----------
+(function(){
+  const W=560,H=250,L=36,R=12,T=14,B=40;const s=svg(W,H);const pw=W-L-R,ph=H-T-B;
+  const x0=9,x1=39.5;const N=doneTimes.length;const xs=v=>L+((v-x0)/(x1-x0))*pw;const ys=v=>T+ph-(v/42)*ph;
+  for(let y=0;y<=42;y+=6){s.appendChild(el("line",{x1:L,x2:W-R,y1:ys(y),y2:ys(y),stroke:"var(--grid)"}));s.appendChild(el("text",{x:L-6,y:ys(y)+4,"text-anchor":"end","font-size":11},y))}
+  [[12,"12·12"],[18,"18"],[24,"13·00"],[30,"06"],[36,"12"]].forEach(([v,l])=>s.appendChild(el("text",{x:xs(v),y:H-B+16,"text-anchor":"middle","font-size":10},l)));
+  // pause band
+  s.appendChild(el("rect",{x:xs(22),y:T,width:xs(28.25)-xs(22),height:ph,fill:"var(--bg2)"}));s.appendChild(el("text",{x:xs(25.1),y:T+ph/2,"text-anchor":"middle","font-size":10,fill:"var(--ink3)"},"usage pause"));
+  let d=`M${xs(x0)} ${ys(0)}`;let c=0;doneTimes.forEach(t=>{d+=` H${xs(t)} V${ys(++c)}`});d+=` H${xs(x1)}`;
+  const area=el("path",{d:d+` V${ys(0)} Z`,fill:"var(--agent)",opacity:.15});s.appendChild(area);
+  s.appendChild(el("path",{d,fill:"none",stroke:"var(--agent)","stroke-width":2}));
+  s.appendChild(el("line",{x1:xs(x0),x2:xs(x1),y1:ys(18),y2:ys(18),stroke:"var(--ink3)","stroke-dasharray":"3 4"}));s.appendChild(el("text",{x:xs(x0)+4,y:ys(18)-5,"font-size":10,fill:"var(--ink3)"},"planning stories: 18 Done by 15:23"));
+  s.appendChild(el("circle",{cx:xs(39.0),cy:ys(42),r:4,fill:"var(--ok)"}));s.appendChild(el("text",{x:xs(39.0)-8,y:ys(42)+4,"text-anchor":"end","font-size":11,fill:"var(--ink)"},"42 · 15:00"));
+  s.appendChild(el("text",{x:L,y:H-6,"font-size":10,fill:"var(--ink3)"},"stories Done (cumulative)"));
+  $("#burnup").appendChild(s);
+})();
+
+// ---------- CI outcomes ----------
+(function(){
+  const rows=[["deploy.yml",[["success",51,"var(--ok)"],["failure",5,"var(--inc)"],["cancelled",13,"var(--ink3)"]]],["pr-check.yml",[["success",100,"var(--ok)"],["failure",17,"var(--inc)"]]]];
+  const W=560,H=150,L=110,R=12;const s=svg(W,H);const pw=W-L-R;const max=117;
+  rows.forEach((r,i)=>{const y=24+i*56;s.appendChild(el("text",{x:L-10,y:y+15,"text-anchor":"end","font-size":12,fill:"var(--ink)"},r[0]));let x=L;const tot=r[1].reduce((a,b)=>a+b[1],0);
+    r[1].forEach(seg=>{const w=(seg[1]/max)*pw;s.appendChild(el("rect",{x,y,width:w,height:24,fill:seg[2],rx:2}));if(w>26)s.appendChild(el("text",{x:x+w/2,y:y+16,"text-anchor":"middle","font-size":11,fill:"#fff"},seg[1]));x+=w+2});
+    s.appendChild(el("text",{x:x+6,y:y+16,"font-size":11},`${tot} runs`));
+    s.appendChild(el("text",{x:L,y:y+38,"font-size":10,fill:"var(--ink3)"},i===0?"merge → build 3 images → migrate → apply; 51 successful deployments to the public URL":"every PR: lint, gitleaks, govulncheck, real Postgres + CockroachDB + SQLite tests, image build"));
+  });
+  $("#ci").appendChild(s);
+})();
+
+// ---------- human in loop stacked bars ----------
+(function(){
+  const W=560,H=hil.length*34+20,L=180,R=60;const s=svg(W,H);const pw=W-L-R;const max=289;
+  hil.forEach((r,i)=>{const y=8+i*34;const a=(r[1]/max)*pw,h=(r[2]/max)*pw;
+    s.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":12,fill:"var(--ink)"},r[0]));
+    if(r[1])s.appendChild(el("rect",{x:L,y,width:Math.max(a,2),height:22,fill:"var(--agent)",rx:2}));
+    if(r[2])s.appendChild(el("rect",{x:L+a+(r[1]?2:0),y,width:Math.max(h,2),height:22,fill:"var(--human)",rx:2}));
+    s.appendChild(el("text",{x:L+a+h+8,y:y+16,"font-size":12},(r[1]||r[2])));
+  });
+  $("#hil").appendChild(s);
+})();
+
+// ---------- authors ----------
+(function(){
+  const data=[["Renata Cole · 03",21831,78],["Theo Bergman · 04",3651,55],["Dana Whitfield · PM",1682,48],["Priya Nandakumar · 05",306,8],["Naomi Voss · 01",253,2],["Marcus Ilori · 02",171,12]];
+  const W=560,H=data.length*40+40,L=170,R=90;const s=svg(W,H);const pw=W-L-R;const max=Math.max(...data.map(d=>d[1]));
+  data.forEach((d,i)=>{const y=8+i*40;const w=Math.max((d[1]/max)*pw,2);
+    s.appendChild(el("text",{x:L-10,y:y+17,"text-anchor":"end","font-size":12,fill:"var(--ink)"},d[0]));
+    s.appendChild(el("rect",{x:L,y,width:w,height:24,fill:"var(--agent)",rx:2}));
+    s.appendChild(el("text",{x:L+w+8,y:y+17,"font-size":12},`${d[1].toLocaleString()} lines · ${d[2]} commits`));
+  });
+  s.appendChild(el("text",{x:L,y:H-8,"font-size":10,fill:"var(--ink3)"},"plus 74 merge commits by the PM under Warren's GitHub identity and 12 pre‑rule commits as wtvamp (8,437 lines)"));
+  $("#authors").appendChild(s);
+})();
+
+// ---------- mentions ----------
+(function(){
+  const W=560,H=mentions.length*24+24,L=90,R=40;const s=svg(W,H);const pw=W-L-R;const max=mentions[0][1];
+  const human=new Set(["Warren"]);const hire=new Set(["Tobias","Oren","Desmond","Tomasz","Nolan","Helena","Wesley","Ingrid","Saoirse"]);const op=new Set(["Amber"]);
+  mentions.forEach((m,i)=>{const y=6+i*24;const w=Math.max((m[1]/max)*pw,2);const col=human.has(m[0])?"var(--human)":op.has(m[0])?"var(--sec)":hire.has(m[0])?"var(--ink3)":"var(--agent)";
+    s.appendChild(el("text",{x:L-10,y:y+13,"text-anchor":"end","font-size":12,fill:"var(--ink)"},m[0]));
+    s.appendChild(el("rect",{x:L,y,width:w,height:16,fill:col,rx:2}));
+    s.appendChild(el("text",{x:L+w+6,y:y+13,"font-size":11},m[1]));
+  });
+  $("#mentions").appendChild(s);
+  const n=document.createElement("p");n.className="note";n.innerHTML='Teal: leads. Grey: hires. Coral: the human. Violet: Amber. The PM wrote the log and names herself rarely (4).';$("#mentions").appendChild(n);
+})();
+
+// ---------- leads ----------
+(function(){
+  const root=$("#leads");
+  leads.forEach(l=>{const c=document.createElement("div");c.className="card";c.innerHTML=`<div class="who">${l.who}</div><div class="role">${l.role}</div><div class="model">${l.model}</div><ul>${l.hires.map(h=>`<li>${h[0]}<i>${h[1]}</i></li>`).join("")}</ul>`;root.appendChild(c)});
+})();
+</script>
