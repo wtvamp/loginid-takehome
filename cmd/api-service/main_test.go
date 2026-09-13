@@ -103,6 +103,20 @@ func TestValidateAuthConfig_IssuerMode(t *testing.T) {
 	}
 }
 
+// TestValidateAuthConfig_SweepMode confirms LT-44's sweep mode requires
+// none of the AUTH_* variables the other two modes need — it never
+// verifies or issues a JWT — and that this is deliberate (recognized:
+// true, empty required list), not the unrecognized-mode fallback.
+func TestValidateAuthConfig_SweepMode(t *testing.T) {
+	t.Setenv("AUTH_JWT_ISSUER", "")
+	t.Setenv("AUTH_JWT_AUDIENCE", "")
+	t.Setenv("AUTH_JWKS_URL", "")
+
+	if err := validateAuthConfig(app.ModeSweep); err != nil {
+		t.Errorf("validateAuthConfig(ModeSweep) = %v, want nil even with every AUTH_* var unset", err)
+	}
+}
+
 // TestNewOnboardingService confirms LT-33's best-effort wiring: fully
 // configured succeeds, and each individually-missing piece of config
 // (the two connector-related URLs, or the client credential) is

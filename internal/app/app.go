@@ -87,9 +87,17 @@ type Mode string
 // idp-connector has no issuer/verifier split — its main.go passes
 // ModeVerifier, the only mode that adds no route beyond /healthz, since
 // that value is also this package's harmless default.
+//
+// ModeSweep (LT-44) is a third value cmd/api-service/main.go checks for
+// BEFORE ever calling NewRouter — a sweep invocation runs
+// internal/sweep.Run once and exits, never starts an HTTP server at
+// all. It's declared here anyway (rather than as a bare string constant
+// local to cmd/api-service) so config.AppMode's three legal values live
+// in one typed place, matching ModeVerifier/ModeIssuer's own pattern.
 const (
 	ModeVerifier Mode = "verifier"
 	ModeIssuer   Mode = "issuer"
+	ModeSweep    Mode = "sweep"
 )
 
 // NewRouter builds the http.Handler shared by both binaries' main.go.
