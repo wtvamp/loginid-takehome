@@ -25,6 +25,8 @@ Amber's observability inventory (LT-49) found Filebeat's `drop_event` filter dro
 
 Standard RED metrics (rate, errors, duration) per endpoint, via Prometheus client library, scraped by whatever the lab cluster already runs (not stood up new for this take-home). Labels: method, route, status class — never a label with cardinality tied to user data (no `sub` or phone number as a metric label; that turns a metrics backend into an accidental PII store with no access control at all, which is a worse leak than a log line since metrics systems are typically more widely readable).
 
+**A `ServiceMonitor` selects `Service` objects by label — not by the `Service`'s own `selector` (which pods it routes to).** Found live during LT-49's rollout: `deploy/api-service.yaml`'s Service had `selector: {app: api-service}` (routing pods correctly, ports/Endpoints all correct) but carried no `labels:` of its own, so `loginid-takehome-api-service`'s `spec.selector.matchLabels: {app: api-service}` matched zero `Service` objects — `/api/v1/targets` showed zero targets for this namespace despite a healthy Endpoints object with `metrics:9101` present. **The `Service` must carry `app=<name>` as its own `metadata.labels`, in addition to whatever `spec.selector` it uses to route traffic — the two are unrelated fields serving different consumers (Prometheus reads the former, kube-proxy the latter).**
+
 ## Tracing
 
 Not built out here — a two-service take-home with no running collector doesn't get more credible by naming OpenTelemetry. If ever added, it follows the same field discipline as logging.
