@@ -240,6 +240,14 @@ func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass,
 				emit.EmitClassMetrics(class, result.RowsExamined, result.RowsDeleted, ageSeconds)
 			}
 			if recorder != nil && runID != "" {
+				// Deliberately time.Now(), not now: now is the single
+				// invocation-time clock cutoffFor/StartRun/the age
+				// calculation all share, but a drain can take multiple
+				// batches and real elapsed wall-clock time — finished_at
+				// must reflect when the run actually completed, not the
+				// frozen moment Run was called, or
+				// retention_sweep_last_run_duration_seconds would read
+				// as near-zero regardless of true duration.
 				if err := recorder.FinishRun(ctx, runID, time.Now(), result.RowsExamined, result.RowsDeleted, true, batch.OldestSurvivingAt); err != nil {
 					log.Printf("sweep: recording run finish for class %q: %v", class, err)
 				}
