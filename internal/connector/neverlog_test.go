@@ -19,6 +19,13 @@ import (
 // never-log list): this inspects the actual bytes written during a
 // real request through the real handler/audit-logging path, catching
 // what a static grep-style rule can miss.
+//
+// Not compatible with t.Parallel(): log.SetOutput/log.Writer() is
+// process-wide, package-level state — no test in this package should
+// call t.Parallel() while a test using captureLog is running, or its
+// captured output will interleave with concurrent tests' own log lines
+// (Oren Castellan's review, PR #59). No test here currently does; keep
+// it that way for tests using this helper.
 func captureLog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
