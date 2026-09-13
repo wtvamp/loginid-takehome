@@ -164,6 +164,26 @@ spec:
   ingress:
     - from: [{podSelector: {matchLabels: {app: api-service}}}]
 ---
+# api-service-issuer serves: (a) JWKS, in-cluster only, no Ingress route
+# for it — internal callers reach it via the ClusterIP Service directly;
+# (b) the reserved /auth/token path, which the Ingress below DOES route
+# publicly. Without this policy the pod would be reachable from anything
+# in the namespace (default is allow, not deny). Two allowed sources:
+# api-service/idp-connector (JWKS), and the ingress-nginx-controller
+# namespace (so the public /auth/token route in the Ingress below still
+# works — that traffic arrives from ingress-nginx's pod, not api-service's).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: api-service-issuer-default-deny, namespace: loginid-takehome}
+spec:
+  podSelector: {matchLabels: {app: api-service-issuer}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - {podSelector: {matchLabels: {app: api-service}}}
+        - {podSelector: {matchLabels: {app: idp-connector}}}
+        - {namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
