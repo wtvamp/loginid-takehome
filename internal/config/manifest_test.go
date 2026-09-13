@@ -151,11 +151,22 @@ func TestManifestsSetRequiredAuthEnvVars(t *testing.T) {
 				mode = "verifier"
 			}
 
-			required := config.RequiredAuthEnvVars(service, mode)
-			if len(required) == 0 {
+			required, recognized := config.RequiredAuthEnvVars(service, mode)
+			if !recognized {
+				// A missing case in RequiredAuthEnvVars silently
+				// requiring nothing would defeat this whole test — the
+				// exact class of gap it exists to catch, just moved one
+				// level up (Oren Castellan, PR #53 review). Either the
+				// manifest's APP_MODE is wrong, or RequiredAuthEnvVars
+				// needs a new case for this (service, mode) pair.
+				t.Errorf("%s: Deployment %q, container %q (service=%s, mode=%s) has no RequiredAuthEnvVars entry for this mode",
+					entry.file, doc.Metadata.Name, c.Image, service, mode)
 				continue
 			}
 			checked++
+			if len(required) == 0 {
+				continue
+			}
 
 			var missing []string
 			for _, name := range required {

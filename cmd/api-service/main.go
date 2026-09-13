@@ -66,7 +66,18 @@ func sqlDriverNameFor(daoDriver string) string {
 // would wrongly fail that binary's startup too — idp-connector runs the
 // equivalent check itself, against its own required list.
 func validateAuthConfig(mode app.Mode) error {
-	for _, name := range config.RequiredAuthEnvVars("api-service", string(mode)) {
+	required, recognized := config.RequiredAuthEnvVars("api-service", string(mode))
+	if !recognized {
+		// app.Mode's own constructor already rejects anything but
+		// "verifier"/"issuer" (config.Load's APP_MODE validation), so
+		// reaching this branch means RequiredAuthEnvVars itself has
+		// drifted out of sync with app.Mode's real values — a bug in
+		// this binary, not a bad deployment, and worth failing loudly
+		// rather than silently requiring nothing (the exact class of
+		// gap this function exists to prevent, moved one level up).
+		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for api-service mode %q", mode)
+	}
+	for _, name := range required {
 		if os.Getenv(name) == "" {
 			return fmt.Errorf("%s must be set in %s mode", name, mode)
 		}

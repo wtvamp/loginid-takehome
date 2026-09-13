@@ -27,7 +27,16 @@ import (
 // rather than a hardcoded list of its own, so this check and that test
 // can never drift apart.
 func validateAuthConfig() error {
-	for _, name := range config.RequiredAuthEnvVars("idp-connector", "") {
+	required, recognized := config.RequiredAuthEnvVars("idp-connector", "")
+	if !recognized {
+		// idp-connector always passes the same fixed ("idp-connector", "")
+		// pair — reaching here means RequiredAuthEnvVars itself has
+		// drifted, not a bad deployment. A bug in this binary, not a
+		// config problem, but still worth failing loudly rather than
+		// silently requiring nothing.
+		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for idp-connector")
+	}
+	for _, name := range required {
 		if os.Getenv(name) == "" {
 			return fmt.Errorf("%s must be set", name)
 		}
