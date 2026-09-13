@@ -620,6 +620,75 @@ func TestClassifyJWKSFetchError(t *testing.T) {
 	}
 }
 
+// TestClassifyJWKSFetchError_AgainstRealFetchErrors is Nolan Reyes's own
+// named fast-follow (PR #44 review): classifyJWKSFetchError substring-
+// matches against fetch()'s own fmt.Errorf wording — the case above
+// only proves the matcher works against hand-written strings that mirror
+// today's wording, which would silently degrade to "unknown" if a future
+// edit to fetch() reworded a message, with nothing catching the drift.
+// This exercises the real fetch() against real broken conditions and
+// classifies its ACTUAL returned error, closing that gap.
+func TestClassifyJWKSFetchError_AgainstRealFetchErrors(t *testing.T) {
+	t.Run("http status error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer srv.Close()
+		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+		_, err := cache.fetch(context.Background())
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+		if got := classifyJWKSFetchError(err); got != "http_status_error" {
+			t.Errorf("classifyJWKSFetchError(%v) = %q, want http_status_error", err, got)
+		}
+	})
+
+	t.Run("response parse error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("not valid json"))
+		}))
+		defer srv.Close()
+		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+		_, err := cache.fetch(context.Background())
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+		if got := classifyJWKSFetchError(err); got != "response_parse_error" {
+			t.Errorf("classifyJWKSFetchError(%v) = %q, want response_parse_error", err, got)
+		}
+	})
+
+	t.Run("network error", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		unreachableURL := srv.URL
+		srv.Close() // closing before use: connection refused on a real (just-freed) port
+		cache := NewJWKSCache(unreachableURL, time.Hour, nil)
+		_, err := cache.fetch(context.Background())
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+		if got := classifyJWKSFetchError(err); got != "network_error" {
+			t.Errorf("classifyJWKSFetchError(%v) = %q, want network_error", err, got)
+		}
+	})
+
+	t.Run("request build error", func(t *testing.T) {
+		// A control character in the URL is one of the few inputs that
+		// makes http.NewRequestWithContext itself fail, rather than
+		// merely producing a request that later fails to connect.
+		cache := NewJWKSCache("http://\x7f", time.Hour, nil)
+		_, err := cache.fetch(context.Background())
+		if err == nil {
+			t.Fatalf("expected an error")
+		}
+		if got := classifyJWKSFetchError(err); got != "request_build_error" {
+			t.Errorf("classifyJWKSFetchError(%v) = %q, want request_build_error", err, got)
+		}
+	})
+}
+
 // TestJWKSCache_RecoveryAfterFailureStreak_ResetsFailureCount confirms
 // the recovery path (logged once, per refresh()'s own "once per streak"
 // discipline) actually clears consecutiveFailures/staleAlerted, not just

@@ -355,6 +355,17 @@ func (c *JWKSCache) reserveUnknownKidRetry(kid string) bool {
 // reintroduce that problem on the logging side. No token material is
 // ever in scope for these lines — the JWKS fetch has no token at all,
 // only the verifier's own outbound request to the issuer.
+//
+// Under a flaky (not fully down) network, KeyForKid's own accepted
+// duplicate-fetch behavior (see its doc comment: concurrent callers may
+// both decide a refresh is due and both fetch) can produce one
+// concurrent fetch failing while another succeeds — a "failed" log line
+// immediately followed by a "recovered after 1 failure" line. That's
+// the existing duplicate-fetch trade-off surfacing in the logs, not a
+// new bug this logging introduces (Nolan Reyes, PR #44 review) — an
+// on-call engineer seeing a fail/recover pair with no time between them
+// should read it as network flakiness, not as this rate-limiting being
+// broken.
 func (c *JWKSCache) refresh(ctx context.Context) error {
 	c.mu.Lock()
 	c.lastAttempt = c.now()
