@@ -35,8 +35,14 @@ spec:
   # LT-51 adds the issuer database in the same Postgres instance and the
   # migration Job's third invocation — no new pods, no change to the
   # numbers below beyond what LT-52 already established. api-service-
-  # issuer's replicas dropped 2 -> 1 per Helena's (02) ruling, which
-  # only tightens headroom further, not loosens it):
+  # issuer's replicas dropped 2 -> 1 per Helena's (02) ruling, and
+  # api-service's own replicas dropped 2 -> 1 per Naomi's (01) live
+  # review — RateLimiter/TouchCounter/GrantLimiter are all in-process,
+  # per-pod state; a 12-request burst passed a 10 req/min limit because
+  # the load balancer split it across two pods, each with its own
+  # independent counter. Both reductions only tighten headroom further,
+  # never loosen it, so the numbers below are unchanged, now with more
+  # margin than shown):
   #   requests.cpu:    550m existing + postgres 100m + migrate 50m  = 700m  (limit "1" = 1000m, fits)
   #   requests.memory: 704Mi existing + postgres 256Mi + migrate 64Mi = 1024Mi (was AT the 1Gi limit already — bumped to 2Gi for real headroom)
   #   limits.cpu:      2750m existing + postgres 500m + migrate 200m = 3450m (was "3" = 3000m — bumped to "4")
