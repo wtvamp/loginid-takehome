@@ -16,4 +16,4 @@ This track (04/Theo) owns triggering steps 1, 2, and 4 (they're this track's own
 
 ## Trigger condition
 
-**Not decided here — Warren's call.** Candidates a future decision could pick from: a fixed date (e.g., N days after the take-home is submitted/reviewed), an explicit "done reviewing" signal from Warren, or never (if he decides to keep it running as a portfolio piece). This document only guarantees that when the trigger fires, there's a named, complete list to execute against — it doesn't set the trigger itself.
+**Decided by Warren, 2026-09-12 21:55 PDT (relayed via the PM):** teardown runs **on Warren's explicit instruction, not on a schedule** — his words: "I'll just have y'all do it next week — let's not schedule it — I'll let you know when." Expected the week of 2026-09-14. When he says so, the PM tells 04 and this list is executed in full (steps 1–4, including the GitHub App uninstall), with the outcome recorded in `LOG.md` and on LT-45. Until then the deployment stays up. Superseded text, kept for the record: the earlier draft listed candidate triggers (fixed date, "done reviewing" signal, or never) and deliberately did not choose.
