@@ -7,9 +7,7 @@ package main
 import (
 	"log"
 	"net/http"
-	"time"
 
-	"loginid-takehome/internal/api"
 	"loginid-takehome/internal/app"
 	"loginid-takehome/internal/config"
 	"loginid-takehome/internal/connector"
@@ -59,13 +57,8 @@ func main() {
 		log.Printf("idp-connector: IDP_ABC_BASE_URL not set — using in-process stub vendor (LT-41 non-goal: no real vendor integration)")
 	}
 
-	// Same JWKS-fetch mechanism as api-service's verifier
-	// (internal/app/verifier_router.go) — both binaries verify tokens
-	// minted by the same issuer, just checking a different audience.
-	keys := api.NewJWKSCache(cfg.AuthJWKSURL, 15*time.Minute, nil)
-
 	log.Printf("idp-connector: listening on %s", addr)
-	if err := http.ListenAndServe(addr, app.NewConnectorRouter(cfg, keys, vendor)); err != nil {
+	if err := http.ListenAndServe(addr, app.NewConnectorRouter(cfg, vendor)); err != nil {
 		log.Fatalf("idp-connector: %v", err)
 	}
 }

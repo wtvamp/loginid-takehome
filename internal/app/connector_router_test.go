@@ -11,7 +11,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"loginid-takehome/internal/api"
 	"loginid-takehome/internal/config"
 	"loginid-takehome/internal/connector"
 )
@@ -46,7 +45,7 @@ func newTestStubVendor(t *testing.T) *connector.StubVendorClient {
 
 func TestNewConnectorRouter_HealthzUnaffectedByAuth(t *testing.T) {
 	cfg := config.Config{AuthJWTIssuer: testIssuer, ConnectorJWTAudience: testConnectorAudience, AuthJWKSURL: "http://unused.invalid"}
-	router := NewConnectorRouter(cfg, nil, newTestStubVendor(t))
+	router := NewConnectorRouter(cfg, newTestStubVendor(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -65,8 +64,7 @@ func TestNewConnectorRouter_NoToken_401(t *testing.T) {
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, ConnectorJWTAudience: testConnectorAudience, AuthJWKSURL: jwks.URL}
-	keys := api.NewJWKSCache(jwks.URL, 15*time.Minute, nil)
-	router := NewConnectorRouter(cfg, keys, newTestStubVendor(t))
+	router := NewConnectorRouter(cfg, newTestStubVendor(t))
 
 	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"username":"demo-user","password":"demo-password"}`))
 	w := httptest.NewRecorder()
@@ -90,8 +88,7 @@ func TestNewConnectorRouter_WrongAudience_Rejected(t *testing.T) {
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, ConnectorJWTAudience: testConnectorAudience, AuthJWKSURL: jwks.URL}
-	keys := api.NewJWKSCache(jwks.URL, 15*time.Minute, nil)
-	router := NewConnectorRouter(cfg, keys, newTestStubVendor(t))
+	router := NewConnectorRouter(cfg, newTestStubVendor(t))
 
 	wrongAudienceToken := signConnectorTestToken(t, key, "key-1", "loginid-api-service", "connector:identity-lookup")
 	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"username":"demo-user","password":"demo-password"}`))
@@ -112,8 +109,7 @@ func TestNewConnectorRouter_CorrectAudienceAndScope_ReachesAuthHandler(t *testin
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, ConnectorJWTAudience: testConnectorAudience, AuthJWKSURL: jwks.URL}
-	keys := api.NewJWKSCache(jwks.URL, 15*time.Minute, nil)
-	router := NewConnectorRouter(cfg, keys, newTestStubVendor(t))
+	router := NewConnectorRouter(cfg, newTestStubVendor(t))
 
 	tok := signConnectorTestToken(t, key, "key-1", testConnectorAudience, "connector:identity-lookup")
 	req := httptest.NewRequest(http.MethodPost, "/auth", strings.NewReader(`{"username":"demo-user","password":"demo-password"}`))
@@ -135,8 +131,7 @@ func TestNewConnectorRouter_IdentityEndToEnd(t *testing.T) {
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, ConnectorJWTAudience: testConnectorAudience, AuthJWKSURL: jwks.URL}
 	vendor := newTestStubVendor(t)
-	keys := api.NewJWKSCache(jwks.URL, 15*time.Minute, nil)
-	router := NewConnectorRouter(cfg, keys, vendor)
+	router := NewConnectorRouter(cfg, vendor)
 	tok := signConnectorTestToken(t, key, "key-1", testConnectorAudience, "connector:identity-lookup")
 
 	// First mint a vendor token via /auth.
