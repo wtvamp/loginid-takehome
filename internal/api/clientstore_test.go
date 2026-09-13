@@ -38,7 +38,15 @@ func TestHashSecret_DistinctSaltsPerCall(t *testing.T) {
 }
 
 func TestVerifySecret_MalformedHash_RejectsWithoutPanic(t *testing.T) {
-	for _, malformed := range []string{"", "no-dollar-sign", "$", "not-base64$also-not-base64"} {
+	for _, malformed := range []string{
+		"", "no-dollar-sign", "$", "not-base64$also-not-base64",
+		// "v=19x" — trailing garbage after the version digits. A naive
+		// fmt.Sscanf-based parser doesn't require consuming the whole
+		// field and would accept this as version 19 (Oren Castellan, PR
+		// #39 review); parsePHCParam's whole-field strconv.ParseUint
+		// must reject it instead.
+		"$argon2id$v=19x$m=65536,t=1,p=4$c2FsdA$aGFzaA",
+	} {
 		if verifySecret("anything", malformed) {
 			t.Errorf("verifySecret(%q) = true, want false for a malformed hash", malformed)
 		}
