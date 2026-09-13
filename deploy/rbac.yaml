@@ -1,0 +1,39 @@
+# RBAC for the scoped runner set (deploy/runner-set-values.yaml). The
+# ServiceAccount lives in loginid-takehome-runners (where the runner Pods
+# run — a ServiceAccount must share a namespace with the Pod that uses it)
+# but its Role grant is scoped to loginid-takehome (the app namespace) via
+# a cross-namespace RoleBinding subject. No ClusterRole, no cluster-scoped
+# verbs — this identity can act on nothing outside loginid-takehome.
+apiVersion: v1
+kind: Namespace
+metadata: {name: loginid-takehome-runners}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: loginid-takehome-deployer, namespace: loginid-takehome-runners}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: loginid-takehome-deployer, namespace: loginid-takehome}
+rules:
+  - apiGroups: ["apps"]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [""]
+    resources: [services, resourcequotas]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["networking.k8s.io"]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["batch"]
+    resources: [jobs]
+    verbs: [get, list, watch, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: loginid-takehome-deployer, namespace: loginid-takehome}
+subjects:
+  - kind: ServiceAccount
+    name: loginid-takehome-deployer
+    namespace: loginid-takehome-runners
+roleRef: {kind: Role, name: loginid-takehome-deployer, apiGroup: rbac.authorization.k8s.io}
