@@ -248,10 +248,19 @@ func resolveDSNFrom(fileEnv, plainEnv string) (string, error) {
 // binary in different modes). mode is "verifier"/"issuer" for
 // api-service (matching AppMode's own two values), or "" for
 // idp-connector, which has no mode concept.
-func RequiredAuthEnvVars(service, mode string) []string {
+// The second return value, recognized, distinguishes "this (service, mode)
+// pair is known and legitimately requires nothing extra" from "this pair
+// doesn't match anything this function knows about" — a typo'd mode string
+// (e.g. a manifest's APP_MODE misspelled, or a startup caller passing a
+// value that isn't one of app.Mode's own constants) must not silently
+// require zero env vars, since that would make both enforcement sites
+// (startup validation and the manifest test) blind to the exact class of
+// gap this declaration exists to catch, just moved one level up into its
+// own lookup (Oren Castellan, PR #53 review).
+func RequiredAuthEnvVars(service, mode string) (required []string, recognized bool) {
 	switch {
 	case service == "api-service" && mode == "verifier":
-		return []string{"AUTH_JWT_ISSUER", "AUTH_JWT_AUDIENCE", "AUTH_JWKS_URL"}
+		return []string{"AUTH_JWT_ISSUER", "AUTH_JWT_AUDIENCE", "AUTH_JWKS_URL"}, true
 	case service == "api-service" && mode == "issuer":
 		// AUTH_JWT_AUDIENCE deliberately absent here — the issuer mints
 		// each token's aud from the per-client oauth_client.audience
@@ -259,10 +268,10 @@ func RequiredAuthEnvVars(service, mode string) []string {
 		// requiring it would reject a valid issuer configuration for a
 		// variable it has no use for (validateAuthConfig's own doc
 		// comment states this same reasoning).
-		return []string{"AUTH_JWT_ISSUER"}
+		return []string{"AUTH_JWT_ISSUER"}, true
 	case service == "idp-connector":
-		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}
+		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}, true
 	default:
-		return nil
+		return nil, false
 	}
 }
