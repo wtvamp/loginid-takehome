@@ -1,10 +1,8 @@
 # Containerization Design
 
-Design-only. No Dockerfile, manifest, or config file is being committed yet — per root `CLAUDE.md`, code/config artifacts wait for Warren's project-wide go-ahead. This document describes what would be built, in enough detail that building it is a transcription exercise, not a design exercise.
+Implementation-phase update: Warren gave the implementation go-ahead as an agile loop (`../PLANNING.md`). The Dockerfiles this document describes are now real and committed (LT-45, PRs #4/#5); the manifests below are still the design reference the real deploy job builds from. Deployment target confirmed: Warren's real, shared cluster, not an isolated lab sandbox — see `decisions/deploy-path.md` for the discovery that corrected this and the direct confirmation obtained before proceeding.
 
-Inputs this depends on: `../PLANNING.md` Service boundaries (03, stable), `../02-ai-security-architecture/handoff-04-secrets.md` v2 (02, stable), `../05-data-ops/migration-approach.md` (05, **final**).
-
-Deployment target: the real Kubernetes dev/lab cluster on Warren's LAN, operated by amber-kubernetes (an external agent, not contacted during this take-home — see `./PLAN.md`). Manifests below are sketched against that cluster's shape, not a generic "some Kubernetes somewhere."
+Inputs this depends on: `../PLANNING.md` Service boundaries (03, stable), `../02-ai-security-architecture/handoff-04-secrets.md` v2 (02, stable), `../05-data-ops/migration-approach.md` (05, **final**), `decisions/deploy-path.md` (namespace, image registry, public URL).
 
 ## 1. Two images, not one
 
@@ -23,11 +21,26 @@ Both images run as a read-only root filesystem (`securityContext.readOnlyRootFil
 ## 3. Deployment/Service manifest sketch — `api-service`
 
 ```yaml
+apiVersion: v1
+kind: Namespace
+metadata: {name: loginid-takehome}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: loginid-takehome-quota, namespace: loginid-takehome}
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    pods: "10"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-service
-  namespace: loginid-poc          # amber-kubernetes' convention, confirmed at apply time — not queried during this take-home
+  namespace: loginid-takehome     # a real, isolated namespace on Warren's shared cluster — see decisions/deploy-path.md §3
 spec:
   replicas: 2
   selector:
@@ -42,7 +55,7 @@ spec:
         readOnlyRootFilesystem: true
       containers:
         - name: api-service
-          image: registry.internal/loginid-poc/api-service:<tag>
+          image: ghcr.io/wtvamp/loginid-takehome/api-service:<tag>
           resources:
             requests: {cpu: "100m", memory: "128Mi"}
             limits: {cpu: "500m", memory: "256Mi"}
@@ -69,7 +82,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-service-issuer
-  namespace: loginid-poc
+  namespace: loginid-takehome
 spec:
   replicas: 2
   selector:
@@ -84,7 +97,7 @@ spec:
         readOnlyRootFilesystem: true
       containers:
         - name: api-service
-          image: registry.internal/loginid-poc/api-service:<tag>   # same image as api-service — mode selected below, not a separate build
+          image: ghcr.io/wtvamp/loginid-takehome/api-service:<tag>   # same image as api-service — mode selected below, not a separate build
           resources:
             requests: {cpu: "100m", memory: "128Mi"}
             limits: {cpu: "500m", memory: "256Mi"}
@@ -110,9 +123,31 @@ metadata: {name: api-service-issuer}
 spec:
   selector: {app: api-service-issuer}
   ports: [{port: 443, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: loginid-takehome
+  namespace: loginid-takehome
+  annotations: {cert-manager.io/cluster-issuer: letsencrypt-prod}
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [loginid-takehome.uplifttech.org]
+      secretName: loginid-takehome-tls
+  rules:
+    - host: loginid-takehome.uplifttech.org
+      http:
+        paths:
+          - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
+          # remaining API path prefix pending 03's final route naming; issuer-specific
+          # routes (e.g. /.well-known/jwks.json, a token endpoint) go to api-service-issuer.
+          # idp-connector gets no route here — never publicly reachable, by design.
 ```
 
-**Reachability:** the verifying `api-service` Deployment fetches the JWKS from `api-service-issuer`'s in-cluster `Service` (`https://api-service-issuer.loginid-poc.svc/jwks`) at startup and on rotation, per row #3's "fetched from the issuer" option — no config variable or NetworkPolicy rule exists yet for this path, both are 04's to add once 03 wires the JWKS fetch client (flagged in the vocabulary sweep, receivers Theo/Renata). Nothing blocks this by default: the `NetworkPolicy` in §5 above is a default-deny scoped to `idp-connector`'s ingress only, so egress from `api-service` (and from `idp-connector`, if it ever needs a token from the issuer directly) to `api-service-issuer`'s `Service` is unrestricted namespace-default traffic, not something this design has to open a hole for.
+No `NetworkPolicy` on `api-service` restricts inbound traffic from the `Ingress` — the default-deny `NetworkPolicy` in §5 is scoped to `idp-connector` only, deliberately, since `api-service` needs to accept traffic from the ingress controller and that path isn't the one this design is defending.
+
+**Reachability:** the verifying `api-service` Deployment fetches the JWKS from `api-service-issuer`'s in-cluster `Service` (`https://api-service-issuer.loginid-takehome.svc/jwks`) at startup and on rotation, per row #3's "fetched from the issuer" option — no config variable or NetworkPolicy rule exists yet for this path, both are 04's to add once 03 wires the JWKS fetch client (flagged in the vocabulary sweep, receivers Theo/Renata). Nothing blocks this by default: the `NetworkPolicy` in §5 above is a default-deny scoped to `idp-connector`'s ingress only, so egress from `api-service` (and from `idp-connector`, if it ever needs a token from the issuer directly) to `api-service-issuer`'s `Service` is unrestricted namespace-default traffic, not something this design has to open a hole for.
 
 **Why two Deployments of one image, not RBAC on one:** a `Role` restricting `get` on the signing-key `Secret` does nothing once that `Secret` is already volume-mounted into a container — every replica of that Deployment can read the file regardless of who's allowed to `kubectl get` it. The only way to keep the verification code path (every `api-service` replica) from being able to read the private key is to never mount it there at all. `APP_MODE=issuer` on the second Deployment is 03's addition to the config surface (env-var only, no flags, per `PLANNING.md`); the same binary handles both modes, wired by that variable, not two separate images. This was F13 in the consistency pass — the earlier version of this manifest mounted the key into `api-service` directly, which the RBAC comment here used to (incorrectly) imply was sufficient.
 
