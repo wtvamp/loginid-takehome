@@ -15,10 +15,32 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-// setupIssuerDB connects to TEST_POSTGRES_DSN (skipping the test if
-// unset, same discipline as internal/dao/postgres's own setupDB — real
-// Postgres verification is this file's responsibility, not something a
-// hand-written fake could ever exercise), applies the real
+// requireOrSkipDSN reads envVar, skipping the test if unset when running
+// locally (CI unset) but FAILING it (not skipping) if the CI env var is
+// set and envVar is still unset — GitHub Actions sets CI=true
+// unconditionally, so this is a reliable signal this test is running in
+// the gate, not on a developer's machine. Naomi Voss's joint-review
+// finding (originally caught in internal/dao/conformance, applying the
+// same fix here since this file follows the identical pattern): a plain
+// t.Skip made this integration suite look green in CI while never
+// actually running against a real database — a skipped assertion that
+// reads as a pass is worse than a red build (05's own §7 principle).
+func requireOrSkipDSN(t *testing.T, envVar string) string {
+	t.Helper()
+	dsn := os.Getenv(envVar)
+	if dsn != "" {
+		return dsn
+	}
+	if os.Getenv("CI") != "" {
+		t.Fatalf("%s not set in CI — the issuer-database integration gate is not running", envVar)
+	}
+	t.Skipf("%s not set — skipping issuer-database integration test", envVar)
+	return ""
+}
+
+// setupIssuerDB connects to TEST_POSTGRES_DSN — real Postgres
+// verification is this file's responsibility, not something a
+// hand-written fake could ever exercise. Applies the real
 // migrations/issuer/00001_initial_schema.sql into a fresh, uniquely-named
 // schema, and tears it down on cleanup.
 //
@@ -45,10 +67,7 @@ import (
 // parallel.
 func setupIssuerDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("TEST_POSTGRES_DSN not set — skipping issuer-database integration test")
-	}
+	dsn := requireOrSkipDSN(t, "TEST_POSTGRES_DSN")
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
