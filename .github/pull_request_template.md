@@ -1,9 +1,13 @@
 ## Summary
 
-## Test plan
-
-## Review checklist
-- [ ] If this PR changes `Repository` or any of its sub-interfaces (`internal/dao`), the corresponding hand-written fake is updated in the same PR — the same-PR rule from `03-engineering-delivery/decisions/test-double-strategy.md` (interface drift is silent with hand-written fakes; this is the review-time check that catches what a generated mock would otherwise catch automatically).
-
 ## Who did the work
-<!-- Lead, hires/seats, reviewers, and models — per root CLAUDE.md's attribution rule. -->
+<!-- Lead, hires and seats, reviewers (including 02's independent reviewer where applicable), and models. -->
+
+## Links
+<!-- Refinement doc path, Jira key. -->
+
+## Checklist
+- [ ] Any change to `dao.Repository` or its sub-interfaces updates the hand-written fake in this PR (decisions/test-double-strategy.md)
+- [ ] Any new env var read in config.go is set in every Deployment whose APP_MODE uses it (handoff-03-auth.md v9)
+- [ ] No secret or token in code, tests, or comments (gitleaks runs on this PR's commits)
+- [ ] `git diff origin/main` reviewed before requesting merge
