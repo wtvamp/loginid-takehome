@@ -61,18 +61,22 @@ func splitSQLStatements(sqlText string) []string {
 	return out
 }
 
-// setupDB connects to TEST_POSTGRES_DSN (skipping the test if unset — real
-// Postgres/CockroachDB verification is this package's own responsibility;
-// LT-38's cross-backend suite proves behavior matches SQLite, not that
-// this package can reach a database at all), applies the real migration
-// files into a fresh, uniquely-named schema, and tears the schema down on
-// test cleanup so tests never collide with each other.
+// setupDB connects to this package's throwaway per-run database (see
+// TestMain in testmain_test.go — testDBDSN, not TEST_POSTGRES_DSN
+// directly, skipping the test if no database is configured at all: real
+// Postgres/CockroachDB verification is this package's own
+// responsibility; LT-38's cross-backend suite proves behavior matches
+// SQLite, not that this package can reach a database at all), applies
+// the real migration files into a fresh, uniquely-named schema, and
+// tears the schema down on test cleanup so tests never collide with
+// each other WITHIN this package (cross-package collisions are what
+// TestMain's throwaway database prevents).
 func setupDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv("TEST_POSTGRES_DSN")
-	if dsn == "" {
+	if testDBDSN == "" {
 		t.Skip("TEST_POSTGRES_DSN not set — skipping Postgres integration test (see refinement/LT-36-LT-37.md: real-backend verification is this package's responsibility, run manually or in CI once wired)")
 	}
+	dsn := testDBDSN
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
