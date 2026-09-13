@@ -28,6 +28,13 @@ spec:
             - {name: DB_DRIVER, value: postgres}
             - {name: DB_DSN_FILE, value: /secrets/db/dsn}
             - {name: AUTH_JWKS_URL, value: http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json}
+            # StopgapAuthorizer's hard-coded (sub -> allowed record id)
+            # seed: sub is the "qa-review-read-own" QA client's client_id
+            # (the issuer mints Subject: clientID — LT-51), matched to
+            # one of deploy/demo-data/review-profiles.sql's fixed demo
+            # profile ids. Placeholder until real per-token authz lands.
+            - {name: AUTHZ_QA_SUB, value: qa-review-read-own}
+            - {name: AUTHZ_QA_ALLOWED_PROFILE_ID, value: "00000000-0000-4000-8000-000000000001"}
           volumeMounts:
             - {name: db-runtime-credential, mountPath: /secrets/db, readOnly: true}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
