@@ -95,6 +95,8 @@ spec:
             - {name: APP_MODE, value: issuer}
             - {name: JWT_SIGNING_KEY_FILE, value: /secrets/jwt/signing-key}
             - {name: ISSUER_DB_DSN_FILE, value: /secrets/issuer-db/dsn}
+            - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
+            - {name: AUTH_JWT_AUDIENCE, value: "loginid-api-service"}
           volumeMounts:
             - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
             - {name: issuer-db-runtime-credential, mountPath: /secrets/issuer-db, readOnly: true}
@@ -397,6 +399,7 @@ spec:
             limits: {cpu: "250m", memory: "128Mi"}
           env:
             - {name: HTTP_ADDR, value: ":8081"}
+            - {name: CONNECTOR_JWT_AUDIENCE, value: "idp-connector-service"}
           readinessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8081}, initialDelaySeconds: 10}
 ---
