@@ -111,12 +111,24 @@ CREATE TABLE oauth_client (
 -- never application code — a trigger is the only mechanism that can't be
 -- forgotten by whichever runbook step runs next (Priya Nandakumar's
 -- review, PR #34).
+--
+-- The StatementBegin/StatementEnd markers just below are required here:
+-- goose's default parser splits a migration file on every semicolon,
+-- including the ones inside this plpgsql function body — without them
+-- it breaks the CREATE FUNCTION apart mid dollar-quoted block and fails
+-- with "unterminated dollar-quoted string" (reproduced against the real
+-- goose CLI, not just psql, which has no such splitting behavior and
+-- would not have caught this — deploy failure on the live cluster).
+-- The markers tell goose to treat everything between them as one atomic
+-- statement instead.
+-- +goose StatementBegin
 CREATE FUNCTION oauth_client_set_updated_at() RETURNS trigger AS $$
 BEGIN
 	NEW.updated_at := now();
 	RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER trg_oauth_client_set_updated_at
 	BEFORE UPDATE ON oauth_client
