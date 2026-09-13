@@ -364,6 +364,32 @@ spec:
     metadata: {labels: {app: db-migrate}}
     spec:
       restartPolicy: Never
+      # Story 8 (backlog.md): the first real deploy's migrate attempt
+      # hit "lookup postgres.loginid-takehome.svc ... no such host" —
+      # the StatefulSet reported Ready before the headless Service's DNS
+      # record had actually propagated. The Job's own backoffLimit
+      # absorbed it (2nd attempt succeeded), so this is closing a race
+      # rather than fixing a live failure. initContainer, not a change
+      # to the main container's command: keeps the goose invocation
+      # order/logic in the main container untouched, and reuses the
+      # migrate image itself (alpine base, already has nc/getent) rather
+      # than pulling in a second image just for this.
+      initContainers:
+        - name: wait-for-postgres
+          image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until getent hosts postgres && nc -z -w2 postgres 5432; do
+                echo "waiting for postgres DNS/TCP..."
+                sleep 1
+              done
+              echo "postgres is reachable"
+          resources:
+            requests: {cpu: "10m", memory: "16Mi"}
+            limits: {cpu: "50m", memory: "32Mi"}
       containers:
         - name: migrate
           image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
