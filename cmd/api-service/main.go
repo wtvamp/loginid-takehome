@@ -216,6 +216,14 @@ func runSweepMode(cfg config.Config) {
 		_ = pingDB.Close()
 		if pingErr != nil {
 			log.Printf("api-service: sweep: database unreachable (class=%s) after %s: %v", classifySweepDBConnectError(pingErr), sweepDBConnectTimeout, pingErr)
+			// os.Exit skips the repo.Close() deferred above (dao.New
+			// already opened repo's own *sql.DB by this point) —
+			// deliberate, not an oversight: the process is exiting
+			// immediately, the OS reclaims the fd/goroutines on exit,
+			// and sql.DB.Close() has nothing durable to flush. Do not
+			// "fix" this into a manual repo.Close() call before Exit —
+			// that would add ordering risk for no real benefit
+			// (Oren Castellan's review, PR #64).
 			os.Exit(1)
 		}
 	}
