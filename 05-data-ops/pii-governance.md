@@ -32,7 +32,7 @@ This separation is treated as a governance control, not merely a normalization c
 | `user_profile`, `source='direct'` | `updated_at` | **24 months** since last update | *unknown — needs product/legal ruling.* Engineering basis only: long enough that a dormant account surviving a slow re-engagement cycle is not destroyed, short enough to be a defensible answer to "why do you still hold this." No regulation supplies this number | Hard delete | Cascade FK destroys all `user_credential` rows — the account stops existing | unknown — no named legal owner on this POC | Proposed |
 | `user_profile`, `source='idp_cache'` | `updated_at` | **30 days** since last hydration | Engineering: **a cache is not a record.** Re-hydration costs one `/identity` call, so deleting too early costs a vendor round-trip. Vendor data also goes stale — a 14-month-old cached address is a correctness problem before it is a privacy one. We are downstream custodian of another party's collected PII with no independent relationship to the subject, which argues for the shortest window that still functions | Hard delete | Cascade FK; a cached profile should not normally have credentials — if it does, it is no longer merely a cache and product must say which clock wins | unknown | Proposed |
 | `user_profile`, `source='idp_cache'`, **no referencing `user_credential`** (orphaned cache) | **`created_at`**, deliberately not `updated_at` | **7 days** since creation | Engineering: lookup residue, not an account — someone called `/identity`, we cached the answer, nothing was ever built on it. **The clock is `created_at` because `updated_at` is touched by the read and re-hydration path: an orphan re-read on any schedule would keep resetting its own expiry and never die.** Closing that loop is the entire reason this row exists | Hard delete | Nothing — by definition it has no children | unknown | Proposed |
-| **Audit-log stream** (the emitted log entries evidencing deletions, as read by 04's sink) | the entry's own timestamp | **Proposed, pending ruling — see basis** | **unknown — needs a legal ruling.** The audit stream evidences that a deletion happened, which is useful for exactly as long as someone may ask. That period is a question about limitation windows and regulator expectations, not an engineering one, and no engineering rationale substitutes for it | Expiry at the sink | Nothing | unknown — needs product/legal ruling | **Proposed** |
+| **Audit-log stream** (the emitted log entries evidencing deletions, as read by 04's sink) | the entry's own timestamp | **≥ 90 days — a FLOOR, not a ceiling** (POC default, ruled 2026-09-13) | Engineering: this is the opposite kind of number from every other row here. The PII windows above are **maximums** driven by minimization; this is a **minimum** driven by incident review, because the events carry no PII payload under the never-log discipline and their subject identifiers stop being linkable to a person once the profile they name is gone. 90 days covers the common incident-review horizon, and it is *only* 90 rather than a year because the durable proof-of-deletion lives in the `deletion_log` **table**, not in this stream — the stream is corroborating detail (who called what, when), not primary evidence | Expiry at the sink; 05 states the floor, 04 owns the configuration | Nothing | unknown — needs product/legal ruling to convert the floor into a commitment | **Proposed** |
 | `user_credential` | — | **No independent window** | Wholly governed by its profile's window via the cascade FK. A credential cannot outlive its profile; a credential row with no profile cannot exist. A second clock could only ever disagree with the first, with no resolution rule | n/a | n/a | **Ruled** |
 
 **The audit-stream row is enforced by 04, not by this schema.** Its enforcement site is 04's log-sink retention policy (`../04-infra-devops/observability.md`), which is what the consistency pass ruled and what `LT-20` cites. Nothing in the DAO reaches it: the sweep methods in `multi-db-strategy.md` §3c operate on `RetentionClass` values, all three of which are `user_profile` classes.
@@ -84,7 +84,47 @@ Added after the cross-track consistency pass (F21) found that none of the above 
 
 A deletion job that stops running produces no error, no alert and no visible symptom. The only evidence is data that should be absent and isn't. So the sweep emits, per class and per run: **rows examined, rows deleted, and the age of the oldest surviving row in that class.**
 
-The third is the actual health check. **04 should alert when the age of the oldest surviving row exceeds that class's window plus one sweep interval** — that is the condition that detects a job which has silently stopped, which rows-deleted counts cannot.
+The third is the actual health check. **04 alerts when the age of the oldest surviving row exceeds that class's window plus TWO sweep intervals** — see the ruling below; the earlier "plus one interval" figure was wrong and would have fired on every healthy cycle — that is the condition that detects a job which has silently stopped, which rows-deleted counts cannot.
+
+### Delivered state, 2026-09-13
+
+Checked against `origin/main` rather than against this document's own intentions, because a governance note that describes a plan as though it were a control is worse than one that admits a gap.
+
+**Shipped and live:**
+- `deletion_log` exists in all three per-backend migrations (`00001_initial_schema.sql`), PII-free as specified.
+- `DeleteExpired` and `DeleteProfile` are on the DAO composite and covered by the conformance suite across all three backends.
+- The retention sweep runs as a `CronJob` at **`17 3 * * *`** (03:17 UTC daily) with `concurrencyPolicy: Forbid`, invoking one `DeleteExpired` per class per run.
+- The audit-log retention floor is filed with the logging owner as an ILM policy request.
+
+**Specified but not yet merged:** the `retention_sweep_run` table and the `/metrics` endpoint that reads it (contract amendment A7, `multi-db-strategy.md` §3d) are in PR #71, **open at the time of writing**. Until it merges, the sweep executes and deletes correctly but **its result is not persisted and the alert rules have nothing to read** — the deletion control is live, the *observability* of that control is not. That is the honest state, and it is the one thing in this note that would be wrong to describe in the past tense.
+
+**Not modelled at all:** derived data (below), and a window for the `deletion_log` table itself.
+
+### The alert formula — three rules, and why skip-visibility must not suppress
+
+Ruled 2026-09-13 for LT-49; full reasoning in `../04-infra-devops/refinement/LT-49.md`. Recorded here because the windows are this track's and the alert is the retention policy's only enforcement site.
+
+With **W** the class window and **I** the sweep interval:
+
+1. **`RetentionSweepNotReporting`**, per class — no fresh sample in **more than 2I**. One skipped run leaves a gap of exactly 2I so it does not fire; two consecutive skips do. **This is what distinguishes a skipped sweep from a dead one**, by counting missed samples rather than by trusting an explanation. Per class, because `DeleteExpired` takes one class per call — a class that silently stops would otherwise hide behind the others.
+2. **`RetentionWindowExceeded`**, per class — `oldest_surviving_row_age_seconds > W + 2I`. One I is legitimate lag (a row can become eligible just after a sweep and wait a full interval), so a threshold of W + I fires on every healthy cycle; the second I absorbs one skip.
+3. **`RetentionSweepSkipRate`**, low severity — skips exceeding ~25% of runs over a day. This is where the skip signal is consumed: **as evidence, never as a suppression term on rules 1 or 2.**
+
+**Why suppression-on-skip was rejected, and it is the important half.** A sweep that chronically overruns emits a skip signal every interval — so an alert silenced by the presence of a skip signal is silenced permanently, exactly when the sweep is failing hardest. The suppression mechanism would become the failure mode. A single skip and an endless run are indistinguishable by the *presence* of a skip; they differ only in how many consecutive intervals produce no fresh sample, which is what rule 1 counts.
+
+**A sweep that never drains emits no valid sample and trips rule 1. That is correct.** `oldest_surviving_row_age_seconds` is published only from a `Drained` result (`multi-db-strategy.md` §3c) because the value is meaningless mid-sweep. A sweep that cannot drain is not keeping up, which is what should alert — publishing non-drained values to "fix" the gap would replace a true alert with a number that is always large and always ignored.
+
+### The audit-log floor, and why it is a floor
+
+The audit stream is the one row in the table above whose number points the other way, and conflating the two kinds would be a real error rather than a pedantic one: apply minimization thinking to an audit trail and you delete the evidence.
+
+**Three revisit triggers, each with what it means:**
+
+- **`deletion_log`'s own window is ruled shorter than 90 days.** The 90 is short *because* that table holds the durable proof; if the table becomes the more perishable record, the stream becomes primary evidence and the floor must rise to whatever the table no longer covers.
+- **Any contractual or regulatory retention commitment** (a PCI-style one-year obligation, a customer contract). The floor then stops being an engineering judgment and becomes a stated minimum someone is accountable for.
+- **The never-log discipline breaks.** This is the dangerous one. If PII ever reaches the logs, the stream simultaneously acquires a *minimum* from incident review and a *maximum* from storage limitation — **two constraints that can conflict**, with no correct answer available at configuration time. That makes `handoff-04-secrets.md`'s never-log list load-bearing for this ruling and not merely good hygiene: it is what keeps the audit trail a one-sided constraint.
+
+**Practical constraint on how this is expressed:** the audit events share a filebeat data stream with other logs on a Basic licence, so per-source retention is not separable. The requirement is therefore on the *stream's* minimum — it may retain longer for other reasons, it must not retain less. 05 states the floor; 04 owns whether and how it is configured.
 
 ### Explicitly not modelled: derived data
 

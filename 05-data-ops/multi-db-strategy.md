@@ -312,6 +312,50 @@ That is a deliberate narrowing from the first draft, which took `reason` as a ca
 
 **Neither method is a "third cross-table operation" loophole.** These two plus `CreateProfileWithCredential` are the complete set; a fourth is a change to this contract.
 
+## 3d. `retention_sweep_run` — the sweep's result, persisted (amendment A7)
+
+**Status: specified, not yet merged — PR #71 is open at the time of writing.** The table below does not exist in any migration on `main`; `DeleteExpired` runs and deletes correctly without it, but its result is not persisted and the alert rules have nothing to read. Recorded in the present tense as a specification, not as delivered state.
+
+Added because the retention alerts run in the cluster's Prometheus, which scrapes an HTTP endpoint on the always-up `api-service` rather than reading the `CronJob`'s stdout (`../04-infra-devops/handoff-amber-observability-inventory.md`). The sweep is a short-lived pod; the scraper is a long-lived one; they never overlap. **So the sweep's per-class result has to live somewhere `api-service` can read it, and that somewhere is a table.**
+
+```
+retention_sweep_run
+  id                   UUID PK
+  class                TEXT NOT NULL   ck_retention_sweep_run_class: 'direct'|'idp_cache'|'idp_cache_orphan'
+  started_at           TIMESTAMPTZ NOT NULL
+  finished_at          TIMESTAMPTZ NULL          -- NULL = started and did not finish
+  rows_examined        INTEGER NOT NULL DEFAULT 0
+  rows_deleted         INTEGER NOT NULL DEFAULT 0
+  oldest_surviving_at  TIMESTAMPTZ NULL          -- non-NULL only when drained
+  drained              BOOLEAN NOT NULL DEFAULT false
+  missed_slots         INTEGER NOT NULL DEFAULT 0
+```
+
+**Written twice per run, not once.** A row is inserted at start (`finished_at` NULL) and updated at completion. That is deliberate: it makes three outcomes distinguishable that would otherwise collapse. **No row** = the run never started (skipped by `concurrencyPolicy: Forbid`, or the schedule is dead). **Row with NULL `finished_at`** = it started and died. **Row with `finished_at`** = it completed. Writing only on success would make a crashing sweep indistinguishable from one that was never scheduled — the same three-states-in-one-null defect `secret_state` exists to prevent.
+
+**`skipped_reason` cannot be a column, and this is the one place the requested shape does not work.** Under `Forbid`, a skipped run **has no pod** — nothing executes, so nothing can write a row explaining itself. A `skipped_reason TEXT NULL` would be NULL on every row that exists, forever.
+
+Skips are therefore recorded by the *next* run rather than the skipped one: on start, the sweep compares the gap since the last `finished_at` for that class against the interval `I` and writes **`missed_slots`** — `floor(gap / I) - 1`, zero in the normal case. That makes the skip rate computable from this table alone (`sum(missed_slots)` over a rolling day against expected runs), which is what `RetentionSweepSkipRate` needs, without depending on Kubernetes event scraping.
+
+**Tying CHECK, named `ck_retention_sweep_run_drained`:** `CHECK (drained OR oldest_surviving_at IS NULL)`. `oldest_surviving_at` is meaningful only from a drained result (§3c), so a non-drained row carrying one must be **unrepresentable, not merely discouraged**. NULL *with* `drained` stays legal — that is an empty class, which is a real state.
+
+**Index** `(class, finished_at DESC)` — serves both reads: latest-per-class for the gauges, and the rolling-day scan for the skip rate.
+
+**Roles: no new grant.** The sweep writes and `api-service` reads, both with the existing **runtime** credential. All four operations are DML, and `ALTER DEFAULT PRIVILEGES FOR ROLE migrator … GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO runtime` already covers tables the migrator creates from that point on — which includes this one, since the migration runs as migrator. Nothing in `04`'s initdb changes.
+
+**Migrations: three files, not `shared/`.** This is DDL, so it goes in `postgres/`, `cockroachdb/` and `sqlite/` per A5 — `shared/` is seed data only. Same per-engine type mapping as every other table (`TIMESTAMPTZ` vs `TEXT` RFC3339, `BOOLEAN` vs `INTEGER`), and identical constraint names across all three.
+
+**This table's own retention — it is not a `RetentionClass`.** It holds operational metadata and no PII, so it is outside `pii-governance.md` and acquires no retention clock there. But it must not grow without bound: the sweep deletes `retention_sweep_run` rows older than **30 days** at the end of each run. Thirty days comfortably covers the widest alert window (24h) and leaves a month of history for debugging; at three classes daily that is roughly 90 rows.
+
+Two things that must not happen to it. **It must never be added as a fourth `RetentionClass`** — the classes are `user_profile` classes, and mixing operational metadata into the PII retention machinery would put a table with no data subject under a policy built for people. And **its cleanup must never write a `deletion_log` row** — that log is the audit trail for *PII* deletions with meaningful reason codes, and diluting it with routine metadata housekeeping would make the thing auditors read mostly noise.
+
+### Conformance assertions (§7) — three backends
+
+- The tying CHECK rejects `drained = false` with a non-NULL `oldest_surviving_at`, on every backend.
+- Latest-per-class returns the same row on every backend given identical inserts.
+- **Timestamp ordering survives the round trip.** This is the real cross-backend risk here: Postgres and CockroachDB store `TIMESTAMPTZ` natively, SQLite stores `TEXT`, and a `TEXT` timestamp only sorts chronologically if it is zero-padded, fixed-width and in a single offset. **Store RFC3339 in UTC with a `Z` suffix** — a local-offset or variable-width rendering sorts lexicographically into the wrong order on SQLite alone, silently, and "latest run" then returns the wrong row on exactly one backend. Assert ordering explicitly across a set spanning a month, not just a round trip of one value.
+- `missed_slots` defaults to 0 and is never NULL, so the skip-rate sum needs no NULL handling.
+
 ## 3a. Per-method summary — read this row before writing that method
 
 Added after a cold read observed that this document is organized by *artifact* (factory, types, interfaces, errors, schema) while an implementer works by *verb* — so answering "I am about to write `Create`, what do I need?" meant holding five sections open at once. Four of that read's fourteen blocking questions existed only because a method's full story was never assembled in one place. This table closes them by construction; the prose above remains the authority where they disagree.
@@ -431,7 +475,11 @@ A blanket rule breaks three methods, so the rule names its parameters:
 4. **(A6)** The same phone string is accepted or rejected identically by every backend's `ck_user_profile_phone_e164` — the boundary cases are what matter, so assert at 6, 7, 15 and 16 digits.
 5. **(A6)** Two usernames differing only by **ASCII** case collide on every backend, and `GetByUsername` finds a row regardless of the case the caller supplies.
 
-**Forward requirement — credential verification, for whenever it is built.** There is deliberately no password-verification code in this system today: `user_credential` is pure storage and the API authenticates by JWT. This is therefore a requirement on code that does not yet exist, not an assertion that can be written now.
+**Forward requirement — credential verification. Still open for `user_credential`; already honoured for `oauth_client`.**
+
+`user_credential` remains pure storage — nothing verifies a user password, and the API authenticates by JWT — so for that table this is still a requirement on code that does not exist rather than an assertion that can be written.
+
+**Updated 2026-09-13:** a verification path *does* now exist for the analogous column, `oauth_client.secret_state`, and it honours this requirement. `ClientSecretHash` reads as empty whenever `secret_state != 'set'`, the token handler treats that as no-match rather than reaching a comparison with nothing to compare, and the opportunistic rehash is guarded by `AND secret_state = 'set'` so a revoked credential cannot be rehashed back into existence. That last guard is the one I would not have thought to ask for. Recorded because a forward requirement that is silently satisfied elsewhere should say so — otherwise the next reader writes it a second time.
 
 **Any future credential-verification helper must treat `secret_state != 'set'` as no-match, and must never panic or error on a nil `Secret`.** A credential with `secret_state = 'none'` is a legitimate, reachable state — one of the three the column exists to separate — and the review fixtures in `deploy/demo-data/` create exactly such rows. A verifier that reaches a hash comparison with a nil secret can panic, can surface a driver error, or worst can treat an empty comparison as a match, which would let an un-provisioned credential authenticate.
 
@@ -611,6 +659,7 @@ Every change to this contract after 03 accepted it is logged here with who did t
 
 | # | Date | Section | Change | Why | Work-By |
 |---|---|---|---|---|---|
+| A7 | 2026-09-13 | §3d (new), §7 | `retention_sweep_run` table — the sweep persists its per-class result so `api-service` can expose it to Prometheus | The retention alerts run in the cluster's Prometheus, which scrapes a long-lived `api-service` endpoint rather than the short-lived `CronJob`'s stdout — the two pods never overlap, so the result has to be persisted. Row written twice per run (insert at start, update at finish) so that *no row*, *row with NULL finished_at* and *row with finished_at* distinguish skipped-or-dead, started-and-died, and completed. **`skipped_reason` was requested and cannot exist**: under `concurrencyPolicy: Forbid` a skipped run has no pod, so nothing can write a row explaining itself — skips are recorded by the *next* run as `missed_slots` instead, which also makes the skip rate computable without scraping Kubernetes events. Not a `RetentionClass`, not in `deletion_log`, self-pruned at 30 days | Authored: **Priya Nandakumar**. Requirement surfaced by Amber's observability inventory (04) via team-lead; consumed by **Renata Cole** (03, endpoint + migration) and **Theo Bergman** (04, alert rules) |
 | A6 | 2026-09-13 | §3, §4, §5, §7 | Validation steps must write their accepted set down rather than name it; E.164 `CHECK` pair aligned; `GetByUsername` folds case in SQL, not Go | Generalized from A4's first objection. Two live instances followed immediately. **The E.164 pair accepted different sets**: the Postgres regex `{1,14}` allowed 2–15 digits while the SQLite `GLOB` allowed 7–15, so `+1234` passed one constraint and failed the other — a portability defect provable by arithmetic from this document, never tested. **`GetByUsername` had three lowercasers** — Go's Unicode-full `strings.ToLower`, PostgreSQL's locale-aware `lower()`, SQLite's ASCII-only one — serving a single `UNIQUE (lower(username))` guarantee; folding in SQL removes the Go one and makes index and lookup agree by construction | Authored: **Priya Nandakumar**. Raised unprompted by: **Yusuf Karadag** (05, Detail Hawk), who generalized his own A4 objection into a rule and named both instances without being asked to look |
 | A5 | 2026-09-13 | §5, §6.3, §6.9, `migration-approach.md` §2 | Byte-order collation declared per engine by whatever that engine supports; migrations split three ways, one per driver string | `COLLATE "C"` was required on "Postgres/CockroachDB" as though one clause served both. It is **invalid syntax on CockroachDB** (`42601`) — which needs no clause, its default `TEXT` comparison already being byte order — while PostgreSQL needs it explicitly, its default being locale-dependent. No portable clause exists, so the shared `postgres/` migration directory could not express the requirement. **This blocked the CockroachDB conformance run entirely — the migration would not apply.** Ruled to split the migration directories rather than move the guarantee to database-creation locale, keeping the enforcement site visible in the schema instead of in a provisioning step nobody reads | Authored: **Priya Nandakumar**. Surfaced and empirically established by: **Renata Cole** (03) against live CockroachDB v23.2.0, including the test showing its uncollated default already yields the required byte order |
 | A4 | 2026-09-12 | §3a, §4, §7 | Identifier validation: malformed **or non-canonical** ids return `ErrInvalidArgument`, validated once above the backends against the canonical form only | LT-38's conformance suite found `Get` with a malformed id diverging: Postgres/CockroachDB raise `22P02` before any lookup (`id` is `UUID`-typed), SQLite returns `ErrNotFound` (`id` is `TEXT`). §3a said only that `Get` returns `ErrNotFound`, and §4's "same sentinel for the same condition" did not define what "the same condition" means when column types make a malformed id a different *kind* of failure per engine. Ruled for consistency with every other malformed input in this contract, which already maps to an argument error rather than a data outcome | Authored: **Priya Nandakumar**. Surfaced by: **Renata Cole** (03) via the LT-38 conformance suite — the suite finding a genuine divergence is the per-driver ruling's condition being met. Objection turn: **Yusuf Karadag** (05, Detail Hawk) — **five objections, all accepted; the amendment was substantially revised.** He found that the first version's validator *moved* the divergence rather than closing it (`uuid.Parse` admits four textual forms; Postgres normalizes them and finds the row, SQLite byte-compares and misses), that `""` was undefined, that "every method taking an id" broke three methods and silently changed `ListByUserID`'s guarantee, and that the ruling's stated reason was the weaker one — the decisive argument being that `ErrNotFound` is treated as success by delete callers, so a typo'd subject-deletion request would report completed to the data subject |
