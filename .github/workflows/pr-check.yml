@@ -84,10 +84,37 @@ jobs:
           sys.exit(1 if fail else 0)
           PYEOF
 
+  changes:
+    name: Detect whether image-buildable code changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Inverse of deploy.yml's paths-ignore: a docs-only PR (LOG.md,
+          # PLAN.md, track directories, decisions/**) shouldn't spin up
+          # Docker builds that can't have changed. build-lint-test,
+          # security-scan, and manifest-secret-guard above are NOT gated
+          # by this — they stay on every PR regardless of what changed.
+          filters: |
+            code:
+              - 'cmd/**'
+              - 'internal/**'
+              - 'migrations/**'
+              - 'deploy/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '**/Dockerfile'
+              - '.github/workflows/**'
+
   build-images:
     name: Build images (no push)
     runs-on: ubuntu-latest
-    needs: [build-lint-test]
+    needs: [build-lint-test, changes]
+    if: needs.changes.outputs.code == 'true'
     strategy:
       matrix:
         service: [api-service, idp-connector]
