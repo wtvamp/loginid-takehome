@@ -8,17 +8,6 @@ permissions:
   contents: read
   packages: write
 
-# Until the loginid-takehome runner set is installed, the `deploy` job
-# below queues indefinitely (no matching self-hosted runner exists yet) —
-# that's expected, not a failure; GitHub Actions has no "no runner
-# available" error state, a job just waits. This concurrency group keeps
-# that wait bounded to the most recent push instead of piling up one
-# queued run per merge in the meantime: a newer push cancels an older
-# queued/running deploy for the same branch.
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   REGISTRY: ghcr.io
   IMAGE_BASE: ghcr.io/${{ github.repository }}
@@ -27,6 +16,11 @@ jobs:
   build-and-push:
     name: Build and push images
     runs-on: ubuntu-latest
+    # Safe to cancel a stale build/push in favor of a newer commit's — an
+    # in-progress image build has no external effect worth preserving.
+    concurrency:
+      group: deploy-build-${{ github.ref }}
+      cancel-in-progress: true
     strategy:
       matrix:
         service: [api-service, idp-connector]
@@ -45,6 +39,8 @@ jobs:
           context: .
           file: cmd/${{ matrix.service }}/Dockerfile
           push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_BASE }}/${{ matrix.service }}:${{ github.sha }}
             ${{ env.IMAGE_BASE }}/${{ matrix.service }}:latest
@@ -53,6 +49,14 @@ jobs:
     name: Apply manifests to the lab cluster
     runs-on: loginid-takehome
     needs: [build-and-push]
+    # Deliberately NOT cancel-in-progress: cancelling a run that has already
+    # reached `kubectl apply` mid-flight can leave a Deployment rollout
+    # partially applied. A newer push queues behind an in-progress apply
+    # instead of aborting it; GitHub Actions has no "no runner available"
+    # failure state, so queuing here costs nothing but a short wait.
+    concurrency:
+      group: deploy-apply-${{ github.ref }}
+      cancel-in-progress: false
     environment:
       name: production
       url: https://loginid-takehome.uplifttech.org
