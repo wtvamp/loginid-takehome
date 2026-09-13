@@ -129,6 +129,15 @@ const (
 	// Castellan, PR #30 re-review). Short relative to ttl/maxStaleness:
 	// this only throttles retries during an active failure, it must not
 	// delay picking up a healthy issuer again once it recovers.
+	//
+	// Assumes ttl is meaningfully larger than this floor (the real
+	// wiring uses a 15-minute ttl — see jwksCacheTTL in
+	// internal/app/verifier_router.go — three orders of magnitude
+	// above it). A ttl configured smaller than jwksMinRefreshRetryInterval
+	// would let this floor gate the NORMAL refresh cadence, not just
+	// outage retries — not this codebase's configuration, but worth
+	// stating as an assumption rather than leaving it implicit (Nolan
+	// Reyes, PR #30 round-3 review).
 	jwksMinRefreshRetryInterval = 5 * time.Second
 
 	// jwksMaxTrackedUnknownKids bounds how many distinct kids can hold an
@@ -139,6 +148,17 @@ const (
 	// different fabricated kids can force at most this many extra
 	// fetches per jwksUnknownKidRefetchInterval, not one per distinct
 	// value they bother to send.
+	//
+	// Known, accepted limitation (Nolan Reyes, PR #30 round-3 review): a
+	// sustained flood holding all jwksMaxTrackedUnknownKids slots at once
+	// denies the fast-path out-of-band refetch to any OTHER kid,
+	// including a real newly-rotated one — but that kid still gets
+	// picked up by the ordinary TTL-driven refresh on its normal
+	// schedule regardless. The flood degrades unknown-kid handling back
+	// to TTL-only (this mechanism's pre-existing baseline before the
+	// per-kid fix), it does not create a worse outcome than that
+	// baseline — a bounded, cheap-to-sustain-for-the-attacker
+	// degradation, not a lockout.
 	jwksMaxTrackedUnknownKids = 64
 )
 
