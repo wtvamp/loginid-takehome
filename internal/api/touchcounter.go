@@ -126,6 +126,61 @@ func (c *InProcessTouchCounter) Reserve(_ context.Context, sub string, maxNewTou
 	return true, nil
 }
 
+// touchReservation guarantees a booked TouchCounter reservation is
+// released exactly once, by a deferred cleanup unless settle() already
+// ran — closing the "a manual Settle call at every return path" fragility
+// (Nolan Reyes, PR #26 review): the next handler that reserves and
+// forgets one branch's Settle call silently burns that caller's budget
+// for the rest of the window, and nothing catches it, including a panic
+// unwinding past a manual call. A defer can't be forgotten the same way.
+type touchReservation struct {
+	tc       TouchCounter
+	sub      string
+	reserved int
+	done     bool
+}
+
+// reserveTouches books maxNewTouches against sub's window if the cap
+// allows it. ok is false if the cap is already met — the caller must not
+// use the returned *touchReservation in that case (it is nil).
+func reserveTouches(ctx context.Context, tc TouchCounter, sub string, maxNewTouches int) (tr *touchReservation, ok bool, err error) {
+	ok, err = tc.Reserve(ctx, sub, maxNewTouches)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	return &touchReservation{tc: tc, sub: sub, reserved: maxNewTouches}, true, nil
+}
+
+// release is a no-op if settle already ran; call it via `defer
+// tr.release(ctx)` immediately after a successful reserveTouches, so
+// every return path — including one added later without updating this
+// function, and a panic unwind — releases an unsettled reservation.
+// Detaches ctx from the triggering request's own cancellation
+// (context.WithoutCancel): this is a release-shaped operation exactly
+// like the DAO credential-write detach points decisions/
+// context-propagation.md already rules on, and the most common reason
+// this fires at all is that ctx just expired or was canceled upstream —
+// handing that same dying context to the cleanup would be handing the
+// release the same failure the request itself just hit (Oren Castellan,
+// PR #26 review).
+func (tr *touchReservation) release(ctx context.Context) {
+	if tr == nil || tr.done {
+		return
+	}
+	tr.done = true
+	_ = tr.tc.Settle(context.WithoutCancel(ctx), tr.sub, nil, tr.reserved)
+}
+
+// settle records the actual distinct record ids touched and marks the
+// reservation finalized, so the deferred release becomes a no-op.
+func (tr *touchReservation) settle(ctx context.Context, recordIDs []string) error {
+	if tr == nil || tr.done {
+		return nil
+	}
+	tr.done = true
+	return tr.tc.Settle(ctx, tr.sub, recordIDs, tr.reserved)
+}
+
 func (c *InProcessTouchCounter) Settle(_ context.Context, sub string, recordIDs []string, reserved int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
