@@ -1,6 +1,11 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"golang.org/x/crypto/argon2"
+)
 
 func TestHashSecret_VerifySecret_RoundTrip(t *testing.T) {
 	hash, err := hashSecret("correct horse battery staple")
@@ -33,10 +38,87 @@ func TestHashSecret_DistinctSaltsPerCall(t *testing.T) {
 }
 
 func TestVerifySecret_MalformedHash_RejectsWithoutPanic(t *testing.T) {
-	for _, malformed := range []string{"", "no-dollar-sign", "$", "not-base64$also-not-base64"} {
+	for _, malformed := range []string{
+		"", "no-dollar-sign", "$", "not-base64$also-not-base64",
+		// "v=19x" — trailing garbage after the version digits. A naive
+		// fmt.Sscanf-based parser doesn't require consuming the whole
+		// field and would accept this as version 19 (Oren Castellan, PR
+		// #39 review); parsePHCParam's whole-field strconv.ParseUint
+		// must reject it instead.
+		"$argon2id$v=19x$m=65536,t=1,p=4$c2FsdA$aGFzaA",
+	} {
 		if verifySecret("anything", malformed) {
 			t.Errorf("verifySecret(%q) = true, want false for a malformed hash", malformed)
 		}
+	}
+}
+
+// TestHashSecret_EmitsPHCFormat confirms hashSecret's output is an
+// actual PHC string, not merely something verifySecret happens to accept
+// — the enforcement site for "PHC, not the old bare encoding"
+// (Priya Nandakumar's ruling, handoff-03-auth.md v7).
+func TestHashSecret_EmitsPHCFormat(t *testing.T) {
+	hash, err := hashSecret("some-secret")
+	if err != nil {
+		t.Fatalf("hashSecret: %v", err)
+	}
+	wantPrefix := "$argon2id$v=19$m=65536,t=1,p=4$"
+	if !strings.HasPrefix(hash, wantPrefix) {
+		t.Errorf("hashSecret() = %q, want a prefix of %q", hash, wantPrefix)
+	}
+}
+
+// TestVerifySecret_ReadsEmbeddedParameters_NotPackageConstants is the
+// test with actual teeth (Priya Nandakumar's review): a verifySecret
+// that silently recomputed with this package's own current
+// argon2Time/argon2Memory/argon2Threads constants instead of the hash's
+// own embedded parameters would still pass every round-trip test above
+// (hashSecret and verifySecret always agree with themselves) while
+// making the PHC string's self-description pointless. This hand-builds
+// a hash at DIFFERENT parameters (t=2, not this package's current t=1)
+// and confirms it still verifies correctly — the only way that can
+// happen is if verifySecret actually read t=2 out of the string and
+// used it, not the constant.
+func TestVerifySecret_ReadsEmbeddedParameters_NotPackageConstants(t *testing.T) {
+	const differentTime = 2 // deliberately not argon2Time (1)
+	secret := "hand-constructed-secret"
+	salt := []byte("0123456789abcdef") // 16 bytes, fixed for reproducibility
+	hash := argon2.IDKey([]byte(secret), salt, differentTime, argon2Memory, argon2Threads, argon2KeyLen)
+	handBuilt := encodePHC(argon2Memory, differentTime, argon2Threads, salt, hash)
+
+	if !strings.Contains(handBuilt, ",t=2,") {
+		t.Fatalf("test setup bug: hand-built PHC string doesn't contain t=2: %s", handBuilt)
+	}
+	if !verifySecret(secret, handBuilt) {
+		t.Errorf("verifySecret rejected a correctly-hashed secret at a DIFFERENT cost profile (t=2) than this package's current constant (t=1) — it must be recomputing from this package's own constants instead of the hash's embedded parameters")
+	}
+	if verifySecret("wrong-secret", handBuilt) {
+		t.Errorf("verifySecret accepted the wrong secret against a hand-built t=2 hash")
+	}
+}
+
+// TestNeedsRehash confirms the opportunistic-rehash signal fires only
+// when a hash's embedded parameters actually differ from this package's
+// current profile — the mechanism handoff-03-auth.md v7's
+// verify-then-rehash ruling depends on.
+func TestNeedsRehash(t *testing.T) {
+	currentHash, err := hashSecret("whatever")
+	if err != nil {
+		t.Fatalf("hashSecret: %v", err)
+	}
+	if needsRehash(currentHash) {
+		t.Errorf("needsRehash(current-profile hash) = true, want false")
+	}
+
+	salt := []byte("0123456789abcdef")
+	oldHash := argon2.IDKey([]byte("whatever"), salt, 2, argon2Memory, argon2Threads, argon2KeyLen) // t=2, not current t=1
+	oldEncoded := encodePHC(argon2Memory, 2, argon2Threads, salt, oldHash)
+	if !needsRehash(oldEncoded) {
+		t.Errorf("needsRehash(old-profile hash, t=2 vs current t=1) = false, want true")
+	}
+
+	if needsRehash("not-a-valid-phc-string") {
+		t.Errorf("needsRehash(unparseable) = true, want false (can't tell, so don't rehash)")
 	}
 }
 

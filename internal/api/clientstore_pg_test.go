@@ -12,6 +12,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 )
 
 // setupIssuerDB connects to TEST_POSTGRES_DSN (skipping the test if
@@ -20,6 +21,28 @@ import (
 // hand-written fake could ever exercise), applies the real
 // migrations/issuer/00001_initial_schema.sql into a fresh, uniquely-named
 // schema, and tears it down on cleanup.
+//
+// Applied through goose.Up (the pressly/goose/v3 library — the same
+// parser and statement-splitting logic the real `goose` CLI 04's deploy
+// pipeline runs uses), not a hand-rolled "extract the Up section and
+// Exec it as one blob" approach. The two are NOT equivalent: goose's
+// real statement splitter breaks a migration file apart at every
+// semicolon unless a block is wrapped in "-- +goose StatementBegin"/
+// "StatementEnd" markers, and a plain db.Exec of the whole Up section
+// never exercises that splitting at all — it caught this file's own
+// CREATE FUNCTION ... $$ ... $$ block cleanly in review here while the
+// exact same file failed on the live cluster's real goose run
+// (SQLSTATE 42601, "unterminated dollar-quoted string"). Running the
+// actual migration runner is what "verification exercises the sequence
+// the live system executes" (05-data-ops's own principle) means in
+// practice, not just a stated intention.
+//
+// Do not add t.Parallel() to this file's tests without first addressing
+// that goose.SetDialect/SetTableName below are package-level, global
+// mutable state (goose's own API design, not a choice made here) — two
+// tests running this setup concurrently would race on it (Nolan Reyes,
+// PR #39 review). Safe today only because nothing in this file runs in
+// parallel.
 func setupIssuerDB(t *testing.T) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -50,20 +73,18 @@ func setupIssuerDB(t *testing.T) *sql.DB {
 		t.Fatalf("getwd: %v", err)
 	}
 	repoRoot := filepath.Join(wd, "..", "..") // this package: <repoRoot>/internal/api
-	migrationPath := filepath.Join(repoRoot, "migrations", "issuer", "00001_initial_schema.sql")
-	b, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Fatalf("reading migration %s: %v", migrationPath, err)
+	migrationDir := filepath.Join(repoRoot, "migrations", "issuer")
+
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("goose.SetDialect: %v", err)
 	}
-	content := string(b)
-	upStart := strings.Index(content, "-- +goose Up")
-	downStart := strings.Index(content, "-- +goose Down")
-	if upStart == -1 || downStart == -1 {
-		t.Fatalf("migration missing +goose Up/Down markers")
-	}
-	upSQL := content[upStart+len("-- +goose Up") : downStart]
-	if _, err := db.Exec(upSQL); err != nil {
-		t.Fatalf("applying issuer migration: %v", err)
+	// Matches the real deploy pipeline's `-table goose_db_version_issuer`
+	// invocation (deploy/manifests.yaml) — the version table lives inside
+	// this test's own schema via search_path, so it never collides with
+	// a real deployment's table of the same name.
+	goose.SetTableName("goose_db_version_issuer")
+	if err := goose.Up(db, migrationDir); err != nil {
+		t.Fatalf("applying issuer migration via goose.Up: %v", err)
 	}
 
 	return db
@@ -153,6 +174,47 @@ func TestPostgresClientStore_Get_DisabledStatus(t *testing.T) {
 	}
 	if rec.Active {
 		t.Errorf("Active = true for status=disabled")
+	}
+}
+
+// TestPostgresClientStore_UpdateSecretHash is the opportunistic-rehash
+// mechanism's own storage-layer test (handoff-03-auth.md v7) — a real
+// UPDATE against a real row, confirmed by re-reading it back, not just
+// asserted from the SQL text.
+func TestPostgresClientStore_UpdateSecretHash(t *testing.T) {
+	db := setupIssuerDB(t)
+	oldHash, err := hashSecret("s3cr3t")
+	if err != nil {
+		t.Fatalf("hashing secret: %v", err)
+	}
+	insertOAuthClient(t, db, "rehash-client", "Rehash Test", &oldHash, "set", []string{"profile:search"}, "aud", "active")
+
+	newHash, err := hashSecret("s3cr3t")
+	if err != nil {
+		t.Fatalf("hashing secret: %v", err)
+	}
+	store := NewPostgresClientStore(db)
+	if err := store.UpdateSecretHash(context.Background(), "rehash-client", newHash); err != nil {
+		t.Fatalf("UpdateSecretHash: %v", err)
+	}
+
+	rec, ok, err := store.Get(context.Background(), "rehash-client")
+	if err != nil || !ok {
+		t.Fatalf("Get after UpdateSecretHash: ok=%v err=%v", ok, err)
+	}
+	if rec.ClientSecretHash != newHash {
+		t.Errorf("stored hash = %q, want the new hash %q", rec.ClientSecretHash, newHash)
+	}
+	if !verifySecret("s3cr3t", rec.ClientSecretHash) {
+		t.Errorf("updated hash doesn't verify against the secret it was set to")
+	}
+}
+
+func TestPostgresClientStore_UpdateSecretHash_NoSuchClient(t *testing.T) {
+	db := setupIssuerDB(t)
+	store := NewPostgresClientStore(db)
+	if err := store.UpdateSecretHash(context.Background(), "does-not-exist", "irrelevant"); err == nil {
+		t.Errorf("UpdateSecretHash against a nonexistent client_id returned nil error, want an error")
 	}
 }
 

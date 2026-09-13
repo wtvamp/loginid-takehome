@@ -1,5 +1,7 @@
 # QA client credential — out-of-band seeding runbook
 
+**Format change (handoff-03-auth.md v7):** `gen-argon2-hash.go` now emits a PHC-format hash instead of the earlier `<base64-salt>$<base64-hash>` encoding — the two are not interchangeable. Any row seeded before this change must be re-seeded (re-run step 1 for a new secret, then the rotation `UPDATE` in "Rotation / revocation" below) before it will verify again.
+
 Per Priya's ruling on LT-51: "migrations carry reference data, never credentials" — the QA client row in `oauth_client` is seeded by hand, directly against the issuer database's own migrator role, never through a migration file, never through the CI-applied manifest set (`deploy/rbac.yaml` grants the deployer nothing on `secrets`, so it has no path to this credential regardless), and never with the plaintext secret or its hash committed anywhere in this repo.
 
 ## 1. Generate the secret and its Argon2id hash
@@ -11,7 +13,7 @@ HASH=$(cat /tmp/qa-hash.txt)
 rm -f /tmp/qa-hash.txt
 ```
 
-`deploy/gen-argon2-hash.go` produces the exact encoding `internal/api/clientstore.go`'s `hashSecret`/`verifySecret` expect (`<base64-salt>$<base64-hash>`, same fixed Argon2id cost profile) — verified by round-tripping a test hash through the app's own comparison logic before this runbook was written, not assumed from reading the source.
+`deploy/gen-argon2-hash.go` produces a standard PHC-format Argon2id hash (`$argon2id$v=19$m=...,t=...,p=...$<salt>$<hash>`) — the same self-describing encoding `user_credential.secret` already uses, and what `internal/api/clientstore.go`'s `verifySecret` reads its cost parameters back from (never assumed to match the app's own current constants — Priya Nandakumar's ruling, `handoff-03-auth.md` v7). Verified by round-tripping a test hash through the app's own comparison logic before this runbook was written, not assumed from reading the source, and again by a permanent test (`internal/api/clientstore_test.go`'s hand-constructed-different-parameters case) that fails if the verifier is ever changed to ignore the embedded parameters.
 
 **Give `$CLIENT_SECRET` to whoever will run the PO review script and nowhere else** — it is the Basic-auth password for `POST /auth/token`. It cannot be recovered from `$HASH` afterward; if lost, generate a new secret and re-run step 2 (an `UPDATE`, not a fresh `INSERT`).
 

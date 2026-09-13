@@ -10,6 +10,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -172,6 +173,34 @@ func NewTokenHandler(store ClientStore, limiter GrantLimiter, key *SigningKey, i
 			return
 		}
 		limiter.RecordSuccess(ctx, clientID, sourceIP)
+
+		// Opportunistic rehash-on-verify (Marcus Ilori's ruling,
+		// handoff-03-auth.md v7): reaching this point guarantees secretOK
+		// came from the real-hash branch above (the dummy-hash branch
+		// always sets secretOK=false), so rec.ClientSecretHash is a real,
+		// just-verified PHC string. If its embedded cost parameters have
+		// drifted from this package's current profile, re-hash the
+		// secret the caller just proved they hold and persist it — this
+		// is how an existing row migrates to a bumped cost profile
+		// without a live-credential migration. Best-effort: a failure
+		// here does not fail the grant already earned by a correct
+		// secret; it's logged and the next successful auth tries again.
+		// Bounded even under concurrent grants against the same
+		// still-drifted client: UpdateSecretHash's WHERE clause targets
+		// one row by primary key, serialized by Postgres's own row lock
+		// and capped by clientStoreQueryTimeout — a burst of redundant
+		// UPDATEs before the row migrates, not a table lock or a
+		// cascading write (Nolan Reyes, PR #39 review). This design
+		// assumes a cost-profile bump (and therefore a burst of drifted
+		// rows all rehashing near-simultaneously) is a rare, infrequent
+		// event, not something load-tested at scale.
+		if needsRehash(rec.ClientSecretHash) {
+			if newHash, err := hashSecret(clientSecret); err != nil {
+				log.Printf("api: opportunistic rehash for client_id=%s: hashing failed: %v", clientID, err)
+			} else if err := store.UpdateSecretHash(ctx, clientID, newHash); err != nil {
+				log.Printf("api: opportunistic rehash for client_id=%s: storing failed: %v", clientID, err)
+			}
+		}
 
 		// scope is optional per RFC 6749 §4.4: omitted means issue the
 		// client's full granted set, which — per ClientRecord's own doc

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,13 +14,16 @@ import (
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/argon2"
 )
 
 // fakeClientStore implements ClientStore, per decisions/test-double-strategy.md.
 type fakeClientStore struct {
-	records map[string]ClientRecord
-	getErr  error
-	gotIDs  []string // records every clientID Get was called with, for call-shape assertions
+	records         map[string]ClientRecord
+	getErr          error
+	gotIDs          []string // records every clientID Get was called with, for call-shape assertions
+	updateHashCalls []string // clientIDs UpdateSecretHash was called for
+	updateHashErr   error
 }
 
 func (f *fakeClientStore) Get(_ context.Context, clientID string) (ClientRecord, bool, error) {
@@ -29,6 +33,18 @@ func (f *fakeClientStore) Get(_ context.Context, clientID string) (ClientRecord,
 	}
 	rec, ok := f.records[clientID]
 	return rec, ok, nil
+}
+
+func (f *fakeClientStore) UpdateSecretHash(_ context.Context, clientID, newHash string) error {
+	f.updateHashCalls = append(f.updateHashCalls, clientID)
+	if f.updateHashErr != nil {
+		return f.updateHashErr
+	}
+	if rec, ok := f.records[clientID]; ok {
+		rec.ClientSecretHash = newHash
+		f.records[clientID] = rec
+	}
+	return nil
 }
 
 // fakeGrantLimiter implements GrantLimiter.
@@ -248,6 +264,86 @@ func TestNewTokenHandler_CorrectCredentials_IssuesValidToken(t *testing.T) {
 
 	if len(limiter.succeededIDs) != 1 || limiter.succeededIDs[0] != "known-client" {
 		t.Errorf("RecordSuccess calls = %v, want exactly one for known-client", limiter.succeededIDs)
+	}
+	if len(store.updateHashCalls) != 0 {
+		t.Errorf("UpdateSecretHash called %v, want none — this hash was created under the current cost profile", store.updateHashCalls)
+	}
+}
+
+// TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess is
+// handoff-03-auth.md v7's verify-then-rehash ruling: a stored hash whose
+// embedded cost parameters differ from this package's current profile
+// still verifies correctly (using its own embedded parameters, not the
+// current constants), and a successful grant against it triggers an
+// opportunistic UpdateSecretHash call so the row migrates forward.
+func TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess(t *testing.T) {
+	salt := []byte("0123456789abcdef")
+	const oldTime = 2 // deliberately not this package's current argon2Time (1)
+	oldHash := argon2.IDKey([]byte("s3cr3t"), salt, oldTime, argon2Memory, argon2Threads, argon2KeyLen)
+	driftedEncoded := encodePHC(argon2Memory, oldTime, argon2Threads, salt, oldHash)
+
+	store := &fakeClientStore{records: map[string]ClientRecord{
+		"drifted-client": {ClientID: "drifted-client", Name: "Drifted", ClientSecretHash: driftedEncoded, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+	}}
+	limiter := &fakeGrantLimiter{allow: true}
+	h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+
+	form := url.Values{"grant_type": {"client_credentials"}}
+	resp := postToken(t, h, form, "drifted-client", "s3cr3t", true)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200 (a drifted-profile hash must still verify correctly), body=%s", resp.StatusCode, body)
+	}
+	if len(store.updateHashCalls) != 1 || store.updateHashCalls[0] != "drifted-client" {
+		t.Fatalf("UpdateSecretHash calls = %v, want exactly one for drifted-client", store.updateHashCalls)
+	}
+
+	newHash := store.records["drifted-client"].ClientSecretHash
+	if newHash == driftedEncoded {
+		t.Errorf("stored hash unchanged after rehash")
+	}
+	if needsRehash(newHash) {
+		t.Errorf("rehashed value still reports needsRehash=true — it wasn't actually re-encoded under the current profile")
+	}
+	if !verifySecret("s3cr3t", newHash) {
+		t.Errorf("rehashed value doesn't verify against the same secret")
+	}
+}
+
+// TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds is the
+// best-effort half of the rehash design (Helena Marsh's review, PR #39):
+// the caller already proved they hold the correct secret, so a failure
+// to WRITE the rehashed value must never turn an earned 200 into an
+// error — the grant response is already fully determined before the
+// rehash is even attempted.
+func TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds(t *testing.T) {
+	salt := []byte("0123456789abcdef")
+	const oldTime = 2 // deliberately not this package's current argon2Time (1)
+	oldHash := argon2.IDKey([]byte("s3cr3t"), salt, oldTime, argon2Memory, argon2Threads, argon2KeyLen)
+	driftedEncoded := encodePHC(argon2Memory, oldTime, argon2Threads, salt, oldHash)
+
+	store := &fakeClientStore{
+		records: map[string]ClientRecord{
+			"drifted-client": {ClientID: "drifted-client", Name: "Drifted", ClientSecretHash: driftedEncoded, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+		},
+		updateHashErr: fmt.Errorf("simulated issuer database write failure"),
+	}
+	limiter := &fakeGrantLimiter{allow: true}
+	h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+
+	form := url.Values{"grant_type": {"client_credentials"}}
+	resp := postToken(t, h, form, "drifted-client", "s3cr3t", true)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200 even when the rehash persist write fails — the secret was already correctly verified before the rehash was attempted, body=%s", resp.StatusCode, body)
+	}
+	if len(store.updateHashCalls) != 1 {
+		t.Errorf("UpdateSecretHash calls = %v, want exactly one attempt even though it fails", store.updateHashCalls)
+	}
+	// The stored hash must be unchanged, since the write failed — the
+	// row still verifies with its original (drifted) hash next time.
+	if store.records["drifted-client"].ClientSecretHash != driftedEncoded {
+		t.Errorf("stored hash changed despite UpdateSecretHash returning an error")
 	}
 }
 
