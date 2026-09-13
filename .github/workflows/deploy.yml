@@ -8,6 +8,17 @@ permissions:
   contents: read
   packages: write
 
+# Until the loginid-takehome runner set is installed, the `deploy` job
+# below queues indefinitely (no matching self-hosted runner exists yet) —
+# that's expected, not a failure; GitHub Actions has no "no runner
+# available" error state, a job just waits. This concurrency group keeps
+# that wait bounded to the most recent push instead of piling up one
+# queued run per merge in the meantime: a newer push cancels an older
+# queued/running deploy for the same branch.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_BASE: ghcr.io/${{ github.repository }}
