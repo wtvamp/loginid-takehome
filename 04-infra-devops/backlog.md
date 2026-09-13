@@ -162,3 +162,40 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Model/effort:** Sonnet, low.
 **Type:** Task.
 **Labels:** `track-04`.
+
+---
+
+## Story 9 — Scope gitleaks to PR commits, add a separate scheduled full-history scan
+
+**Status: new** — flagged during PR #34's review. `pr-check.yml`'s gitleaks job scans full history (`fetch-depth: 0`, needed for the tool to work at all) — meaning a leaked-pattern match in *any* commit on a branch fails the PR even after a later commit rewrites/removes it, and would fail every subsequent PR on main forever if such a commit were ever merged. Not currently a live incident (Renata is rewriting the offending commit on her own unmerged branch), but the CI design itself has this sharp edge regardless of whether any specific finding is real or a false positive.
+
+**Description:** Two changes, per team-lead's leaning (adopted here, not just recorded neutrally):
+1. Scope the PR-check gitleaks scan to only the PR's own commits (`--log-opts="origin/${{ github.base_ref }}..HEAD"`), so history already on `main` isn't rescanned on every subsequent PR.
+2. Add a separate, scheduled (e.g. nightly or on-push-to-main) full-history gitleaks scan as its own workflow, so the full-history safety net isn't lost — it just stops being a per-PR gate that can be broken by history it didn't introduce.
+
+**Acceptance criteria:**
+- [ ] `pr-check.yml`'s gitleaks job scans only commits new to the PR, not all of branch history.
+- [ ] A separate workflow runs full-history gitleaks on a schedule (or on every push to `main`), and its findings are visible somewhere a human actually looks (not just a green/red check nobody opens).
+- [ ] A genuinely new leaked secret in a PR's own commits still fails that PR — this change narrows the scan window, it doesn't weaken the check within that window.
+
+**Depends on:** none.
+**Model/effort:** Sonnet, low.
+**Type:** Task.
+**Labels:** `track-04`.
+
+---
+
+## Story 10 — Metric: idp-connector's identity rate-limiter overflow-bucket hit rate
+
+**Status: new** — no urgency, flagged by Tomasz Wrede (02) on PR #40's re-check as a revisit trigger, not an active problem. LT-40's identity rate-limiter uses a shared overflow bucket (reset-on-success across unrelated identities) as a deliberate trade-off, accepted while overflow-bucket traffic is rare. If that traffic ever stops being rare, the trade-off needs re-examining — but nobody currently has visibility into how often it's actually hit.
+
+**Description:** Add a counter/gauge from `idp-connector` for overflow-bucket hits (rate-limiter falling back to the shared bucket rather than an identity-specific one), exposed the same way as this track's other metrics (`04-infra-devops/observability.md`'s RED-metrics pattern — no PII/identity value as a label, per that document's existing cardinality rule).
+
+**Acceptance criteria:**
+- [ ] A metric exists distinguishing overflow-bucket hits from normal (identity-specific) rate-limiter hits.
+- [ ] No identity value or other per-caller data used as a metric label — consistent with `observability.md`'s existing rule.
+
+**Depends on:** none — purely additive observability, no design change to the rate limiter itself.
+**Model/effort:** Sonnet, low.
+**Type:** Task.
+**Labels:** `track-04`.
