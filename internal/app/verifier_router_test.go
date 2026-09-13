@@ -113,7 +113,7 @@ func TestNewVerifierRouter_UnauthenticatedRequest_401(t *testing.T) {
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
-	router := NewVerifierRouter(cfg, &fakeRepo{})
+	router := NewVerifierRouter(cfg, &fakeRepo{}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
 	w := httptest.NewRecorder()
@@ -137,7 +137,7 @@ func TestNewVerifierRouter_AuthenticatedSearch_ReachesHandler(t *testing.T) {
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
-	router := NewVerifierRouter(cfg, &fakeRepo{})
+	router := NewVerifierRouter(cfg, &fakeRepo{}, nil)
 	tok := signTestToken(t, key, "key-1", "profile:search")
 
 	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"jane"}`))
@@ -151,7 +151,7 @@ func TestNewVerifierRouter_AuthenticatedSearch_ReachesHandler(t *testing.T) {
 
 func TestNewVerifierRouter_HealthzUnaffectedByAuth(t *testing.T) {
 	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: "http://unused.invalid"}
-	router := NewVerifierRouter(cfg, &fakeRepo{})
+	router := NewVerifierRouter(cfg, &fakeRepo{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -181,7 +181,7 @@ func TestNewVerifierRouter_ReadOwn_AllowedAndDenied(t *testing.T) {
 		AuthzQASub:              "client-under-test", // matches signTestToken's hardcoded sub
 		AuthzQAAllowedProfileID: "allowed-profile",
 	}
-	router := NewVerifierRouter(cfg, &fakeRepo{})
+	router := NewVerifierRouter(cfg, &fakeRepo{}, nil)
 	tok := signTestToken(t, key, "key-1", "profile:read:own")
 
 	allowedReq := httptest.NewRequest(http.MethodGet, "/profiles/allowed-profile", nil)
@@ -219,7 +219,7 @@ func TestNewVerifierRouter_NilRepo_ProtectedRoutesFailClosed503(t *testing.T) {
 	defer jwks.Close()
 
 	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
-	router := NewVerifierRouter(cfg, nil) // no DAO repository — the no-database-yet case
+	router := NewVerifierRouter(cfg, nil, nil) // no DAO repository — the no-database-yet case
 	tok := signTestToken(t, key, "key-1", "profile:search")
 
 	// /healthz must still be green.
