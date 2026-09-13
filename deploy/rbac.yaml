@@ -40,6 +40,14 @@ rules:
     # cert-manager mint one; the resulting TLS Secret is managed by
     # cert-manager's own controller, not read/written by this identity.
     verbs: [get, list, watch, create, update, patch]
+  - apiGroups: ["monitoring.coreos.com"]
+    # LT-49: PrometheusRule/ServiceMonitor, per Amber's observability
+    # inventory. Namespaced objects in loginid-takehome only — the
+    # Prometheus CR in ns monitoring (empty ruleNamespaceSelector/
+    # serviceMonitorNamespaceSelector) adopts them by label, no edit to
+    # that CR or anything in ns monitoring needed.
+    resources: [prometheusrules, servicemonitors]
+    verbs: [get, list, watch, create, update, patch]
   - apiGroups: ["batch"]
     resources: [jobs]
     # `delete` is needed because a Job's pod template is immutable — the
