@@ -16,7 +16,12 @@ under time pressure.
 qa-client-credential, postgres-server-tls, and loginid-takehome-tls are
 deliberately NOT in MIGRATED_SECRET_NAMES -- see refinement/LT-46.md and
 handoff-04-secrets.md for why each of those three stays a Kubernetes
-Secret.
+Secret. postgres-superuser WAS a fourth accepted exception in an
+earlier version of this list (its own bootstrap-ordering rationale --
+Postgres needing its password before anything else existed to serve
+one) but the PM's ruling on 2026-09-13 retired that exception now that
+Vault is confirmed running on this cluster before Postgres ever starts;
+it's included in MIGRATED_SECRET_NAMES below like the other five.
 """
 import re
 import sys
