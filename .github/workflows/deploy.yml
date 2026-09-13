@@ -1,0 +1,75 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-service, idp-connector]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: cmd/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_BASE }}/${{ matrix.service }}:latest
+
+  deploy:
+    name: Apply manifests to the lab cluster
+    runs-on: [self-hosted, loginid-takehome]
+    needs: [build-and-push]
+    environment:
+      name: production
+      url: https://loginid-takehome.uplifttech.org
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render manifests for this commit
+        run: sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml > /tmp/rendered.yaml
+
+      - name: Show planned change (kubectl diff)
+        run: kubectl diff -f /tmp/rendered.yaml || true
+
+      - name: Apply manifests
+        run: kubectl apply -f /tmp/rendered.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n loginid-takehome rollout status deployment/api-service --timeout=120s
+          kubectl -n loginid-takehome rollout status deployment/idp-connector --timeout=120s
+
+      - name: Print deploy summary
+        run: |
+          echo "## Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Public URL:** https://loginid-takehome.uplifttech.org/healthz" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Commit:** ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Author:** ${{ github.event.head_commit.author.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          curl -s https://loginid-takehome.uplifttech.org/healthz >> "$GITHUB_STEP_SUMMARY" || echo "(curl failed — DNS may not have propagated yet)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
