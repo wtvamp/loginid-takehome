@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -24,7 +25,7 @@ type fakeKeySource struct {
 	keys map[string]*rsa.PublicKey
 }
 
-func (f *fakeKeySource) KeyForKid(kid string) (*rsa.PublicKey, error) {
+func (f *fakeKeySource) KeyForKid(_ context.Context, kid string) (*rsa.PublicKey, error) {
 	k, ok := f.keys[kid]
 	if !ok {
 		return nil, errNoKey
@@ -98,7 +99,7 @@ func defaultOpts(kid string) tokenOpts {
 }
 
 func newTestMiddleware(keys map[string]*rsa.PublicKey) func(http.Handler) http.Handler {
-	return NewJWTMiddleware(&fakeKeySource{keys: keys}, testIssuer, testAudience)
+	return NewJWTMiddleware(&fakeKeySource{keys: keys}, testIssuer, testAudience, &fakeAuditLogger{})
 }
 
 func okHandler(gotCtx *AuthContext) http.Handler {
