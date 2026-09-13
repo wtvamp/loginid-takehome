@@ -123,6 +123,14 @@ spec:
             # profile ids. Placeholder until real per-token authz lands.
             - {name: AUTHZ_QA_SUB, value: qa-review-read-own}
             - {name: AUTHZ_QA_ALLOWED_PROFILE_ID, value: "00000000-0000-4000-8000-000000000001"}
+          ports:
+            - {name: http, containerPort: 8080}
+            # LT-49: retention-sweep metrics sink (Amber's observability
+            # inventory) — port/name agreed with Renata (03). The
+            # ServiceMonitor below targets this exact Service port name;
+            # the metrics-only NetworkPolicy ingress rule admits only
+            # ns=monitoring on this port, nothing else.
+            - {name: metrics, containerPort: 9101}
           readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 10}
 ---
@@ -131,4 +139,6 @@ kind: Service
 metadata: {name: api-service, namespace: loginid-takehome}
 spec:
   selector: {app: api-service}
-  ports: [{port: 443, targetPort: 8080}]
+  ports:
+    - {name: https, port: 443, targetPort: 8080}
+    - {name: metrics, port: 9101, targetPort: 9101}
