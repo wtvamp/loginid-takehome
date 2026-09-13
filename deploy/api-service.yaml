@@ -2,13 +2,23 @@
 # (LT-52) so the deploy workflow can apply it AFTER Postgres exists and
 # the migration Job has completed — api-service is the one thing in this
 # namespace whose startup depends on the schema already being there.
+#
+# replicas: 1, not 2 — per Naomi's (01) live review: RateLimiter,
+# TouchCounter, and GrantLimiter are all in-process, per-pod state. She
+# reproduced a 12-request burst passing a 10 req/min limit because the
+# load balancer split it across two pods, each with its own independent
+# counter — the same class of issue as api-service-issuer's replica
+# count (Helena's review). Production path for real HA is a shared
+# store (Redis), already named in the relevant code comments; not built
+# for this take-home, so replicas stay at 1 rather than shipping a
+# rate limiter that silently doesn't limit at the stated rate.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-service
   namespace: loginid-takehome
 spec:
-  replicas: 2
+  replicas: 1
   selector: {matchLabels: {app: api-service}}
   template:
     metadata: {labels: {app: api-service}}
