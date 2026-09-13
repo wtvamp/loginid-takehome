@@ -323,6 +323,7 @@ type fakeRunRecorder struct {
 
 type finishCall struct {
 	runID             string
+	finishedAt        time.Time
 	rowsExamined      int
 	rowsDeleted       int
 	drained           bool
@@ -342,8 +343,8 @@ func (f *fakeRunRecorder) StartRun(_ context.Context, class dao.RetentionClass, 
 	return fmt.Sprintf("run-%d", f.nextRunID), missed, nil
 }
 
-func (f *fakeRunRecorder) FinishRun(_ context.Context, runID string, _ time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error {
-	f.finishCalls = append(f.finishCalls, finishCall{runID, rowsExamined, rowsDeleted, drained, oldestSurvivingAt})
+func (f *fakeRunRecorder) FinishRun(_ context.Context, runID string, finishedAt time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error {
+	f.finishCalls = append(f.finishCalls, finishCall{runID, finishedAt, rowsExamined, rowsDeleted, drained, oldestSurvivingAt})
 	return f.finishErr
 }
 
@@ -356,7 +357,15 @@ func TestRun_RecorderStartedAndFinishedOncePerDrainedClass(t *testing.T) {
 	f := allDrainedFake()
 	recorder := &fakeRunRecorder{}
 
-	Run(context.Background(), f, time.Now(), &fakeMetricEmitter{}, recorder, time.Hour)
+	// now is frozen (a fixed instant), unlike a real clock — so an
+	// assertion that finishedAt is not exactly equal to it confirms
+	// runClass really did call time.Now() at completion rather than
+	// reusing the invocation-time now, per the comment at the FinishRun
+	// call site.
+	now := time.Now()
+	before := time.Now()
+	Run(context.Background(), f, now, &fakeMetricEmitter{}, recorder, time.Hour)
+	after := time.Now()
 
 	if len(recorder.startCalls) != len(allClasses) {
 		t.Fatalf("StartRun called %d times, want %d (once per class)", len(recorder.startCalls), len(allClasses))
@@ -370,6 +379,9 @@ func TestRun_RecorderStartedAndFinishedOncePerDrainedClass(t *testing.T) {
 		}
 		if c.runID == "" {
 			t.Errorf("finishCalls[%d].runID is empty, want the id StartRun returned", i)
+		}
+		if c.finishedAt.Before(before) || c.finishedAt.After(after) {
+			t.Errorf("finishCalls[%d].finishedAt = %v, want a real wall-clock reading between %v and %v (not the frozen invocation-time now=%v)", i, c.finishedAt, before, after, now)
 		}
 	}
 }
