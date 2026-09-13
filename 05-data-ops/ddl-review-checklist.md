@@ -43,6 +43,17 @@ These are the defects the behavioural conformance suite exists to catch. Each wa
 18. **`auth_method` seeded with one `'password'` row, idempotent via `INSERT ... ON CONFLICT (name) DO NOTHING`.** In `shared/`, as a migration — not a runtime bootstrap. (`migration-approach.md` §4.)
 19. **New auth methods are inserted as data, never added as migrations.** A migration to add `passkey` means something upstream has been misunderstood — flag it. (Contract §6.7.)
 
+## G. Applied migrations are immutable — check the sequence, not just the file
+
+**Added 2026-09-13 after this checklist failed to catch a no-op change, and I approved it.** Items A–F all review a migration file's *contents*. None of them asked the prior question: *will this change actually apply to a database that already exists?* A corrected `CHECK` inside an already-applied `00001` is correct text and a **no-op migration** — goose never re-runs an applied version, so a live database keeps the old constraint forever while the file, the tests and the reviewer all look right.
+
+20. **Never edit an already-numbered migration that could plausibly have been applied anywhere** — any environment, any CI run, any developer's local database. Corrections ship as a **new numbered migration**, never as an edit to an old one. The only safe window for editing a migration in place is before it has ever been applied outside the branch that introduces it, and by the time it is in a PR that window is usually shut.
+21. **A change to a constraint is a `DROP` and `ADD` in a new migration**, applied to both `postgres/` and `cockroachdb/` (and `sqlite/` where relevant) — one file per directory, same version number, same constraint name.
+22. **Verify by incremental apply, not against a fresh schema.** A fresh-schema test passes for an edit to `00001` — which is precisely why this failure hides. The check that catches it is applying the *previous* state and then migrating forward, which is also what the deployed pipeline does. Same principle as the migration-order defect: **the thing tested and the thing run must be the same artifact.**
+23. **CockroachDB rejects a same-transaction `DROP` + `ADD` of a same-named constraint**, so such a migration needs `-- +goose NO TRANSACTION`. Found by running the real incremental sequence against a live v23.2.0; it does not appear in a fresh-schema apply.
+
+*Items 20–23 were raised by Nolan Reyes (03, Veteran) and Renata Cole (03) after catching a no-op migration I had already approved. The general principle behind them is stated once, authoritatively, in the contract's §7 — **verification exercises the sequence the live system executes, not an idealized construction of the end state** — and is not restated here. Items 20–23 are its specific consequences for DDL review; §7 lists the four defects that produced it.*
+
 ## What I will not do at review
 
 Re-open decisions. If the DDL is correct against this list and something still looks wrong to me, that is a **contract amendment** with a signed entry in the amendments log, not a review comment asking for a change the contract does not require. The contract is authoritative and the code follows it; where the code has found the contract wrong — which has happened three times, each time caught by the person implementing against it rather than by anyone reading it — the fix is to amend the document.
