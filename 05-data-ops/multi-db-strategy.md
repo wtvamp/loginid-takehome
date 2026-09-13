@@ -572,6 +572,15 @@ Numbered so there is no ambiguity. Each names **the enforcement site that makes 
 
 This is the condition the whole per-driver ruling rests on (`decisions/multi-db-abstraction.md`). Two implementations behind one interface guarantee both *compile*; nothing guarantees they *behave* alike, and the failure mode produces no error — just different results. Every defect this phase found (the `LIKE` case divergence, the collation ordering divergence, `Country` normalization) is invisible when either implementation is read in isolation, because each is correct on its own terms.
 
+**Verification exercises the sequence the live system executes, not an idealized construction of the end state.** This is one principle, stated once, because four separate defects in this project have been instances of it and each was found only by someone running the real thing:
+
+- an integration suite applied migration files in its own working order, so a documented order that could not work still passed;
+- a SQLite test harness set its own `PRAGMA`, so it would have kept passing after the real `New()` regressed;
+- a corrected `CHECK` inside an already-applied migration was verified against a fresh schema, where it looks right and is a no-op against every live database;
+- and CockroachDB's `NO TRANSACTION` requirement for a same-transaction `DROP`+`ADD` could not be discovered at all by a fresh-schema apply, because that path never performs one.
+
+In each case the test was well written and tested the wrong artifact. **A suite that builds its own version of the thing under test cannot fail in the way the real thing fails** — so where the production path applies migrations, so does the suite; where production opens a connection through `New()`, so does the suite; where production migrates forward from a prior state, the suite does not start from empty.
+
 Mechanism is 03's. The requirement is 05's, and at minimum the suite asserts: identical result sets and identical ordering for the same `Search` across backends; `errors.Is` sentinel parity for every error condition in §4; the secret-state rules in §5 and §6.10; empty-string rejection on every `*string` filter; and for the retention methods in §3c —
 
 - a zero-value `RetentionClass` (`""`) returns `ErrInvalidArgument` — a caller-reachable invalid input, unlike `ErrAlreadyExists`, and therefore owed an explicit assertion rather than only prose;
