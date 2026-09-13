@@ -22,7 +22,6 @@
 x-api-service-common: &api-service-common
   build: {context: ., dockerfile: cmd/api-service/Dockerfile}
   ports: ["8080:8080"]
-  secrets: [db_dsn]
 
 # JWT_ISSUER/AUDIENCE literals shared by every service in the local
 # auth chain — same values the real cluster manifests use
@@ -39,9 +38,10 @@ services:
       <<: *jwt-common
       APP_MODE: verifier
       DB_DRIVER: sqlite
-      DB_DSN_FILE: /run/secrets/db_dsn
+      DB_DSN_FILE: /run/secrets/db_dsn_sqlite
       HTTP_ADDR: ":8080"
       AUTH_JWT_AUDIENCE: "loginid-api-service"
+    secrets: [db_dsn_sqlite]
     # Bind mount, not a named volume — found by reading
     # cmd/api-service/Dockerfile directly, not assumed: the production
     # image (gcr.io/distroless/static-debian12:nonroot) never creates a
@@ -64,9 +64,10 @@ services:
       <<: *jwt-common
       APP_MODE: verifier
       DB_DRIVER: postgres
-      DB_DSN_FILE: /run/secrets/db_dsn
+      DB_DSN_FILE: /run/secrets/db_dsn_postgres
       HTTP_ADDR: ":8080"
       AUTH_JWT_AUDIENCE: "loginid-api-service"
+    secrets: [db_dsn_postgres]
     depends_on:
       postgres: {condition: service_healthy}
       api-service-issuer: {condition: service_started}
@@ -151,8 +152,14 @@ services:
     environment:
       <<: *jwt-common
       APP_MODE: verifier
-      DB_DRIVER: ${DB_DRIVER:-sqlite}
-      DB_DSN_FILE: /run/secrets/db_dsn
+      # Hot-reload is documented and tested as a SQLite-only dev path
+      # (this file's own quick-start comment) — DB_DSN_FILE below
+      # matches that; a developer wanting hot-reload against Postgres
+      # would need to point both DB_DRIVER and DB_DSN_FILE at the
+      # postgres secret themselves, not something this profile wires
+      # by default.
+      DB_DRIVER: sqlite
+      DB_DSN_FILE: /run/secrets/db_dsn_sqlite
       HTTP_ADDR: ":8080"
       AUTH_JWT_AUDIENCE: "loginid-api-service"
       # Found live, not assumed: cosmtrek/air:latest bundles go1.27.0,
@@ -166,7 +173,7 @@ services:
       # running the dev profile for real, not just reasoning about it.
       GOTOOLCHAIN: auto
     ports: ["8080:8080"]
-    secrets: [db_dsn]
+    secrets: [db_dsn_sqlite]
     depends_on:
       api-service-issuer: {condition: service_started}
     profiles: ["dev"]
@@ -214,7 +221,12 @@ services:
     profiles: ["tools"]
 
 secrets:
-  db_dsn: {file: ./.dev-secrets/db_dsn}
+  # Naomi's (01) live re-review: split into two DSN files so nothing
+  # depends on which profile scripts/dev-secrets-init.sh was run
+  # alongside, or the order profiles were started in — see that
+  # script's own comment for the full incident.
+  db_dsn_sqlite: {file: ./.dev-secrets/db_dsn.sqlite}
+  db_dsn_postgres: {file: ./.dev-secrets/db_dsn.postgres}
   postgres_password: {file: ./.dev-secrets/postgres_password}
   jwt_signing_key: {file: ./.dev-secrets/jwt_signing_key}
   issuer_db_dsn: {file: ./.dev-secrets/issuer_db_dsn}

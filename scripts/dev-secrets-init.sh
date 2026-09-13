@@ -37,14 +37,29 @@ write_if_absent() {
   fi
 }
 
-# Plain file path, not a "file:" URI — internal/dao/sqlite.New's dsn
-# argument is a bare path or ":memory:" (internal/dao/sqlite/sqlite.go),
-# confirmed by reading the driver directly rather than assumed from the
-# design sketch's own comment, which used "file:/data/dev.db" — that
-# form isn't what this driver actually parses.
-write_if_absent "$dir/db_dsn" "/data/dev.db"
+# Two DSN files, not one — Naomi's (01) live re-review found the
+# postgres profile failing healthz with db: down: a single db_dsn file
+# written unconditionally as the SQLite path meant api-service-pg's
+# DB_DSN_FILE (DB_DRIVER=postgres) pointed at a sqlite-shaped DSN
+# regardless of which profile actually ran this script last or which
+# profile is active now. Fixed the fragile way first drafts reach for
+# (branch on which profile the developer says they're using) by
+# removing the branch entirely instead: write BOTH DSNs unconditionally,
+# and let each profile's own compose service definition point its
+# DB_DSN_FILE at the one it actually needs (api-service ->
+# db_dsn.sqlite, api-service-pg -> db_dsn.postgres) — nothing depends
+# on script invocation order or which profile ran last.
+#
+# Plain file path, not a "file:" URI, for the sqlite one —
+# internal/dao/sqlite.New's dsn argument is a bare path or ":memory:"
+# (internal/dao/sqlite/sqlite.go), confirmed by reading the driver
+# directly rather than assumed from the design sketch's own comment,
+# which used "file:/data/dev.db" — that form isn't what this driver
+# actually parses.
+write_if_absent "$dir/db_dsn.sqlite" "/data/dev.db"
 dev_pg_password="dev-only-not-a-real-secret"
 write_if_absent "$dir/postgres_password" "$dev_pg_password"
+write_if_absent "$dir/db_dsn.postgres" "postgres://dev:${dev_pg_password}@postgres:5432/loginid_dev?sslmode=disable"
 
 # LT-48 (Naomi's live review): the issuer's own database — same "dev"
 # role/password as the main database (docker-postgres-initdb's
