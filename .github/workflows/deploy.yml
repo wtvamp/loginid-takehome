@@ -51,7 +51,7 @@ jobs:
 
   deploy:
     name: Apply manifests to the lab cluster
-    runs-on: [self-hosted, loginid-takehome]
+    runs-on: loginid-takehome
     needs: [build-and-push]
     environment:
       name: production
