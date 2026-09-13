@@ -171,3 +171,37 @@ func TestLoad_VerifierModeIgnoresSigningKeyFile(t *testing.T) {
 		t.Errorf("JWTSigningKeyPath = %q, want empty in verifier mode regardless of the env var", cfg.JWTSigningKeyPath)
 	}
 }
+
+// TestValidateEnvVarValue is ValidateEnvVarValue's own direct unit
+// test — Ingrid Solano's PR #53 review (a bare presence check lets an
+// env var be non-empty garbage and still pass) and Marcus Ilori's (02)
+// ruling narrowing the fix to exactly AUTH_JWKS_URL and AUTH_JWT_ISSUER.
+func TestValidateEnvVarValue(t *testing.T) {
+	cases := []struct {
+		name    string
+		envName string
+		value   string
+		wantErr bool
+	}{
+		{name: "jwks url: valid absolute URL", envName: "AUTH_JWKS_URL", value: "http://svc.cluster.local:443/.well-known/jwks.json", wantErr: false},
+		{name: "jwks url: no scheme or host", envName: "AUTH_JWKS_URL", value: "not-a-url", wantErr: true},
+		{name: "jwks url: scheme but no host", envName: "AUTH_JWKS_URL", value: "http://", wantErr: true},
+		{name: "issuer: valid absolute URL", envName: "AUTH_JWT_ISSUER", value: "https://auth.example.internal", wantErr: false},
+		{name: "issuer: garbage", envName: "AUTH_JWT_ISSUER", value: "garbage", wantErr: true},
+		// A var not in urlShapedEnvVars is never shape-checked — this
+		// deliberately narrow scope is Marcus's own ruling ("don't
+		// extend it further"), not an oversight.
+		{name: "audience: not URL-shaped, anything passes", envName: "AUTH_JWT_AUDIENCE", value: "not-a-url-and-thats-fine", wantErr: false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := ValidateEnvVarValue(c.envName, c.value)
+			if c.wantErr && err == nil {
+				t.Errorf("ValidateEnvVarValue(%q, %q) = nil, want an error", c.envName, c.value)
+			}
+			if !c.wantErr && err != nil {
+				t.Errorf("ValidateEnvVarValue(%q, %q) = %v, want nil", c.envName, c.value, err)
+			}
+		})
+	}
+}
