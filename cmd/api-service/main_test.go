@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -152,6 +155,32 @@ func TestNewOnboardingService(t *testing.T) {
 			c.mutate(&cfg)
 			if _, err := newOnboardingService(cfg); err == nil {
 				t.Errorf("newOnboardingService(%s) = nil error, want an error", c.name)
+			}
+		})
+	}
+}
+
+// TestClassifySweepDBConnectError is Naomi Voss's (PO) live-run finding
+// made concrete: a sweep pod hung silently against an unreachable
+// database, and the fix's whole point is naming the failure class in
+// one structured log line rather than leaving an operator to parse a
+// raw driver error string.
+func TestClassifySweepDBConnectError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "context deadline exceeded", err: context.DeadlineExceeded, want: "connect_timeout"},
+		{name: "wrapped deadline exceeded", err: fmt.Errorf("dialing: %w", context.DeadlineExceeded), want: "connect_timeout"},
+		{name: "connection refused", err: errors.New("dial tcp 10.0.0.5:5432: connect: connection refused"), want: "connection_refused"},
+		{name: "dns failure", err: errors.New("dial tcp: lookup postgres.example: no such host"), want: "dns_error"},
+		{name: "unrecognized error text", err: errors.New("something else entirely"), want: "unknown"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := classifySweepDBConnectError(c.err); got != c.want {
+				t.Errorf("classifySweepDBConnectError(%v) = %q, want %q", c.err, got, c.want)
 			}
 		})
 	}

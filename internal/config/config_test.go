@@ -220,3 +220,27 @@ func TestValidateEnvVarValue(t *testing.T) {
 		})
 	}
 }
+
+// TestLoad_SweepIntervalSeconds confirms this purely-descriptive field
+// flows through Load unchanged, and is empty (not some default) when
+// unset — cmd/api-service's own startup log line is what turns empty
+// into the human-readable "unset", not this package.
+func TestLoad_SweepIntervalSeconds(t *testing.T) {
+	t.Setenv("SWEEP_INTERVAL_SECONDS", "86400")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.SweepIntervalSeconds != "86400" {
+		t.Errorf("SweepIntervalSeconds = %q, want %q", cfg.SweepIntervalSeconds, "86400")
+	}
+
+	t.Setenv("SWEEP_INTERVAL_SECONDS", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.SweepIntervalSeconds != "" {
+		t.Errorf("SweepIntervalSeconds = %q, want empty when unset", cfg.SweepIntervalSeconds)
+	}
+}
