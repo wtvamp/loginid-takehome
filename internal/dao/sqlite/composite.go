@@ -21,6 +21,7 @@ func (r *repository) CreateProfileWithCredential(ctx context.Context, p *model.U
 	if err := dao.ValidateProfilePointers(p); err != nil {
 		return nil, nil, err
 	}
+	dao.NormalizeProfileForWrite(p)
 	if err := dao.ValidateCreateID(c.ID); err != nil {
 		return nil, nil, err
 	}
@@ -173,6 +174,9 @@ func (r *repository) DeleteExpired(ctx context.Context, class dao.RetentionClass
 }
 
 func (r *repository) DeleteProfile(ctx context.Context, id string, externalRef *string) error {
+	if err := dao.ValidateID(id); err != nil {
+		return err
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return translateError(err)
