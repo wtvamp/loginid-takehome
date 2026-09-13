@@ -12,7 +12,7 @@ import (
 func TestHealthz(t *testing.T) {
 	Commit = "abc123"
 
-	srv := httptest.NewServer(NewRouter("api-service"))
+	srv := httptest.NewServer(NewRouter("api-service", ModeVerifier))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -47,5 +47,68 @@ func TestHealthz(t *testing.T) {
 		if !allowed[k] {
 			t.Errorf("unexpected field %q in health response — only status/service/build are permitted on this unauthenticated endpoint", k)
 		}
+	}
+}
+
+// TestNewRouter_IssuerModeAddsTokenRoute is LT-32's acceptance-criteria
+// enforcement site for "internal/app branches on it at startup": the
+// issuer and verifier routers must be demonstrably different handlers, not
+// just two identical routers reading a value neither acts on.
+func TestNewRouter_IssuerModeAddsTokenRoute(t *testing.T) {
+	srv := httptest.NewServer(NewRouter("api-service", ModeIssuer))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/auth/token", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /auth/token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// 501, not 404: the route must exist and be reachable on the issuer
+	// router even though S7/LT-40 hasn't implemented real issuance yet —
+	// a 404 here would mean the route isn't actually wired.
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Errorf("status = %d, want %d (route must exist on the issuer router)", resp.StatusCode, http.StatusNotImplemented)
+	}
+}
+
+// TestNewRouter_VerifierModeHasNoTokenRoute is the other half of the same
+// criterion: the verifying router — the one actually deployed as
+// api-service, per LT-32's physical-absence requirement — must not expose
+// the issuance route at all, not even as a 501. A 404 here is the correct
+// outcome, mirroring "physically absent, not just RBAC-denied" one layer
+// up, at the HTTP surface rather than the Kubernetes manifest.
+func TestNewRouter_VerifierModeHasNoTokenRoute(t *testing.T) {
+	srv := httptest.NewServer(NewRouter("api-service", ModeVerifier))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/auth/token", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /auth/token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (verifier router must not expose the issuance route)", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+// TestNewRouter_UnrecognizedModeFallsBackToVerifier asserts NewRouter
+// doesn't rely solely on config.Load's validation never being bypassed
+// (Oren Castellan, PR #18 review): an unrecognized Mode value must still
+// produce the safer of the two route sets (no issuance route) rather than
+// silently matching ModeIssuer's behavior by accident of comparison.
+func TestNewRouter_UnrecognizedModeFallsBackToVerifier(t *testing.T) {
+	srv := httptest.NewServer(NewRouter("api-service", Mode("bogus")))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/auth/token", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /auth/token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (unrecognized mode must not expose the issuance route)", resp.StatusCode, http.StatusNotFound)
 	}
 }
