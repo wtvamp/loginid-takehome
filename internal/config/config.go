@@ -29,6 +29,23 @@ type Config struct {
 
 	AuthJWTIssuer   string
 	AuthJWTAudience string
+	// AuthJWKSURL is the verifier's only path to public key material
+	// (LT-40, handoff-03-auth.md v4): the issuer Deployment's in-cluster
+	// ClusterIP Service JWKS endpoint, e.g.
+	// "http://api-service-issuer.loginid-takehome.svc.cluster.local/.well-known/jwks.json".
+	// Never a mounted key file — JWKS survives rotation without a config
+	// change, since the verifier fetches by kid.
+	AuthJWKSURL string
+
+	// AuthzQASub and AuthzQAAllowedProfileID seed the temporary,
+	// default-deny StopgapAuthorizer (internal/api) for LT-40/LT-51's
+	// joint live-URL review only — see StopgapAuthorizer's own doc
+	// comment for why a permissive default was explicitly ruled out.
+	// Both empty (the default) means the stand-in denies every
+	// profile:read:own request, the safe default until LT-51 seeds a
+	// real QA client credential and this is set to match it.
+	AuthzQASub              string
+	AuthzQAAllowedProfileID string
 
 	ConnectorJWTAudience  string
 	ConnectorClientID     string
@@ -87,6 +104,10 @@ func Load() (Config, error) {
 
 		AuthJWTIssuer:   os.Getenv("AUTH_JWT_ISSUER"),
 		AuthJWTAudience: os.Getenv("AUTH_JWT_AUDIENCE"),
+		AuthJWKSURL:     os.Getenv("AUTH_JWKS_URL"),
+
+		AuthzQASub:              os.Getenv("AUTHZ_QA_SUB"),
+		AuthzQAAllowedProfileID: os.Getenv("AUTHZ_QA_ALLOWED_PROFILE_ID"),
 
 		ConnectorJWTAudience:  os.Getenv("CONNECTOR_JWT_AUDIENCE"),
 		ConnectorClientID:     os.Getenv("CONNECTOR_CLIENT_ID"),
