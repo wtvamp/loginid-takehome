@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"loginid-takehome/internal/dao"
 	"loginid-takehome/internal/onboarding"
 	"loginid-takehome/internal/sweep"
+	"loginid-takehome/internal/sweepstore"
 
 	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
 	// registers the "pgx" database/sql driver this file uses directly
@@ -146,6 +148,31 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
 // stay comfortably below the outer one.
 const sweepDBConnectTimeout = 20 * time.Second
 
+// metricsAddr is the /metrics listener's own address, agreed with Theo
+// Bergman (04, PR #68): port 9101, Service port name "metrics" — a
+// separate port from the main API port, since the NetworkPolicy admits
+// ns monitoring only here, never to the authenticated search/read
+// surface.
+const metricsAddr = ":9101"
+
+// startMetricsServer launches LT-49's /metrics endpoint in its own
+// goroutine — a distinct http.Server on metricsAddr, never sharing a
+// mux with the main API router. db backs a sweepstore.Store read only
+// through SnapshotReader; the reader used here is the exact same
+// *sql.DB pingDB already opened for /healthz's own connectivity probe,
+// not a third connection pool.
+func startMetricsServer(db *sql.DB, driverName string) {
+	store := sweepstore.NewStore(db, driverName)
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", sweepstore.NewMetricsHandler(store))
+	go func() {
+		if err := http.ListenAndServe(metricsAddr, mux); err != nil {
+			log.Printf("api-service: /metrics server on %s stopped: %v", metricsAddr, err)
+		}
+	}()
+	log.Printf("api-service: /metrics listening on %s", metricsAddr)
+}
+
 // classifySweepDBConnectError names the failure class in the one
 // structured log line runSweepMode emits on a connect failure — a
 // human triaging a failed CronJob run needs "timeout" vs "refused" vs
@@ -184,11 +211,24 @@ func classifySweepDBConnectError(err error) string {
 // a real error) — a non-zero exit is what makes a failed sweep show up
 // as a failed Kubernetes Job, not a silently-succeeding one.
 func runSweepMode(cfg config.Config) {
-	interval := cfg.SweepIntervalSeconds
-	if interval == "" {
-		interval = "unset"
+	intervalDisplay := cfg.SweepIntervalSeconds
+	if intervalDisplay == "" {
+		intervalDisplay = "unset"
 	}
-	log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", interval)
+	log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", intervalDisplay)
+
+	// interval feeds RunRecorder.StartRun's missedSlots computation
+	// (05's §3d) — 0 (unknown) if SWEEP_INTERVAL_SECONDS is unset or
+	// unparseable, rather than guessing at a schedule this process was
+	// never told.
+	var interval time.Duration
+	if cfg.SweepIntervalSeconds != "" {
+		if secs, err := strconv.Atoi(cfg.SweepIntervalSeconds); err != nil {
+			log.Printf("api-service: sweep: SWEEP_INTERVAL_SECONDS=%q is not a valid integer, missed-run tracking disabled for this run: %v", cfg.SweepIntervalSeconds, err)
+		} else {
+			interval = time.Duration(secs) * time.Second
+		}
+	}
 
 	repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
 	if err != nil {
@@ -231,8 +271,27 @@ func runSweepMode(cfg config.Config) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	// A separate *sql.DB for retention_sweep_run persistence (05's §3d,
+	// amendment A7) — same reasoning as pingDB above: dao.Repository
+	// exposes no way to run this package's own raw SQL against its
+	// underlying connection. A failure to open this handle is logged,
+	// not fatal — sweepstore.NewStore is still constructed (its own
+	// calls will simply error per-call, each already handled as a
+	// logged, non-fatal best-effort in internal/sweep), so a database
+	// glitch on this one auxiliary table never blocks the sweep's own
+	// real retention work.
+	var recorder sweep.RunRecorder
+	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+		if storeDB, err := sql.Open(driverName, cfg.DBDSN); err != nil {
+			log.Printf("api-service: sweep: opening retention_sweep_run store handle: %v", err)
+		} else {
+			defer func() { _ = storeDB.Close() }()
+			recorder = sweepstore.NewStore(storeDB, driverName)
+		}
+	}
+
 	metrics := sweep.NewPrometheusMetricEmitter()
-	results := sweep.Run(ctx, repo, time.Now(), metrics)
+	results := sweep.Run(ctx, repo, time.Now(), metrics, recorder, interval)
 
 	failed := false
 	for _, r := range results {
@@ -341,6 +400,23 @@ func main() {
 			log.Printf("api-service: onboarding (LT-33) config check failed, no consumer wired yet: %v", err)
 		} else {
 			log.Printf("api-service: onboarding (LT-33) config check passed, no consumer wired yet")
+		}
+
+		// LT-49: /metrics on its own port, per team-lead's routing of
+		// Amber's observability inventory — api-service is the always-up
+		// pod, so it (not the short-lived sweep CronJob) is what
+		// Prometheus scrapes. A separate port, not a route on the main
+		// API port, because the NetworkPolicy admits ns monitoring only
+		// to this one port (Theo Bergman, 04, PR #68), never to the
+		// authenticated search/read API surface. Reuses pingDB — the
+		// same lightweight *sql.DB /healthz already opened — rather than
+		// a third connection pool; if pingDB is nil (DB not configured
+		// yet), there is nothing for this endpoint to read, so it simply
+		// doesn't start rather than serving a permanently-failing route.
+		if pingDB != nil {
+			startMetricsServer(pingDB, sqlDriverNameFor(cfg.DBDriver))
+		} else {
+			log.Printf("api-service: /metrics not started — no database configured yet")
 		}
 
 		handler = app.NewVerifierRouter(cfg, repo, pingDB)
