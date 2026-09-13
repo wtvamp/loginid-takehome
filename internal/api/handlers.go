@@ -162,9 +162,12 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 		// separate Allowed()-then-RecordTouches() pair had, which could
 		// let N concurrent requests each add a full page's worth of
 		// touches before any of them recorded (Nolan Reyes, PR #26
-		// review). Every exit past this point must call Settle exactly
-		// once to release it.
-		reserved, err := d.TouchCounter.Reserve(ctx, ac.Sub, pageSize)
+		// review). The deferred release below guarantees this is settled
+		// exactly once on every exit path — including one added later
+		// without an explicit Settle call, and a panic unwind — rather
+		// than relying on a manual Settle call at each return (Nolan
+		// Reyes, second-round review).
+		tr, reserved, err := reserveTouches(ctx, d.TouchCounter, ac.Sub, pageSize)
 		if err != nil {
 			writeInternalError(w, err)
 			return
@@ -174,18 +177,17 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 			writeTouchCapExceeded(w)
 			return
 		}
+		defer tr.release(ctx)
 
 		// The object-level policy hook, per v3: called after scope
 		// validation (above) and request-shape validation (above), before
 		// the DAO call. ScopeSearch has no single target id.
 		allowed, err := d.Authz.Authorize(ctx, ac.Sub, ac.Scope, "")
 		if err != nil {
-			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
 			writeInternalError(w, err)
 			return
 		}
 		if !allowed {
-			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
 			d.audit(actx, AuditPolicyDenial, nil, "")
 			writeForbidden(w)
 			return
@@ -201,7 +203,6 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 		}
 		results, total, err := d.Repo.Profiles().Search(ctx, q)
 		if err != nil {
-			_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, pageSize)
 			d.audit(actx, AuditRequestFailed, nil, "")
 			writeDAOError(w, err)
 			return
@@ -213,7 +214,7 @@ func NewSearchHandler(d Deps) http.HandlerFunc {
 			ids[i] = p.ID
 			masked[i] = toSearchResult(p)
 		}
-		if err := d.TouchCounter.Settle(ctx, ac.Sub, ids, pageSize); err != nil {
+		if err := tr.settle(ctx, ids); err != nil {
 			writeInternalError(w, err)
 			return
 		}
@@ -297,9 +298,10 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 		// fixed (an earlier wording made this counter a no-op for
 		// read:any, since that scope requires a reason_code on every call
 		// by design).
-		var reserved bool
+		var tr *touchReservation
 		if ac.Scope == ScopeReadAny {
-			reserved, err = d.TouchCounter.Reserve(ctx, ac.Sub, 1)
+			var reserved bool
+			tr, reserved, err = reserveTouches(ctx, d.TouchCounter, ac.Sub, 1)
 			if err != nil {
 				writeInternalError(w, err)
 				return
@@ -309,20 +311,20 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 				writeTouchCapExceeded(w)
 				return
 			}
+			// Deferred release guarantees this is settled exactly once
+			// on every exit path below, including one added later
+			// without an explicit Settle call (Nolan Reyes, PR #26
+			// review, second round) — tr is nil for ScopeReadOwn, and
+			// (*touchReservation)(nil).release is a documented no-op.
+			defer tr.release(ctx)
 		}
 
 		allowed, err := d.Authz.Authorize(ctx, ac.Sub, ac.Scope, id)
 		if err != nil {
-			if reserved {
-				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
-			}
 			writeInternalError(w, err)
 			return
 		}
 		if !allowed {
-			if reserved {
-				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
-			}
 			d.audit(actx, AuditPolicyDenial, []string{id}, reasonCode)
 			writeForbidden(w)
 			return
@@ -330,19 +332,14 @@ func NewGetProfileHandler(d Deps) http.HandlerFunc {
 
 		p, err := d.Repo.Profiles().Get(ctx, id)
 		if err != nil {
-			if reserved {
-				_ = d.TouchCounter.Settle(ctx, ac.Sub, nil, 1)
-			}
 			d.audit(actx, AuditRequestFailed, []string{id}, reasonCode)
 			writeDAOError(w, err)
 			return
 		}
 
-		if reserved {
-			if err := d.TouchCounter.Settle(ctx, ac.Sub, []string{p.ID}, 1); err != nil {
-				writeInternalError(w, err)
-				return
-			}
+		if err := tr.settle(ctx, []string{p.ID}); err != nil {
+			writeInternalError(w, err)
+			return
 		}
 
 		d.audit(actx, AuditSuccess, []string{p.ID}, reasonCode)

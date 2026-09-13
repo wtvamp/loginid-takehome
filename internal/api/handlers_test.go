@@ -420,3 +420,43 @@ func TestGetProfileHandler_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", w.Code)
 	}
 }
+
+// TestSearchHandler_PanicStillReleasesTouchReservation is the guarantee
+// the defer-based release exists for (Nolan Reyes, PR #26 review, second
+// round): a manual Settle call at every return path is one forgotten
+// early-return (or an outright panic) away from silently burning a
+// caller's cumulative-cap budget for the rest of the window. A deferred
+// release runs during Go's own panic-unwind, with no recover needed in
+// the handler itself — this test panics from inside Authorize and
+// recovers only at the test boundary, then asserts the reservation was
+// still released.
+func TestSearchHandler_PanicStillReleasesTouchReservation(t *testing.T) {
+	d := allowAllDeps()
+	d.Authz = &fakeAuthorizer{} // never reached directly; overridden below
+	tc := d.TouchCounter.(*fakeTouchCounter)
+	panicAuthz := authorizeFunc(func(ctx context.Context, sub string, scope Scope, target string) (bool, error) {
+		panic("simulated handler panic between Reserve and any Settle call")
+	})
+	d.Authz = panicAuthz
+	h := NewSearchHandler(d)
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+	req = req.WithContext(withScope("client1", ScopeSearch))
+	w := httptest.NewRecorder()
+
+	func() {
+		defer func() { _ = recover() }()
+		h(w, req)
+	}()
+
+	if len(tc.settledReserved) != 1 || tc.settledReserved[0] != defaultPageSize {
+		t.Errorf("Settle calls after a panic = %v, want exactly one release of the full reserved page size (%d) — the deferred release must run during panic unwind", tc.settledReserved, defaultPageSize)
+	}
+}
+
+// authorizeFunc adapts a plain function to the Authorizer interface, for
+// tests that need a body a struct literal can't express (like panicking).
+type authorizeFunc func(ctx context.Context, sub string, scope Scope, target string) (bool, error)
+
+func (f authorizeFunc) Authorize(ctx context.Context, sub string, scope Scope, target string) (bool, error) {
+	return f(ctx, sub, scope, target)
+}
