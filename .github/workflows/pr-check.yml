@@ -137,6 +137,26 @@ jobs:
         # copy-pasted example from an older manifest).
         run: python3 deploy/checks/assert-no-migrated-secrets.py
 
+  never-log-lint:
+    name: Guard against a never-log-list value reaching a log call
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check internal/ and cmd/ for never-log-list violations
+        # LT-49 (observability.md's "Enforcement beyond 'write it
+        # carefully'"): a whole-struct dump verb (%+v/%#v) on a Go log
+        # call, an *http.Request/request body passed straight through,
+        # or a bare identifier matching a never-log-list field name
+        # (password, token, secret, dsn, client_secret) as a log-call
+        # argument. Not foolproof by design (a determined developer can
+        # rename around it, per observability.md) — catches the
+        # accidental case. Verified against real code before wiring in:
+        # clean against the actual codebase, and a scratch mutation
+        # (a %+v struct dump plus a raw password argument) was
+        # confirmed to actually fail this check before being reverted.
+        run: python3 scripts/check-never-log.py
+
   manifest-secret-guard:
     name: Guard against the JWT signing-key Secret leaking into another manifest
     runs-on: ubuntu-latest

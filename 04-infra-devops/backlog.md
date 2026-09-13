@@ -87,7 +87,7 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Description:** Implement `./observability.md`: structured `slog` logging with an explicit-field discipline (never a whole request/response struct through a log call), a lint check flagging never-log-list field names, RED metrics with no PII-cardinality labels, ingress-level query-string redaction for search endpoints, RBAC-separated audit-log read access, and 05's S5 retention-sweep requirement — rows-examined/rows-deleted/oldest-surviving-row-age metrics per data class, with an alert when oldest-row-age exceeds retention-window-plus-sweep-interval, since a dead sweep job produces zero rows-deleted either way and gives no other symptom.
 
 **Acceptance criteria:**
-- [ ] 02 confirms the never-log list (`handoff-04-secrets.md`'s nine items) is fully covered by a named enforcement site, not just a policy statement.
+- [ ] 02 confirms the never-log list (`handoff-04-secrets.md`'s eleven items, per the F50 consistency-pass additions of items 10-11) is fully covered by a named enforcement site, not just a policy statement.
 - [ ] No password, token, JWT, client secret, or DSN reaches a log call — enforcement site: explicit-field logging discipline plus the CI lint check.
 - [ ] Search-endpoint name/phone query fragments never appear in ingress access logs — enforcement site: ingress log-format override / redaction.
 - [ ] Audit-log read access is a distinct RBAC grant from Secret-read access — enforcement site: separate `Role` bound to an incident-review group.
