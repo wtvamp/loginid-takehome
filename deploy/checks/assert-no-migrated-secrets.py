@@ -3,15 +3,10 @@
 still appear as a Kubernetes Secret reference (volume or secretKeyRef/
 envFrom.secretRef) anywhere under deploy/.
 
-Not yet wired into any GitHub Actions workflow. Wiring this in only
-makes sense in the same PR that actually removes the Secret volumes/
-secretKeyRefs below and replaces them with Vault Agent Injector
-annotations (Amber's real KV paths/roles) -- adding this check any
-earlier would just fail every PR against the current, still-Secret-based
-manifests. Kept here, written and ready, so that PR is a smaller diff
-when the real names land: this script plus the manifest edits plus one
-new pr-check.yml step, not three separate things invented from scratch
-under time pressure.
+Wired into .github/workflows/pr-check.yml's no-vault-migrated-secrets
+job as of the PR that also removed the Secret volumes/secretKeyRefs
+below and added the real Vault Agent Injector annotations (Amber's
+provisioning, 04-infra-devops/handoff-amber-vault-provisioning.md).
 
 qa-client-credential, postgres-server-tls, and loginid-takehome-tls are
 deliberately NOT in MIGRATED_SECRET_NAMES -- see refinement/LT-46.md and
