@@ -314,7 +314,7 @@ That is a deliberate narrowing from the first draft, which took `reason` as a ca
 
 ## 3d. `retention_sweep_run` — the sweep's result, persisted (amendment A7)
 
-**Status: specified, not yet merged — PR #71 is open at the time of writing.** The table below does not exist in any migration on `main`; `DeleteExpired` runs and deletes correctly without it, but its result is not persisted and the alert rules have nothing to read. Recorded in the present tense as a specification, not as delivered state.
+**Status: delivered (`e289c38`, 2026-09-13).** Shipped in all three per-backend migrations — `migrations/postgres/00003`, `migrations/cockroachdb/00003`, `migrations/sqlite/00002` — with `ck_retention_sweep_run_drained` present in each, the two-write pattern implemented, and SQLite storing timestamps as RFC3339 UTC with a `Z` suffix so cross-backend ordering holds. `api-service` reads it at `/metrics`; the alert rules consuming it deployed in `5a0f841`.
 
 Added because the retention alerts run in the cluster's Prometheus, which scrapes an HTTP endpoint on the always-up `api-service` rather than reading the `CronJob`'s stdout (`../04-infra-devops/handoff-amber-observability-inventory.md`). The sweep is a short-lived pod; the scraper is a long-lived one; they never overlap. **So the sweep's per-class result has to live somewhere `api-service` can read it, and that somewhere is a table.**
 
