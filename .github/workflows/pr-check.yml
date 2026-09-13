@@ -137,6 +137,25 @@ jobs:
         # copy-pasted example from an older manifest).
         run: python3 deploy/checks/assert-no-migrated-secrets.py
 
+  postgres-netpol-covers-db-consumers:
+    name: Guard against a DB-credential-holding workload missing from postgres's NetworkPolicy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deploy/manifests.yaml and deploy/api-service.yaml
+        # Naomi's (01) live LT-44 review: retention-sweep held a real
+        # Vault-delivered db-runtime-credential but wasn't in
+        # postgres-default-deny's ingress allow-list — a TCP socket
+        # stuck in SYN_SENT forever, no error from Vault or the app,
+        # nothing in pg_stat_activity. Fails CI if a future workload
+        # gets a DB_DSN_FILE/ISSUER_DB_DSN_FILE env var or a Vault
+        # DB-credential path without also being added to that
+        # allow-list — verified this check actually catches the exact
+        # bug that just happened (removed retention-sweep from the
+        # allow-list locally, confirmed it fails, then restored it).
+        run: python3 deploy/checks/assert-postgres-netpol-covers-db-consumers.py
+
   never-log-lint:
     name: Guard against a never-log-list value reaching a log call
     runs-on: ubuntu-latest

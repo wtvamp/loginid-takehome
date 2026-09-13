@@ -491,10 +491,21 @@ spec:
   ports: [{port: 5432, targetPort: 5432}]
 ---
 # Postgres holds real PII at rest — the first component in this namespace
-# that does. Reachable only from api-service and the migration Job's own
-# pod (labeled app: db-migrate), matching idp-connector-default-deny's
-# shape. Nothing else in the namespace, and nothing outside it, can reach
-# port 5432 on this pod.
+# that does. Reachable only from api-service, api-service-issuer,
+# db-migrate, and retention-sweep — every workload with a database
+# credential (a Vault role or DB_DSN_FILE), matching
+# idp-connector-default-deny's shape. Nothing else in the namespace, and
+# nothing outside it, can reach port 5432 on this pod.
+#
+# retention-sweep added per Naomi's (01) live LT-44 review: the sweep
+# Job's pod held one TCP socket in SYN_SENT to postgres-0:5432,
+# retransmitting forever, nothing in pg_stat_activity — this policy's
+# allow-list was never updated when LT-44 introduced a new consumer of
+# the same database credential, the fifth instance of this project's
+# recurring "pattern not carried to a new identical component" class.
+# deploy/checks/assert-postgres-netpol-covers-db-consumers.py (below)
+# is the systemic fix: it fails CI if a future sixth consumer is added
+# without this allow-list following.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata: {name: postgres-default-deny, namespace: loginid-takehome}
@@ -506,6 +517,7 @@ spec:
         - {podSelector: {matchLabels: {app: api-service}}}
         - {podSelector: {matchLabels: {app: api-service-issuer}}}
         - {podSelector: {matchLabels: {app: db-migrate}}}
+        - {podSelector: {matchLabels: {app: retention-sweep}}}
 ---
 # Migration Job: three goose invocations, each against its own version
 # table. Main-database pair first — backend directory then shared/
@@ -790,12 +802,28 @@ spec:
   startingDeadlineSeconds: 900
   jobTemplate:
     spec:
-      # No backoffLimit override (defaults to 6) and no explicit
-      # activeDeadlineSeconds — a stuck sweep should retry like any
-      # other Job, not be treated as a fixed-duration batch the way the
-      # migration Job's own backoffLimit: 2 was tuned for a
-      # fail-fast-on-schema-error case; this story doesn't have that
-      # same reasoning to import.
+      # HOTFIX (Naomi's live LT-44 review): a hung sweep pod (blocked on
+      # a TCP connect to postgres, the NetworkPolicy gap above) ran
+      # forever — no backoffLimit override meant Kubernetes' default of
+      # 6 retries only kicks in on a *failed* pod, and this pod never
+      # failed, it just hung. Worse, under concurrencyPolicy: Forbid, a
+      # permanently-hung run means every future scheduled tick is
+      # skipped forever, since the "active" slot never frees — LT-49's
+      # RetentionSweepNotReporting alert (fires at 2I = 48h) would take
+      # up to two days to notice what was actually an immediate,
+      # permanent failure. activeDeadlineSeconds bounds the whole Job's
+      # wall-clock lifetime regardless of pod state (hung or retrying),
+      # forcing it to a terminal Failed and freeing the Forbid slot;
+      # backoffLimit: 1 means a single failed attempt (not 6) reaches
+      # that terminal state fast. One hour is generous for a sweep
+      # bounded by maxRows per call (Priya can tighten later); this is
+      # about bounding a hang, not tuning normal-case duration. Renata
+      # is separately adding a connect timeout on the sweep binary's own
+      # DB dial, so a blocked socket fails fast at the application layer
+      # too — this is the outer, Kubernetes-level backstop for whatever
+      # that doesn't catch.
+      activeDeadlineSeconds: 3600
+      backoffLimit: 1
       template:
         metadata:
           labels: {app: retention-sweep}
