@@ -120,6 +120,18 @@ spec:
 # CI-applied (no secret material) — the passwords it interpolates come
 # from Secret env vars at container start, never written into this
 # ConfigMap itself.
+#
+# CAVEAT — the same class as the sequences/UUID note below, stated up
+# front rather than rediscovered: docker-entrypoint-initdb.d scripts run
+# ONLY on an empty $PGDATA (Postgres's own first-init behavior, not a
+# choice this manifest makes). Once a PVC has been initialized, editing
+# these scripts changes nothing on the live instance — a future edit
+# here (a new role, a new grant, a new database) has to be hand-applied
+# against the running instance too, the same way the issuer
+# database/roles below were (see deploy/db-secret-bootstrap.yaml's
+# "Hand-apply procedure used for LT-51" section for the exact commands
+# that were actually run, and the note there on the better long-term
+# shape this should eventually become).
 apiVersion: v1
 kind: ConfigMap
 metadata: {name: postgres-initdb, namespace: loginid-takehome}
