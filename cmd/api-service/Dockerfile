@@ -7,7 +7,8 @@ WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/api-service ./cmd/api-service
+ARG COMMIT_SHA=unknown
+RUN CGO_ENABLED=0 go build -ldflags "-X loginid-takehome/internal/app.Commit=${COMMIT_SHA}" -o /out/api-service ./cmd/api-service
 
 FROM gcr.io/distroless/static-debian12:nonroot AS final
 COPY --from=builder /out/api-service /api-service

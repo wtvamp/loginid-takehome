@@ -45,6 +45,8 @@ jobs:
           context: .
           file: cmd/${{ matrix.service }}/Dockerfile
           push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
           tags: |
             ${{ env.IMAGE_BASE }}/${{ matrix.service }}:${{ github.sha }}
             ${{ env.IMAGE_BASE }}/${{ matrix.service }}:latest
