@@ -24,7 +24,10 @@ func main() {
 	}
 
 	log.Printf("idp-connector: listening on %s", addr)
-	if err := http.ListenAndServe(addr, app.NewRouter("idp-connector")); err != nil {
+	// idp-connector has no issuer/verifier split (LT-32 only touches
+	// api-service, per that story's non-goals) — always ModeVerifier, the
+	// mode that adds no route beyond /healthz.
+	if err := http.ListenAndServe(addr, app.NewRouter("idp-connector", app.ModeVerifier)); err != nil {
 		log.Fatalf("idp-connector: %v", err)
 	}
 }

@@ -24,7 +24,7 @@ func main() {
 	}
 
 	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
-	if err := http.ListenAndServe(addr, app.NewRouter("api-service")); err != nil {
+	if err := http.ListenAndServe(addr, app.NewRouter("api-service", cfg.AppMode)); err != nil {
 		log.Fatalf("api-service: %v", err)
 	}
 }

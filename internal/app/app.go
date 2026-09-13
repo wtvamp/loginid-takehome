@@ -22,13 +22,45 @@ type healthResponse struct {
 	Build   string `json:"build"`
 }
 
-// NewRouter builds the http.Handler shared by both binaries' main.go. service
-// identifies which binary is answering ("api-service" or "idp-connector") in
-// the health response, per LT-34's acceptance criteria.
-func NewRouter(service string) http.Handler {
+// ModeVerifier and ModeIssuer are api-service's two run modes (LT-32),
+// selected by config.Config.AppMode and passed to NewRouter by cmd/
+// api-service/main.go. idp-connector has no issuer/verifier split — its
+// main.go passes ModeVerifier, the only mode that adds no route beyond
+// /healthz, since that value is also this package's harmless default.
+const (
+	ModeVerifier = "verifier"
+	ModeIssuer   = "issuer"
+)
+
+// NewRouter builds the http.Handler shared by both binaries' main.go.
+// service identifies which binary is answering ("api-service" or
+// "idp-connector") in the health response, per LT-34's acceptance
+// criteria. mode is api-service's APP_MODE (LT-32) — the router itself is
+// this story's startup-time branch point named in refinement/LT-32.md's
+// acceptance criteria ("internal/app branches on it at startup"): in
+// ModeIssuer, a placeholder route is registered at the path reserved for
+// token issuance so the issuer and verifier Deployments are demonstrably
+// different routers, not just different env vars read by code that
+// otherwise behaves identically. The actual issuance handler is S7/LT-40's
+// scope, not this story's (refinement/LT-32.md's non-goals) — this only
+// proves the wiring exists and is reachable on the Deployment that is
+// supposed to have it, and absent on the one that isn't.
+func NewRouter(service string, mode string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler(service))
+	if mode == ModeIssuer {
+		mux.HandleFunc("/auth/token", issuerPlaceholderHandler)
+	}
 	return mux
+}
+
+// issuerPlaceholderHandler exists only to make the issuer/verifier router
+// split observable and testable before S7/LT-40 implements real token
+// issuance. It deliberately does no cryptography and holds no reference to
+// config.Config.JWTSigningKeyPath — that wiring belongs to whichever S7
+// handler replaces this one.
+func issuerPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "token issuance not yet implemented — reserved for LT-40", http.StatusNotImplemented)
 }
 
 func healthHandler(service string) http.HandlerFunc {
