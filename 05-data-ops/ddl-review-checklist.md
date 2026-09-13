@@ -7,7 +7,7 @@ Owner: 05-data-ops (Priya Nandakumar). Audience: **track 03, before writing migr
 ## A. Layout
 
 1. **`shared/` contains seed data only — no `CREATE TABLE`.** All DDL lives in `postgres/` and `sqlite/`. (`migration-approach.md` §2, corrected under consistency-pass finding F28.)
-2. **`postgres/` serves PostgreSQL *and* CockroachDB.** No third directory. (Contract §9 of the out-of-scope list.)
+2. **Four directories: `shared/`, `postgres/`, `cockroachdb/`, `sqlite/`** — one DDL directory per driver string (amendment A5). `postgres/` and `cockroachdb/` differ today in exactly one clause: `COLLATE "C"` on `user_profile.name`, present on PostgreSQL and **absent on CockroachDB, where it is invalid syntax**. Constraint names identical across all three DDL directories. The *Go package* split is unchanged and separate — `internal/dao/postgres` still serves both engines.
 3. **Two goose invocations, separate version tables** (`goose_db_version_shared`, `goose_db_version_<driver>`). One shared table across two directories interleaves independent sequences and corrupts history. (`migration-approach.md` §2.)
 
 ## B. Every constraint is named — this one is load-bearing

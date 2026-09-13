@@ -16,10 +16,17 @@ Version numbering: timestamped filenames during development (avoids collisions w
 
 ```
 migrations/
-  shared/     # seed data only — no CREATE TABLE
-  postgres/   # all DDL for Postgres + CockroachDB, plus the trigram index
-  sqlite/     # all DDL for SQLite
+  shared/       # seed data only — no CREATE TABLE
+  postgres/     # all DDL for PostgreSQL, incl. COLLATE "C" and the trigram index
+  cockroachdb/  # all DDL for CockroachDB — no COLLATE clause; trigram index native
+  sqlite/       # all DDL for SQLite, COLLATE BINARY, no trigram index
 ```
+
+**Split three ways as of amendment A5 (2026-09-13), one directory per driver string.** It was previously two, with `postgres/` serving both PostgreSQL and CockroachDB. That could not express the byte-order collation requirement: **`COLLATE "C"` is invalid syntax on CockroachDB** (`42601`) — it takes ICU locale tags, not PostgreSQL's `C`/`POSIX` pseudo-locales — while PostgreSQL needs the clause explicitly because its own default collation is locale-dependent. CockroachDB's uncollated `TEXT` comparison already *is* byte order, so it needs the clause **absent**, and no single portable clause satisfies both. Established empirically by 03 against live CockroachDB v23.2.0; it had blocked the CockroachDB conformance run outright, since the migration would not apply.
+
+The alternative — drop the clause from the DDL and provision the PostgreSQL database with `LOCALE 'C'` at creation — was rejected: it moves the guarantee off the schema and into a provisioning step, where it is invisible at review, unenforced by anything the repository contains, and fails silently on any database created without it. **The enforcement site belongs in the artifact that declares the guarantee.**
+
+**This does not change the Go package split.** `internal/dao/postgres` still serves both engines: query construction and dialect *are* shared, and the divergences are the retry seam (keyed off the driver string) and now DDL collation. `DB_DRIVER` already had three distinct values, so `migrations/<driver>` follows from the mechanism below without changing it.
 
 **Corrected after the cross-track consistency pass (F28).** This section previously put every `CREATE TABLE` in `shared/`, with `postgres/` holding one index file. That was wrong, and wrong in a way the rest of this track's own work had already ruled out: the field-level schema in `multi-db-strategy.md` §5 gives **every** table per-engine DDL — `UUID DEFAULT gen_random_uuid()` vs `TEXT`, `TEXT COLLATE "C"` vs `TEXT COLLATE BINARY`, a regex `CHECK` vs a `GLOB` `CHECK`, `TIMESTAMPTZ` vs `TEXT`, `BYTEA` vs `BLOB`, `BOOLEAN` vs `INTEGER`. A single shared `CREATE TABLE` series cannot express that. SQLite's type affinity would quietly swallow the differing *type names*, which is what made the original claim look survivable, but it does nothing for collation clauses or CHECK syntax — those are hard syntax differences, not affinity.
 
@@ -28,7 +35,7 @@ The document already carried the right answer as a hypothetical fallback ("per-b
 So:
 
 - **`shared/`** carries the `auth_method` seed row and nothing else. No `CREATE TABLE`.
-- **`postgres/`** carries the full DDL for `auth_method`, `user_profile`, `user_credential` and `deletion_log` in Postgres/CockroachDB types, plus the `pg_trgm` trigram expression index on `LOWER(name)`.
+- **`postgres/`** and **`cockroachdb/`** each carry the full DDL for `auth_method`, `user_profile`, `user_credential` and `deletion_log`, plus the trigram expression index on `LOWER(name)`. They differ in exactly one respect today — `postgres/` declares `COLLATE "C"` on `user_profile.name`, `cockroachdb/` declares no collate clause. **Every constraint name is identical across all three directories**, which is what keeps them diffable and what makes cross-backend sentinel translation possible.
 
   **Tested CockroachDB version: `cockroachdb/cockroach:v23.2.0`.** On that version `CREATE EXTENSION IF NOT EXISTS pg_trgm` succeeds and `CREATE INDEX … USING GIN (LOWER(name) gin_trgm_ops)` creates a genuine inverted index, confirmed via `SHOW CREATE TABLE`. CockroachDB gained trigram/inverted-index support around v22.2, so v22.2 is the floor; **anything below it is untested and expected to fail.** Verified by 03 against a live container, not inferred — see the withdrawal note below.
 
