@@ -118,3 +118,47 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Type:** Story.
 
 **Labels:** `track-04`, `from-consistency-pass`, `no-code-yet`.
+
+---
+
+## Story 7 — Database provisioning in-namespace: Postgres, DB credentials Secret, migration Job, DB_DSN_FILE wiring (LT-52)
+
+**Status: new** — created from a gap found during 01's LT-40 refinement (`03-engineering-delivery/refinement/LT-40.md`): none of this track's existing stories (LT-45/46/47/48/49/LT-20) actually deploy a running database instance into `loginid-takehome` — they all assume a DB target already exists. Without it, LT-39's handlers have nothing real behind the DAO, and LT-34/LT-39/LT-40/LT-51's joint live-URL review can't exercise a genuine data path. Full refinement: `04-infra-devops/refinement/postgres-in-namespace.md`.
+
+**Description:** A single-replica PostgreSQL `StatefulSet` (with a `PersistentVolumeClaim`) in `loginid-takehome` — a managed instance would be disproportionate infra/cost for this take-home's scale, and a single `StatefulSet` matches this project's existing "small, isolated, no HA beyond what's needed" pattern (Theo's call, confirmed). Plus: a DB credential `Secret` provisioned out-of-band per the pattern already established for the JWT signing key (`deploy/issuer-secret-bootstrap.yaml`); the two-invocation goose migration `Job` in the corrected order (backend directory first, then `shared/`, per `05-data-ops/migration-approach.md`'s own corrected ordering); and `DB_DSN_FILE` wiring so `api-service` actually connects. **CockroachDB is explicitly out of scope for deployment** — it's exercised in CI only (LT-47's testcontainer job), never deployed live in this cluster; stated here so a reviewer doesn't expect to find it running.
+
+**Acceptance criteria:**
+- [ ] Single-replica PostgreSQL `StatefulSet` + `PersistentVolumeClaim` running in `loginid-takehome`.
+- [ ] A default-deny `NetworkPolicy` scopes Postgres's ingress to `api-service` (and the migration `Job`'s pod) only — matching `idp-connector-default-deny`'s existing shape, not the namespace's default-allow.
+- [ ] DB credential `Secret` provisioned out-of-band, never through the CI-applied manifest set — same discipline as the JWT signing key.
+- [ ] Migration-runner credential (DDL rights) and runtime service credential (DML-only, cannot run DDL) are two distinct `Secret`s — enforcement site: the runtime role's Postgres grants exclude `CREATE`/`ALTER`/`DROP`, verified by a failed DDL attempt under that role.
+- [ ] Migration `Job` runs goose in the corrected order — backend directory (`postgres/`) first, `shared/` second — each against its own version table (`goose_db_version_postgres`, `goose_db_version_shared`); both invocations must succeed for the `Job` to count as successful.
+- [ ] The migration `Job` is idempotent — a re-run against an already-migrated database applies zero new versions and exits successfully, not an error.
+- [ ] The migration `Job` completes before `api-service`'s rollout — deploy pipeline ordering, not assumed Kubernetes scheduling.
+- [ ] `DB_DSN_FILE` (not `DB_DSN`) is set in `api-service`'s live Deployment, pointing at the mounted runtime credential — precedence exercised in the running pod, not only in `internal/config`'s existing unit test.
+- [ ] `/healthz` reflects real DB connectivity as a boolean/enum field only (consistent with 02's existing ruling on the endpoint's response shape) — never a connection string, host, port, or driver `DETAIL` text, even when the DB is unreachable.
+- [ ] `deploy/manifests.yaml`'s header comment (currently: "no migration Job, no DB_DSN secret") is updated to match reality.
+- [ ] `ResourceQuota` headroom for the new `StatefulSet` pod confirmed and adjusted in the same PR if needed — shown in the PR description, not discovered as a second `FailedCreate` (per the `api-service-issuer` incident).
+
+**Depends on:** 03 — `api-service`'s `DB_DSN_FILE` config surface (already stable); 05 — `migration-approach.md` (final, corrected ordering).
+**Blocks:** LT-39's live-URL review (joint with LT-40/LT-51).
+**Model/effort:** Sonnet, medium.
+**Type:** Story.
+**Labels:** `track-04`, `security-graded`.
+
+---
+
+## Story 8 — Small hardening: wait for Postgres Service DNS before the migration Job connects (follow-up to LT-52)
+
+**Status: new** — not blocking, flagged by team-lead after the first real deploy. The migration `Job`'s first attempt hit `lookup postgres.loginid-takehome.svc ... no such host` — Postgres's `StatefulSet` rollout reported Ready before its headless `Service`'s DNS record had actually propagated. The `Job`'s own `backoffLimit: 2` retry absorbed it cleanly (second attempt succeeded), so this didn't block the deploy — but it's a race worth closing rather than relying on retry luck indefinitely.
+
+**Description:** Add an `initContainer` (or a small wait loop in the main container's command) to the migration `Job` that polls DNS resolution of `postgres.loginid-takehome.svc` (or a TCP connect to `postgres:5432`) before invoking `goose`, so the first real attempt doesn't depend on winning a race against Service registration.
+
+**Acceptance criteria:**
+- [ ] Migration `Job` waits for Postgres to be reachable (DNS + TCP) before running goose, not just for the `StatefulSet`'s own readiness probe.
+- [ ] No change to `backoffLimit` or the goose invocation order/logic — this is additive, not a replacement for existing retry behavior.
+
+**Depends on:** none — small, self-contained follow-up to LT-52.
+**Model/effort:** Sonnet, low.
+**Type:** Task.
+**Labels:** `track-04`.

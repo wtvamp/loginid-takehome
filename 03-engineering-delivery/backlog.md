@@ -135,6 +135,33 @@ Split note on the DAO: the two-package abstraction (`postgres` serving Postgres+
 
 ---
 
+## S7a. Token issuance: real `/auth/token` grant logic (LT-51)
+
+**Status: new** — created from Tobias's (01) objection during LT-40's refinement (`01-product-industry-research-design/refinement/LT-40.md`), which found the gap was unscheduled, not pending: LT-32 built `/auth/token`'s route (a 501 placeholder on the issuer Deployment) and LT-40 builds the verifier side, but nothing implemented the grant itself. Without it, "done = deployed and reviewable at a public URL" would have quietly weakened into "reviewable by an engineer with cluster access" — a materially different and less credible bar than the one this project has held since LT-34.
+
+**Description:** OAuth2 client-credentials grant at `POST /auth/token` on the issuer Deployment (`APP_MODE=issuer`), per Marcus's `handoff-03-auth.md` v4 addendum:
+- **Client authentication:** HTTP Basic, `client_id`/`client_secret`, form-encoded `client_credentials` grant per RFC 6749 §4.4.
+- **Client store:** the issuer's own datastore (not 05's schema — same F8 boundary as `caller_referral`), secrets hashed with Argon2id, never stored or logged in plaintext.
+- **Responses:** RFC 6749 §5.1 (success) / §5.2 (error) shape. An unknown `client_id` and a wrong secret for a known `client_id` return the **identical** `invalid_client` error — no oracle letting a caller distinguish "doesn't exist" from "exists, wrong secret."
+- **Token:** short-lived RS256 JWT, `iss`/`aud`/`scope`/`exp`/`sub` claims per `handoff-03-auth.md` v3, algorithm/`kid` header per RFC 8725 pinning (matches LT-40's verifier-side allowlist). A `jti` claim is recommended for audit correlation only — **not** a revocation mechanism; TTL-only revocation stands per `api-auth-design.md`, not re-litigated here.
+- **Public-key distribution:** a JWKS endpoint served by the issuer's in-cluster `ClusterIP` `Service` — **no public `Ingress` route** for it; only the verifying middleware inside the cluster (LT-40) needs it, and exposing it publicly is unnecessary attack surface for a machine-to-machine API with no external relying parties.
+
+**Acceptance criteria:**
+- [ ] `POST /auth/token` implements RFC 6749 §4.4 client-credentials grant with HTTP Basic client auth and form-encoded body, without re-deriving 02's scheme reasoning in `handoff-03-auth.md` v4.
+- [ ] Client secrets are stored Argon2id-hashed in the issuer's own datastore; never logged, never returned in any response, never present in plaintext outside the initial provisioning step — enforcement site: log-call review against `handoff-04-secrets.md`'s never-log list, plus a test asserting the stored representation isn't the plaintext secret.
+- [ ] An unknown `client_id` and a wrong secret for a known `client_id` return byte-identical `invalid_client` error responses — enforcement site: a test comparing both response bodies for equality, not just "both return 401."
+- [ ] The issued JWT's claims (`iss`, `aud`, `scope`, `exp`, `sub`) and algorithm/`kid` header match what LT-40's verifier middleware expects and validates — enforcement site: an integration test that mints a token here and verifies it through LT-40's actual middleware, not two independently-trusted unit tests that never touch each other.
+- [ ] The JWKS endpoint is served only on the issuer's in-cluster `ClusterIP` `Service`, with no `Ingress` route — enforcement site: manifest inspection (04's side) plus a test confirming the endpoint exists on the issuer's internal address.
+- [ ] **A dedicated, narrowly-scoped QA client credential is seeded in the client store specifically for the PO's live-URL review** (LT-34/LT-39/LT-40's joint acceptance) — provisioned out-of-band (same discipline as LT-32's signing-key `Secret`, never through the CI-applied manifest set), scoped to the minimum grant needed to exercise `profile:search`/`profile:read:own`/`profile:read:any`, and named/owned so it can be rotated or revoked independently of any real caller's credential.
+- [ ] This story's own failed-grant rate limiting/backoff (LT-40's criterion 5) applies to this endpoint's real implementation, not just the placeholder — confirmed by re-running LT-40's rate-limit tests against the real grant logic, not assumed to still hold.
+
+**Depends on:** S1; **02: Auth scheme hand-off v4 addendum** (`handoff-03-auth.md` v4, accepted); **LT-40** (the verifier this story's tokens must validate against); **04: JWKS `Service` exposure** (in-cluster only, no `Ingress` route).
+**Model/effort:** sonnet, high.
+**Type:** Story.
+**Labels:** `track-03`, `security-graded`.
+
+---
+
 ## S8. Connector: /auth + /identity (Q3) (LT-41)
 
 **Description:** `cmd/idp-connector`'s outbound client and inbound handlers for the assignment's fixed `/auth` and `/identity` contracts, per `connector-security.md`'s no-cache-by-default token lifecycle (fetch per `/identity` call, discard on return; fresh isolated `Authorization` header per outbound request, never inherited from pooling/keep-alive; fetch → use-once → zeroize, retries re-fetch via `/auth`). Includes the connector's own inbound self-auth (distinct audience `idp-connector-service`, scope `connector:identity-lookup`, restricted to `api-service` as caller) per `handoff-03-auth.md` v3 §"Where it's validated" (Ingrid's S8 catch), and the `context.WithTimeout` + bounded pool + backoff requirement from `decisions/go-layout-debate.md`.
