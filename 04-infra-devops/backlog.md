@@ -71,7 +71,7 @@ Authored now per Phase 4; will be re-checked against the consistency pass's cros
 **Acceptance criteria:**
 - [ ] A new developer can run either profile from this file alone, without asking what `DB_DRIVER` values are valid.
 - [ ] The `postgres` profile exercises the shared `postgres`-package code path (Postgres + CockroachDB) — enforcement site: compose service definition wiring `DB_DRIVER=postgres`.
-- [ ] Dev credentials never appear in `./secrets-delivery.md`'s mechanism or in any real manifest — enforcement site: explicit statement in the file plus separate variable naming (`dev`/`dev`, hardcoded client id/secret).
+- [ ] Dev credentials never appear in `./secrets-delivery.md`'s mechanism or in any real manifest — enforcement site: explicit statement in the file, plus compose's file-based `secrets:` mechanism reading from a `.gitignore`d `.dev-secrets/` directory (`db_dsn`, `postgres_password`, `idp_abc_client_id`, `idp_abc_client_secret`), the local equivalent of the `Secret` volume mounts in `./secrets-delivery.md`.
 - [ ] Hot-reload has zero effect on the production image build — enforcement site: `air` target scoped to compose dev profiles only, never `./containerization-design.md`'s Dockerfile.
 
 **Depends on:** 03 — `DB_DRIVER`/config-surface env vars (already stable, per `PLANNING.md`).
