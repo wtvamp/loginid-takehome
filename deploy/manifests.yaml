@@ -101,10 +101,25 @@ spec:
   # as forward headroom for LT-44's retention-sweep CronJob (#57, not
   # yet merged) landing alongside these five workloads plus the
   # migrate Job, not because today's four workloads need it.
+  #
+  # #57 LANDING: retention-sweep now also uses pre-populate-only + the
+  # same small explicit agent resources as the hotfix above, so its own
+  # Vault init container is dominated by its already-declared 100m/500m
+  # cpu, 128Mi/256Mi mem container resources the same way every other
+  # workload's is — verified the same way, not assumed. Net addition is
+  # exactly the sweep container's own numbers, same shape as the
+  # migration Job:
+  #   requests.cpu:    800m existing (postgres+migrate+4 injected workloads) + sweep 100m = 900m  (limit 1500m, fits)
+  #   requests.memory: 1024Mi existing + sweep 128Mi = 1152Mi (limit 2Gi, fits)
+  #   limits.cpu:      3450m existing + sweep 500m = 3950m (limit was "4" = 4000m — only 50m
+  #                    headroom, the same razor-thin margin flagged above and now actually hit.
+  #                    Bumped to "5" = 5000m for real headroom instead of skating on 50m.)
+  #   limits.memory:   2048Mi existing + sweep 256Mi = 2304Mi (limit 3Gi, fits)
+  #   pods: 8 existing + sweep 1 (transient) = 9, fits under 12
   hard:
     requests.cpu: "1500m"
     requests.memory: 2Gi
-    limits.cpu: "4"
+    limits.cpu: "5"
     limits.memory: 3Gi
     pods: "12"
 ---
@@ -742,14 +757,13 @@ apiVersion: batch/v1
 kind: CronJob
 metadata: {name: retention-sweep, namespace: loginid-takehome}
 spec:
-  # Daily, 03:00 UTC — off-peak for this take-home's traffic pattern,
-  # comfortably inside all three retention windows (shortest is
-  # idp_cache_orphan's 7 days) so a missed day or two from
-  # concurrencyPolicy: Forbid skipping an overrun doesn't risk the
-  # alert rule's own tolerance (retention_window_seconds +
-  # sweep_interval_seconds in observability.md's alert expression:
-  # sweep_interval_seconds = 86400 for this schedule).
-  schedule: "0 3 * * *"
+  # Daily, 03:17 UTC — per Priya's (05) LT-49 ruling: one CronJob for
+  # all three classes, I (the interval) = 24h, the single
+  # sweep_interval_seconds constant LT-49's alert thresholds derive
+  # from (RetentionSweepNotReporting at 2I, RetentionWindowExceeded at
+  # W + 2I). Off-peak, comfortably inside all three retention windows
+  # (shortest is idp_cache_orphan's 7 days).
+  schedule: "17 3 * * *"
   # Forbid, not the Kubernetes default Allow — per Tobias's (01)
   # objection on refinement/LT-44.md: a slow first-ever sweep (no
   # prior-run history, a possible real backlog across all three
@@ -777,7 +791,38 @@ spec:
       # fail-fast-on-schema-error case; this story doesn't have that
       # same reasoning to import.
       template:
-        metadata: {labels: {app: retention-sweep}}
+        metadata:
+          labels: {app: retention-sweep}
+          annotations:
+            # LT-44/LT-49: Vault Agent Injector, role
+            # loginid-takehome-retention-sweep (Amber's provisioning),
+            # read-only on the EXISTING secret/loginid-takehome/
+            # db-runtime-credential path — same credential api-service's
+            # own role already reads, no new KV entry. Same settled
+            # pattern as #58's hotfix: pre-populate-only (this Job's own
+            # secrets are static, non-rotated, and the pod terminates
+            # after one run — no sidecar to renew anything), small
+            # explicit agent resources (the injector's own defaults,
+            # 250m cpu/64Mi mem request, would otherwise inflate this
+            # transient pod's quota footprint same as #58's incident),
+            # ca-cert at /vault/custom/ca.crt (agent-extra-secret mounts
+            # a Secret's keys directly there, not into a
+            # per-secret-name subdirectory), single-line template (the
+            # trailing-newline trap).
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-pre-populate-only: "true"
+            vault.hashicorp.com/agent-requests-cpu: "10m"
+            vault.hashicorp.com/agent-limits-cpu: "100m"
+            vault.hashicorp.com/agent-requests-mem: "16Mi"
+            vault.hashicorp.com/agent-limits-mem: "64Mi"
+            vault.hashicorp.com/role: "loginid-takehome-retention-sweep"
+            vault.hashicorp.com/agent-extra-secret: "vault-ca-cert"
+            vault.hashicorp.com/ca-cert: "/vault/custom/ca.crt"
+            vault.hashicorp.com/secret-volume-path: "/secrets/db"
+            vault.hashicorp.com/agent-inject-secret-dsn: "secret/data/loginid-takehome/db-runtime-credential"
+            vault.hashicorp.com/agent-inject-file-dsn: "dsn"
+            vault.hashicorp.com/agent-inject-template-dsn: |
+              {{- with secret "secret/data/loginid-takehome/db-runtime-credential" -}}{{ .Data.data.dsn }}{{- end -}}
         spec:
           serviceAccountName: retention-sweep
           securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
