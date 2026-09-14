@@ -156,6 +156,22 @@ jobs:
         # allow-list locally, confirmed it fails, then restored it).
         run: python3 deploy/checks/assert-postgres-netpol-covers-db-consumers.py
 
+  demo-route-only-api-service:
+    name: Guard against the demo console's Ingress route pointing anywhere but api-service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deploy/manifests.yaml
+        # LT-53: the demo console page carries no credential (a visitor
+        # pastes their own QA client credentials, fetched via the LT-51
+        # runbook), so its only real risk is routing to the wrong
+        # backend, not exposing a secret. Verified this check actually
+        # catches a wrong-service regression (retargeted /demo at
+        # idp-connector locally, confirmed it fails, restored it) before
+        # wiring it in.
+        run: python3 deploy/checks/assert-demo-route-only-api-service.py
+
   never-log-lint:
     name: Guard against a never-log-list value reaching a log call
     runs-on: ubuntu-latest
