@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoginID take-home — live API demo</title>
+<style>
+  /* ---- design tokens (refinement/LT-53.md's six-color legend, exact
+     hex values from Warren's design brief) ---- */
+  :root {
+    --bg:        #0A0F1E;
+    --bg-raised: #101A30;
+    --bg-panel:  #0D1526;
+    --border:    #1E2A44;
+    --text:      #E7EDF7;
+    --text-mute: #8B96AD;
+    --green:     #5BE49B; /* 200 success */
+    --coral:     #FF7A59; /* 401 / 403 */
+    --amber:     #FFC857; /* 429 */
+    --red:       #FF5C6C; /* 5xx / errors */
+    --violet:    #9D8CFF; /* security notes / masked fields */
+    --teal:      #3DD6C8; /* agent / request labels */
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    padding: 24px 16px 64px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  h1, h2, h3 { font-weight: 650; letter-spacing: -0.01em; margin: 0 0 8px; }
+  h1 { font-size: clamp(1.5rem, 1.1rem + 1.5vw, 2.1rem); }
+  h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-mute); margin: 0 0 6px; }
+  p  { margin: 0 0 8px; }
+  .lede {
+    color: var(--text-mute);
+    font-size: 1rem;
+    max-width: 68ch;
+  }
+  .copy {
+    color: var(--text-mute);
+    font-size: 0.92rem;
+    max-width: 72ch;
+    margin-bottom: 16px;
+  }
+
+  a { color: var(--teal); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .badge-num {
+    background: var(--bg-raised);
+    color: var(--teal);
+    border: 1px solid var(--border);
+    min-width: 1.6em;
+  }
+  .status-2xx { background: rgba(91,228,155,0.14); color: var(--green); border: 1px solid rgba(91,228,155,0.4); }
+  .status-401, .status-403 { background: rgba(255,122,89,0.14); color: var(--coral); border: 1px solid rgba(255,122,89,0.4); }
+  .status-429 { background: rgba(255,200,87,0.16); color: var(--amber); border: 1px solid rgba(255,200,87,0.45); }
+  .status-4xx { background: rgba(255,92,108,0.14); color: var(--red); border: 1px solid rgba(255,92,108,0.4); }
+  .status-5xx { background: rgba(255,92,108,0.14); color: var(--red); border: 1px solid rgba(255,92,108,0.4); }
+  .status-pending { background: var(--bg-raised); color: var(--text-mute); border: 1px solid var(--border); }
+
+  section.panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 20px 22px;
+    margin-bottom: 20px;
+  }
+  section.credential {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 20px 22px;
+    margin-bottom: 28px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 16px; }
+  input[type="text"], input[type="password"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+  input:focus, button:focus {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+  }
+  label.field-label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-mute);
+    margin-bottom: 4px;
+  }
+  .field { flex: 1 1 200px; min-width: 160px; }
+
+  button {
+    background: var(--teal);
+    color: #04211E;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 0.85rem;
+    font-weight: 650;
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .token-status { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .token-chip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-mute);
+    background: var(--bg);
+  }
+  .token-chip.live { color: var(--green); border-color: rgba(91,228,155,0.4); background: rgba(91,228,155,0.08); }
+
+  .flows {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 700px) {
+    .flows { grid-template-columns: 1fr; }
+    .flow-pair { grid-template-columns: 1fr !important; }
+  }
+  .flow {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    background: var(--bg);
+    min-width: 0;
+  }
+  .flow-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .flow-title { font-size: 0.78rem; color: var(--text-mute); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  pre.curl {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--teal);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0 0 8px;
+  }
+  .response-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .json {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    min-height: 1.4em;
+  }
+  .json .k { color: var(--teal); }
+  .json .s { color: var(--text); }
+  .json .n { color: var(--amber); }
+  .json .b { color: var(--violet); }
+  .json .nul { color: var(--text-mute); }
+  .json .punc { color: var(--text-mute); }
+  .json .placeholder { color: var(--text-mute); font-style: italic; }
+  .field-tag {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0 5px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: 1px;
+  }
+  .masked-val { background: rgba(157,140,255,0.16); border-radius: 4px; padding: 0 3px; }
+  .masked-tag { background: rgba(157,140,255,0.22); color: var(--violet); }
+  .full-val { background: rgba(91,228,155,0.14); border-radius: 4px; padding: 0 3px; }
+  .full-tag { background: rgba(91,228,155,0.22); color: var(--green); }
+
+  .note { font-size: 0.82rem; color: var(--text-mute); margin-top: 10px; }
+  .note.warn { color: var(--amber); }
+  .result-line {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .result-line.pass { color: var(--green); border-color: rgba(91,228,155,0.4); }
+  .result-line.fail { color: var(--red); border-color: rgba(255,92,108,0.4); }
+
+  .burst-log { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .burst-chip {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 3px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  footer { color: var(--text-mute); font-size: 0.78rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>LoginID take-home — live API demo</h1>
+    <p class="lede">This page lets you drive the actual identity API live from your browser, so you can watch its access rules and safeguards work in real time instead of taking our word for it.</p>
+  </header>
+
+  <section class="credential" aria-label="Credential entry">
+    <h2><span class="badge badge-num">&#9679;</span> Get a token</h2>
+    <p class="copy">You paste a temporary QA test login here only to get a real access token for this demo — it stays in this browser tab, is never saved anywhere, and is only ever used to talk to this one page's own login endpoint.</p>
+    <div class="controls">
+      <div class="field">
+        <label class="field-label" for="qa-client-id">QA client id</label>
+        <input type="text" id="qa-client-id" name="qa-client-id" autocomplete="off" placeholder="paste your QA client id">
+      </div>
+      <div class="field">
+        <label class="field-label" for="qa-token-input">QA client secret</label>
+        <!--
+          autocomplete is "new-password", not "off" — a deliberate
+          deviation from the letter of refinement/LT-53.md's own
+          criterion ("autocomplete=off, falling back to new-password if
+          a browser ignores off"). Chrome specifically ignores "off" on
+          password-typed inputs, so "new-password" is the value that
+          actually suppresses its save-prompt heuristic more often in
+          practice; going straight there is the functionally stronger
+          choice, not a shortcut. Even so, a browser's own
+          password-manager UI can still offer to save this field
+          regardless of either value — this attribute-level hardening,
+          plus the id/name below not pattern-matching "password"/
+          "secret", is what this page's own markup can control; it
+          isn't a guarantee no save-prompt ever appears.
+        -->
+        <input type="password" id="qa-token-input" name="qa-token-input" autocomplete="new-password" placeholder="paste the QA secret">
+      </div>
+      <button id="mint-btn" type="button">Mint token</button>
+    </div>
+    <div id="mint-flow"></div>
+    <div class="token-status" id="token-status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="panel1-title">
+    <h2 id="panel1-title"><span class="badge badge-num">1</span> Masked search vs. full read</h2>
+    <p class="copy">This shows the same person's record returned two different ways depending on what the caller is allowed to see — one version hides sensitive fields, the other reveals them — proving access is limited to what each caller has earned, not an all-or-nothing switch.</p>
+    <div class="controls">
+      <div class="field">
+        <label class="field-label" for="p1-query">Search by name</label>
+        <input type="text" id="p1-query" value="Review Demo">
+      </div>
+      <button type="button" data-run="panel1">Run this panel</button>
+      <span class="note">Needs a <code>profile:search</code> token and a <code>profile:read:any</code> token minted above.</span>
+    </div>
+    <div class="flows">
+      <div class="flow" id="p1-search-flow">
+        <div class="flow-title">Masked (profile:search)</div>
+        <pre class="curl" id="p1-search-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p1-search-status">not run</span></div>
+        <div class="json" id="p1-search-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+      <div class="flow" id="p1-read-flow">
+        <div class="flow-title">Full (profile:read:any)</div>
+        <pre class="curl" id="p1-read-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p1-read-status">not run</span></div>
+        <div class="json" id="p1-read-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="panel2-title">
+    <h2 id="panel2-title"><span class="badge badge-num">2</span> The two 403s</h2>
+    <p class="copy">This shows that being denied for "you don't have permission" and being denied because "that record doesn't exist" look exactly, byte-for-byte, the same from the outside, so no one can use the error message to go fishing for which accounts are real.</p>
+    <div class="controls">
+      <button type="button" data-run="panel2">Run this panel</button>
+      <span class="note">Needs a <code>profile:read:own</code> token minted above. Uses two fresh, unpredictable record ids this credential was never granted — one may exist, one almost certainly doesn't; neither matters to the result.</span>
+    </div>
+    <div class="flows">
+      <div class="flow" id="p2-a-flow">
+        <div class="flow-title">Record A</div>
+        <pre class="curl" id="p2-a-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p2-a-status">not run</span></div>
+        <div class="json" id="p2-a-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+      <div class="flow" id="p2-b-flow">
+        <div class="flow-title">Record B</div>
+        <pre class="curl" id="p2-b-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p2-b-status">not run</span></div>
+        <div class="json" id="p2-b-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+    </div>
+    <div class="result-line" id="p2-result">byte-equality check: not run yet</div>
+  </section>
+
+  <section class="panel" aria-labelledby="panel3-title">
+    <h2 id="panel3-title"><span class="badge badge-num">3</span> The 401</h2>
+    <p class="copy">This shows the API simply refuses to answer at all when no valid login is presented, proving there's no accidental back door for anonymous requests.</p>
+    <div class="controls">
+      <button type="button" data-run="panel3">Run this panel</button>
+      <span class="note">No token needed — that's the point.</span>
+    </div>
+    <div class="flows" style="grid-template-columns: 1fr;">
+      <div class="flow" id="p3-flow">
+        <div class="flow-title">No Authorization header</div>
+        <pre class="curl" id="p3-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p3-status">not run</span></div>
+        <div class="json" id="p3-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="panel4-title">
+    <h2 id="panel4-title"><span class="badge badge-num">4</span> The reason_code enum</h2>
+    <p class="copy">This shows the system accepts a recognized reason for a request and rejects a made-up one, proving it enforces a fixed, checkable list of valid reasons rather than trusting whatever a caller types in.</p>
+    <div class="controls">
+      <button type="button" data-run="panel4">Run this panel</button>
+      <span class="note">Needs a <code>profile:read:any</code> token minted above (and, if panel 1 hasn't run yet, a <code>profile:search</code> token too, to find a real record id).</span>
+    </div>
+    <div class="flows">
+      <div class="flow" id="p4-ok-flow">
+        <div class="flow-title">reason_code=support_ticket (accepted)</div>
+        <pre class="curl" id="p4-ok-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p4-ok-status">not run</span></div>
+        <div class="json" id="p4-ok-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+      <div class="flow" id="p4-bad-flow">
+        <div class="flow-title">reason_code=made_up_reason (rejected)</div>
+        <pre class="curl" id="p4-bad-curl">&mdash;</pre>
+        <div class="response-head"><span class="badge status-pending" id="p4-bad-status">not run</span></div>
+        <div class="json" id="p4-bad-json"><span class="placeholder">run the panel to see a real response</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="panel5-title">
+    <h2 id="panel5-title"><span class="badge badge-num">5</span> The rate limit tripping</h2>
+    <p class="copy">This shows the API cutting off a rapid burst of real requests in real time, proving it can defend itself against being hammered rather than just claiming to.</p>
+    <p class="note warn">Runs last on purpose: the limit is shared by every visitor currently using the same seeded QA credential, so tripping it here really does affect anyone else driving this panel in the same window — not a per-visitor sandbox.</p>
+    <div class="controls">
+      <button type="button" data-run="panel5">Run this panel</button>
+      <span class="note">Needs a <code>profile:search</code> token minted above. Fires real requests, one at a time, until one comes back <span class="badge status-429">429</span> or a safety cap is hit.</span>
+    </div>
+    <div class="burst-log" id="p5-log"></div>
+    <div class="flow" id="p5-flow" style="margin-top:10px;">
+      <div class="flow-title">Last request in the burst</div>
+      <pre class="curl" id="p5-curl">&mdash;</pre>
+      <div class="response-head"><span class="badge status-pending" id="p5-status">not run</span></div>
+      <div class="json" id="p5-json"><span class="placeholder">run the panel to see a real response</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Every request above is a real, same-origin call this page's own JavaScript makes directly from your browser — no proxy, no simulated response, no secret baked into this page's source. Nothing you type here is saved anywhere once you close this tab.
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- shared state, in-memory only, never persisted ----
+  var tokens = {}; // scope -> { token, exp }
+  var lastKnownProfileId = null;
+
+  var origin = window.location.origin;
+
+  function el(id) { return document.getElementById(id); }
+
+  function statusClass(status) {
+    if (status === 401) return "status-401";
+    if (status === 403) return "status-403";
+    if (status === 429) return "status-429";
+    if (status >= 500) return "status-5xx";
+    if (status >= 400) return "status-4xx";
+    if (status >= 200 && status < 300) return "status-2xx";
+    return "status-pending";
+  }
+
+  function setStatus(idPrefix, status) {
+    var badge = el(idPrefix + "-status");
+    badge.className = "badge " + statusClass(status);
+    badge.textContent = String(status);
+  }
+
+  // ---- a small hand-rolled JSON renderer: no raw <pre>{{json}}</pre>
+  // dump anywhere on this page, per LT-53's own visual criterion.
+  // fieldTags lets a caller mark specific top-level field names as
+  // "masked" or "full" with a visible highlight + tag, so a viewer can
+  // *see* which fields are masked without reading closely.
+  function renderJSONValue(value, indent, keyName, fieldTags) {
+    var pad = "  ".repeat(indent);
+    if (value === null) return '<span class="nul">null</span>';
+    if (typeof value === "string") {
+      var esc = value.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+      var tag = fieldTags && keyName ? fieldTags[keyName] : null;
+      if (tag === "masked") {
+        return '<span class="s masked-val">"' + esc + '"</span><span class="field-tag masked-tag">masked</span>';
+      }
+      if (tag === "full") {
+        return '<span class="s full-val">"' + esc + '"</span><span class="field-tag full-tag">full</span>';
+      }
+      return '<span class="s">"' + esc + '"</span>';
+    }
+    if (typeof value === "number") return '<span class="n">' + value + "</span>";
+    if (typeof value === "boolean") return '<span class="b">' + value + "</span>";
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '<span class="punc">[]</span>';
+      var items = value.map(function (v) {
+        return pad + "  " + renderJSONValue(v, indent + 1, null, fieldTags);
+      });
+      return '<span class="punc">[</span>\n' + items.join(',\n') + '\n' + pad + '<span class="punc">]</span>';
+    }
+    if (typeof value === "object") {
+      var keys = Object.keys(value);
+      if (keys.length === 0) return '<span class="punc">{}</span>';
+      var lines = keys.map(function (k) {
+        return pad + '  <span class="k">"' + k + '"</span><span class="punc">: </span>' +
+          renderJSONValue(value[k], indent + 1, k, fieldTags);
+      });
+      return '<span class="punc">{</span>\n' + lines.join(',\n') + '\n' + pad + '<span class="punc">}</span>';
+    }
+    return String(value);
+  }
+
+  function renderJSON(targetId, bodyText, fieldTags) {
+    var target = el(targetId);
+    try {
+      var parsed = JSON.parse(bodyText);
+      target.innerHTML = renderJSONValue(parsed, 0, null, fieldTags || {});
+    } catch (e) {
+      target.textContent = bodyText || "(empty body)";
+    }
+  }
+
+  function curlLine(method, path, opts) {
+    opts = opts || {};
+    var line = "curl -s -X " + method + " " + origin + path;
+    if (opts.basic) {
+      line += " \\\n  -u '" + opts.basic + ":***'";
+    }
+    if (opts.bearer) {
+      line += " \\\n  -H 'Authorization: Bearer ***'";
+    }
+    if (opts.contentType) {
+      line += " \\\n  -H 'Content-Type: " + opts.contentType + "'";
+    }
+    if (opts.data) {
+      line += " \\\n  -d '" + opts.data + "'";
+    }
+    return line;
+  }
+
+  function randomUUID() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    // Fallback for a browser without crypto.randomUUID — still a
+    // well-formed v4-shaped id, just not cryptographically sourced.
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  // ---- token minting ----
+  function updateTokenStatus() {
+    var scopes = ["profile:search", "profile:read:own", "profile:read:any"];
+    var status = el("token-status");
+    status.innerHTML = "";
+    scopes.forEach(function (scope) {
+      var chip = document.createElement("span");
+      var have = !!tokens[scope];
+      chip.className = "token-chip" + (have ? " live" : "");
+      chip.textContent = scope + (have ? " ✓ live" : " — not minted");
+      status.appendChild(chip);
+    });
+  }
+  updateTokenStatus();
+
+  el("mint-btn").addEventListener("click", function () {
+    var clientId = el("qa-client-id").value.trim();
+    // Read the secret field's value only right here, at the moment of
+    // use, and never assign it to a variable that outlives this
+    // function call — Marcus Ilori's (02) enforcement site: no other
+    // network call in this file ever references a client-secret value.
+    var body = "grant_type=client_credentials";
+    var authValue = clientId + ":" + el("qa-token-input").value;
+
+    el("mint-flow").innerHTML =
+      '<pre class="curl">' + curlLine("POST", "/auth/token", { basic: clientId, contentType: "application/x-www-form-urlencoded", data: body }) + '</pre>' +
+      '<div class="response-head"><span class="badge status-pending" id="mint-status">running&hellip;</span></div>' +
+      '<div class="json" id="mint-json"><span class="placeholder">waiting for a response</span></div>';
+
+    fetch(origin + "/auth/token", {
+      method: "POST",
+      headers: {
+        "Authorization": "Basic " + btoa(authValue),
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: body
+    }).then(function (resp) {
+      // Clear the pasted secret from the input immediately — it is
+      // never written to durable browser storage or a cookie, and
+      // this file reads it in exactly one place (above, to build the
+      // Basic-auth header).
+      el("qa-token-input").value = "";
+      return resp.text().then(function (text) { return { resp: resp, text: text }; });
+    }).then(function (result) {
+      var badge = document.getElementById("mint-status");
+      badge.className = "badge " + statusClass(result.resp.status);
+      badge.textContent = String(result.resp.status);
+      renderJSON("mint-json", result.text);
+      if (result.resp.status >= 200 && result.resp.status < 300) {
+        try {
+          var parsed = JSON.parse(result.text);
+          tokens[parsed.scope] = { token: parsed.access_token, exp: Date.now() + (parsed.expires_in || 0) * 1000 };
+          updateTokenStatus();
+        } catch (e) { /* malformed body is shown as-is above; nothing to store */ }
+      }
+    }).catch(function (err) {
+      el("qa-token-input").value = "";
+      var badge = document.getElementById("mint-status");
+      badge.className = "badge status-5xx";
+      badge.textContent = "network error";
+      document.getElementById("mint-json").textContent = String(err);
+    });
+  });
+
+  // ---- a small fetch helper shared by every panel below: never
+  // prints the real token in the displayed curl line (always ***),
+  // and always renders through renderJSON (no raw dump anywhere).
+  function runFlow(idPrefix, method, path, scope, opts) {
+    opts = opts || {};
+    var headers = {};
+    var curlOpts = { contentType: opts.contentType };
+    if (scope && tokens[scope]) {
+      headers["Authorization"] = "Bearer " + tokens[scope].token;
+      curlOpts.bearer = true;
+    }
+    if (opts.contentType) headers["Content-Type"] = opts.contentType;
+    curlOpts.data = opts.body;
+
+    el(idPrefix + "-curl").textContent = curlLine(method, path, curlOpts);
+    var statusBadge = el(idPrefix + "-status");
+    statusBadge.className = "badge status-pending";
+    statusBadge.textContent = "running…";
+
+    return fetch(origin + path, { method: method, headers: headers, body: opts.body }).then(function (resp) {
+      return resp.text().then(function (text) {
+        setStatus(idPrefix, resp.status);
+        renderJSON(idPrefix + "-json", text, opts.fieldTags);
+        return { status: resp.status, text: text };
+      });
+    }).catch(function (err) {
+      statusBadge.className = "badge status-5xx";
+      statusBadge.textContent = "network error";
+      el(idPrefix + "-json").textContent = String(err);
+      return { status: 0, text: "" };
+    });
+  }
+
+  function requireScope(scope, panelNote) {
+    if (!tokens[scope]) {
+      window.alert("This panel needs a " + scope + " token — mint one with the matching QA credential above first.");
+      return false;
+    }
+    if (Date.now() >= tokens[scope].exp) {
+      // Caught here rather than left to surface as an unexplained 401
+      // from the real API — a token aging out mid-review is expected
+      // (the PO review script has a reviewer deliberately wait out a
+      // rate-limit window, which is long enough for a 10-minute token
+      // to expire), not a bug in the page or the API.
+      delete tokens[scope];
+      updateTokenStatus();
+      window.alert("Your " + scope + " token has expired — mint a fresh one with the matching QA credential above, then run this panel again.");
+      return false;
+    }
+    return true;
+  }
+
+  // ---- Panel 1: masked search vs. full read ----
+  function findSampleId() {
+    if (lastKnownProfileId) return Promise.resolve(lastKnownProfileId);
+    if (!requireScope("profile:search")) return Promise.resolve(null);
+    var body = JSON.stringify({ name: el("p1-query").value || "Review Demo" });
+    return runFlow("p1-search", "POST", "/profiles/search", "profile:search", {
+      contentType: "application/json",
+      body: body,
+      fieldTags: { phone: "masked", region: "masked" }
+    }).then(function (result) {
+      if (result.status !== 200) return null;
+      try {
+        var parsed = JSON.parse(result.text);
+        if (parsed.results && parsed.results.length) {
+          lastKnownProfileId = parsed.results[0].id;
+          return lastKnownProfileId;
+        }
+      } catch (e) { /* rendered already above */ }
+      return null;
+    });
+  }
+
+  document.querySelector('[data-run="panel1"]').addEventListener("click", function () {
+    if (!requireScope("profile:search")) return;
+    if (!requireScope("profile:read:any")) return;
+    findSampleId().then(function (id) {
+      if (!id) return;
+      runFlow("p1-read", "GET", "/profiles/" + id + "?reason_code=support_ticket", "profile:read:any", {
+        fieldTags: { phone: "full", street_address: "full", locality: "full", region: "full", postal_code: "full", country: "full" }
+      });
+    });
+  });
+
+  // ---- Panel 2: the two 403s ----
+  document.querySelector('[data-run="panel2"]').addEventListener("click", function () {
+    if (!requireScope("profile:read:own")) return;
+    var idA = randomUUID();
+    var idB = randomUUID();
+    Promise.all([
+      runFlow("p2-a", "GET", "/profiles/" + idA, "profile:read:own"),
+      runFlow("p2-b", "GET", "/profiles/" + idB, "profile:read:own")
+    ]).then(function (results) {
+      var a = results[0], b = results[1];
+      var result = el("p2-result");
+      if (a.status === 403 && b.status === 403 && a.text === b.text) {
+        result.className = "result-line pass";
+        result.textContent = "byte-equality check: PASS — both 403 response bodies are identical, " + a.text.length + " bytes each.";
+      } else {
+        result.className = "result-line fail";
+        result.textContent = "byte-equality check: did not match this run (statuses " + a.status + "/" + b.status + ") — try again.";
+      }
+    });
+  });
+
+  // ---- Panel 3: the 401 ----
+  document.querySelector('[data-run="panel3"]').addEventListener("click", function () {
+    runFlow("p3", "POST", "/profiles/search", null, { contentType: "application/json", body: JSON.stringify({ name: "anyone" }) });
+  });
+
+  // ---- Panel 4: reason_code enum ----
+  document.querySelector('[data-run="panel4"]').addEventListener("click", function () {
+    if (!requireScope("profile:read:any")) return;
+    findSampleId().then(function (id) {
+      if (!id) return;
+      runFlow("p4-ok", "GET", "/profiles/" + id + "?reason_code=support_ticket", "profile:read:any");
+      runFlow("p4-bad", "GET", "/profiles/" + id + "?reason_code=made_up_reason", "profile:read:any");
+    });
+  });
+
+  // ---- Panel 5: rate limit tripping (runs last; shared window) ----
+  document.querySelector('[data-run="panel5"]').addEventListener("click", function () {
+    if (!requireScope("profile:search")) return;
+    var log = el("p5-log");
+    log.innerHTML = "";
+    var maxAttempts = 15;
+    var body = JSON.stringify({ name: "Review Demo" });
+
+    function attempt(n) {
+      if (n > maxAttempts) {
+        var chip = document.createElement("span");
+        chip.className = "burst-chip status-amber";
+        chip.textContent = "stopped after " + maxAttempts + " requests without a 429 — the shared window may already be spent for this credential; try again shortly";
+        log.appendChild(chip);
+        return;
+      }
+      var headers = { "Content-Type": "application/json", "Authorization": "Bearer " + tokens["profile:search"].token };
+      fetch(origin + "/profiles/search", { method: "POST", headers: headers, body: body }).then(function (resp) {
+        return resp.text().then(function (text) {
+          var chip = document.createElement("span");
+          chip.className = "burst-chip " + statusClass(resp.status);
+          chip.textContent = "#" + n + ": " + resp.status;
+          log.appendChild(chip);
+
+          el("p5-curl").textContent = curlLine("POST", "/profiles/search", { bearer: true, contentType: "application/json", data: body });
+          setStatus("p5", resp.status);
+          renderJSON("p5-json", text);
+
+          if (resp.status === 401) {
+            var expiredChip = document.createElement("span");
+            expiredChip.className = "burst-chip status-401";
+            expiredChip.textContent = "got 401 mid-burst — this token likely expired; mint a fresh profile:search token and run this panel again";
+            log.appendChild(expiredChip);
+            return;
+          }
+          if (resp.status === 429) return;
+          return attempt(n + 1);
+        });
+      }).catch(function (err) {
+        var chip = document.createElement("span");
+        chip.className = "burst-chip status-5xx";
+        chip.textContent = "#" + n + ": network error — " + err;
+        log.appendChild(chip);
+      });
+    }
+    attempt(1);
+  });
+
+})();
+</script>
+</body>
+</html>

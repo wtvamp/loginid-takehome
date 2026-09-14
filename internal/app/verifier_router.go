@@ -80,6 +80,19 @@ func NewVerifierRouter(cfg config.Config, repo dao.Repository, pingDB *sql.DB) h
 	mux.Handle("POST /profiles/search", protect(searchHandler))
 	mux.Handle("GET /profiles/{id}", protect(getHandler))
 
+	// LT-53: the demo console. A plain static handler — no auth
+	// middleware, no rate limiter of its own — sitting on the exact
+	// same mux as every other route this router serves, so there is no
+	// special-cased bypass to build or to accidentally omit: it gets
+	// exactly the same (lack of) treatment /healthz already has, not a
+	// new exemption invented for this route. The page's own JS is what
+	// drives the real, fully-enforced /profiles/search and
+	// /profiles/{id} routes above (and /auth/token on the issuer,
+	// same-origin via Theo Bergman's, 04, ingress routing) — those
+	// calls hit the real rate limiters inside searchHandler/getHandler
+	// exactly as any other caller's would.
+	mux.Handle("GET /demo", demoHandler())
+
 	return mux
 }
 
