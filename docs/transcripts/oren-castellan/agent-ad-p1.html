@@ -1,0 +1,1118 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 18 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 7:08 AM PDT – Sep 13, 2026 7:09 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #46 on github.com/wtvamp/loginid-takehome, branch fix/ci-skip-not-pass, for track 03-engineering-delivery. Worktree at /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix (based on origin/main).
+
+Context: a live-review finding (Naomi Voss, PO). internal/dao/conformance's newPostgresFamilyFixture, internal/dao/postgres/testutil_test.go's setupDB, and internal/api/clientstore_pg_test.go's setupIssuerDB all t.Skip when TEST_POSTGRES_DSN/TEST_COCKROACHDB_DSN are unset — and the CI workflow (pr-check) never set them. Every Postgres and CockroachDB conformance/integration test, including TestConformance_CockroachDB_RealSerializationRetry, has been silently skipped in CI all along; a green pr-check run has only ever meant SQLite conformance, never all three backends.
+
+Fix: each of the three fixtures gained a shared-shape (but independently duplicated per-package, since they're in three different packages: internal/dao/conformance, internal/dao/postgres, internal/api) helper function `requireOrSkipDSN(t *testing.T, envVar string) string` (the conformance package's version takes an extra `driver string` param for its log message, since it serves both "postgres" and "cockroachdb" from one fixture). Each checks the DSN env var; if empty AND the `CI` env var (which GitHub Actions sets unconditionally to "true") is also set, it calls t.Fatalf naming the exact missing variable; if empty and CI is NOT set (a local developer run), it still calls t.Skipf as before, unchanged behavior for local runs.
+
+Please run `go build ./...`, `go vet ./...`, `go test ./...`, and `staticcheck ./...` (at $(go env GOPATH)/bin/staticcheck if installed, else `go install honnef.co/go/tools/cmd/staticcheck@latest`) yourself in that worktree. Also specifically re-run with `CI=true go test ./internal/dao/conformance/... ./internal/dao/postgres/... ./internal/api/...` (no DSN set) to confirm it actually fails loudly rather than silently passing — don't just trust the PR description's claim.
+
+Then focus on:
+1. Is duplicating the `requireOrSkipDSN` helper across three packages (rather than extracting a shared test-support package) a reasonable choice given this codebase's existing precedent of per-package testutil files, or should this have been factored into one shared location? Weigh the duplication cost against the cross-package coupling cost.
+2. Is checking `os.Getenv("CI") != ""` a robust-enough signal? GitHub Actions sets `CI=true`, but is there a way a real CI run could have `CI` unset (making this fix silently ineffective in some CI configuration this project might use), or a way a LOCAL developer environment could have CI accidentally set (making local test runs suddenly start failing instead of skipping when a database happens to be unavailable)? Check whether this repo's own CI workflow config (if visible in the worktree, e.g. .github/workflows/) actually confirms CI=true is set for pr-check specifically.
+3. Any other test in the codebase that follows the same DSN-skip pattern that this PR might have missed — grep broadly for `os.Getenv` combined with `t.Skip` across the whole internal/ tree, not just the three files named in the PR description, to confirm nothing else silently skips in CI the same way.
+4. The PR description flags an explicit sequencing risk: merging this PR alone (before Theo's separate PR adding real Postgres/CockroachDB service containers to the CI workflow) will turn pr-check red for every other in-flight PR, since CI=true will be set but the DSNs still won't be. Confirm you understand and agree with that risk assessment — is there anything about the current code that could make it WORSE than described (e.g., some other code path this change touches that could fail in a more confusing way), or is the described risk exactly and only what will happen?
+5. Anything else — your usual review lens (error handling, naming, doc-comment accuracy).
+
+Report your findings in plain prose to Renata Cole (03 lead), as you'd normally report a review. This is a small, focused fix — a short report is fine if everything holds up.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md"
+}</pre><div class="lbl">result</div><pre>1	---
+2	schema_version: 1
+3	name: "Oren Castellan"
+4	slug: "oren-castellan"
+5	image: "profiles/oren-castellan/oren-castellan.png"
+6	
+7	nsfw: false
+8	display:
+9	  image: true
+10	  name: true
+11	  autostart: false
+12	generation:
+13	  backend: "comfyui"
+14	  model: "comfyui-workflow.json"
+15	  prompt: "Oren Castellan, a meticulous and understated man in his late 30s with short neat hair, wire-rim glasses, wearing a plain navy button-down shirt, calm focused expression, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+16	  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+17	  seed: null
+18	  gif_mode: null
+19	  created_at: "2026-09-12T00:00:00Z"
+20	---
+21	
+22	# Oren Castellan
+23	
+24	![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+25	
+26	
+27	## Personality
+28	
+29	Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied.
+30	
+31	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git status &amp;&amp; git log --oneli</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git status &amp;&amp; git log --oneline -5 &amp;&amp; echo --- &amp;&amp; gh pr view 46 --repo wtvamp/loginid-takehome --json title,body,headRefName,baseRefName,files -q '.title,.headRefName,.baseRefName' 2&gt;&amp;1 | head -50"
+}</pre><div class="lbl">result</div><pre>On branch fix/ci-skip-not-pass
+Your branch is up to date with 'origin/fix/ci-skip-not-pass'.
+
+nothing to commit, working tree clean
+1615e9b fix: fail (not skip) real-backend tests when CI is set and DSN is absent
+aff6e6e Merge PR #44: verifier logs JWKS fetch failures (once per streak) and audits 'verification unavailable' distinctly from 'token invalid'
+5f658b7 fix review findings: real-fetch classification test, flip-flop doc note
+e5ea1ef fix: JWKS fetch failures were silent; cold-start miscategorized as auth failure
+d6c9c50 Merge PR #43: AUTH_JWKS_URL addresses the issuer Service on :443 (the only port exposed; plain HTTP in-cluster)
+---
+fix: real-backend tests fail (not skip) in CI when DSN is absent
+fix/ci-skip-not-pass
+main</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; gh pr view 46 --repo wtvamp/l</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; gh pr view 46 --repo wtvamp/loginid-takehome --json body -q .body"
+}</pre><div class="lbl">result</div><pre>## Summary
+Naomi Voss's live-review finding: `internal/dao/conformance`'s `newPostgresFamilyFixture` (and the equivalent fixtures in `internal/dao/postgres/testutil_test.go` and `internal/api/clientstore_pg_test.go`) `t.Skip` when `TEST_POSTGRES_DSN`/`TEST_COCKROACHDB_DSN` are unset — and `pr-check` never set them. Every Postgres and CockroachDB conformance/integration test, including `TestConformance_CockroachDB_RealSerializationRetry`, has been silently skipped in CI all along. A green run meant SQLite-only coverage, never all three backends.
+
+Fixed: all three fixtures now check the `CI` environment variable (GitHub Actions sets it unconditionally) before skipping.
+- Unset locally (a developer's machine without a database configured) — unchanged, still skips.
+- Set in CI with the DSN still absent — `t.Fatalf`s, naming the exact missing variable, instead of silently passing.
+
+Noted in `refinement/LT-38.md` as a finding from the joint review.
+
+## ⚠️ Sequencing note for the PM
+**This PR will make `pr-check` go red on its own CI run**, and on every PR after it, until Theo's companion PR (adding real Postgres/CockroachDB service containers to the workflow so the DSNs are actually set) lands. That's the intended effect — it's the whole point of the fix — but it means these two PRs need to merge together, or this one needs to wait for Theo's to land first. Merging this one alone first would turn the whole CI pipeline red for every other in-flight PR until his lands.
+
+## Test plan
+- [x] `go build ./...`, `go vet ./...`, `go test ./...`, `staticcheck ./...` all clean locally (CI unset — tests skip as before)
+- [x] Manually verified with `CI=true` set locally, DSN unset: each of the three affected packages now fails loudly, naming the missing variable, instead of skipping
+
+## Who did the work
+- Lead: Renata Cole (03-engineering-delivery)
+- Finding: Naomi Voss (01), live joint review
+- Models: Claude Sonnet 5
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_011Cuba4JUvrsQCrTdUj4yzk</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git diff aff6e6e..1615e9b --s</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git diff aff6e6e..1615e9b --stat"
+}</pre><div class="lbl">result</div><pre> 03-engineering-delivery/refinement/LT-38.md | 10 +++++++
+ internal/api/clientstore_pg_test.go         | 35 +++++++++++++++++------
+ internal/dao/conformance/testutil_test.go   | 33 ++++++++++++++++++----
+ internal/dao/postgres/testutil_test.go      | 44 ++++++++++++++++++++++-------
+ 4 files changed, 98 insertions(+), 24 deletions(-)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git diff aff6e6e..1615e9b -- </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; git diff aff6e6e..1615e9b -- internal/dao/conformance/testutil_test.go internal/dao/postgres/testutil_test.go internal/api/clientstore_pg_test.go"
+}</pre><div class="lbl">result</div><pre>diff --git a/internal/api/clientstore_pg_test.go b/internal/api/clientstore_pg_test.go
+index 6b4526b..4951c39 100644
+--- a/internal/api/clientstore_pg_test.go
++++ b/internal/api/clientstore_pg_test.go
+@@ -15,10 +15,32 @@ import (
+ 	"github.com/pressly/goose/v3"
+ )
+ 
+-// setupIssuerDB connects to TEST_POSTGRES_DSN (skipping the test if
+-// unset, same discipline as internal/dao/postgres's own setupDB — real
+-// Postgres verification is this file's responsibility, not something a
+-// hand-written fake could ever exercise), applies the real
++// requireOrSkipDSN reads envVar, skipping the test if unset when running
++// locally (CI unset) but FAILING it (not skipping) if the CI env var is
++// set and envVar is still unset — GitHub Actions sets CI=true
++// unconditionally, so this is a reliable signal this test is running in
++// the gate, not on a developer's machine. Naomi Voss's joint-review
++// finding (originally caught in internal/dao/conformance, applying the
++// same fix here since this file follows the identical pattern): a plain
++// t.Skip made this integration suite look green in CI while never
++// actually running against a real database — a skipped assertion that
++// reads as a pass is worse than a red build (05's own §7 principle).
++func requireOrSkipDSN(t *testing.T, envVar string) string {
++	t.Helper()
++	dsn := os.Getenv(envVar)
++	if dsn != "" {
++		return dsn
++	}
++	if os.Getenv("CI") != "" {
++		t.Fatalf("%s not set in CI — the issuer-database integration gate is not running", envVar)
++	}
++	t.Skipf("%s not set — skipping issuer-database integration test", envVar)
++	return ""
++}
++
++// setupIssuerDB connects to TEST_POSTGRES_DSN — real Postgres
++// verification is this file's responsibility, not something a
++// hand-written fake could ever exercise. Applies the real
+ // migrations/issuer/00001_initial_schema.sql into a fresh, uniquely-named
+ // schema, and tears it down on cleanup.
+ //
+@@ -45,10 +67,7 @@ import (
+ // parallel.
+ func setupIssuerDB(t *testing.T) *sql.DB {
+ 	t.Helper()
+-	dsn := os.Getenv("TEST_POSTGRES_DSN")
+-	if dsn == "" {
+-		t.Skip("TEST_POSTGRES_DSN not set — skipping issuer-database integration test")
+-	}
++	dsn := requireOrSkipDSN(t, "TEST_POSTGRES_DSN")
+ 
+ 	db, err := sql.Open("pgx", dsn)
+ 	if err != nil {
+diff --git a/internal/dao/conformance/testutil_test.go b/internal/dao/conformance/testutil_test.go
+index 9d76215..6832863 100644
+--- a/internal/dao/conformance/testutil_test.go
++++ b/internal/dao/conformance/testutil_test.go
+@@ -94,16 +94,37 @@ func splitSQLStatements(sqlText string) []string {
+ 	return out
+ }
+ 
++// requireOrSkipDSN reads envVar, skipping the test if unset when running
++// locally (CI unset) but FAILING it (not skipping) if the CI env var is
++// set and envVar is still unset — GitHub Actions sets CI=true
++// unconditionally, so this is a reliable signal this test is running in
++// the gate, not on a developer's machine. Naomi Voss's joint-review
++// finding: this fixture's plain t.Skipf made every Postgres/CockroachDB
++// conformance test (including TestConformance_CockroachDB_RealSerializationRetry)
++// look green in CI while never actually running against a real
++// database — pr-check never set these DSNs, so "passing" meant
++// "skipped," indistinguishable from a real pass in the CI summary. A
++// skipped assertion that reads as a pass is worse than a red build
++// (05's own §7 principle).
++func requireOrSkipDSN(t *testing.T, envVar, driver string) string {
++	t.Helper()
++	dsn := os.Getenv(envVar)
++	if dsn != "" {
++		return dsn
++	}
++	if os.Getenv("CI") != "" {
++		t.Fatalf("%s not set in CI — the %s conformance gate is not running", envVar, driver)
++	}
++	t.Skipf("%s not set — skipping %s conformance run", envVar, driver)
++	return ""
++}
++
+ // newPostgresFamilyFixture is shared by the "postgres" and "cockroachdb"
+ // backends — same migration, same setup, different env var and driver
+-// string. Skips if the corresponding DSN env var isn't set: this suite
+-// asserts behavior, it doesn't stand up infrastructure.
++// string.
+ func newPostgresFamilyFixture(t *testing.T, driver, dsnEnvVar string) fixture {
+ 	t.Helper()
+-	dsn := os.Getenv(dsnEnvVar)
+-	if dsn == "" {
+-		t.Skipf("%s not set — skipping %s conformance run", dsnEnvVar, driver)
+-	}
++	dsn := requireOrSkipDSN(t, dsnEnvVar, driver)
+ 
+ 	admin, err := sql.Open("pgx", dsn)
+ 	if err != nil {
+diff --git a/internal/dao/postgres/testutil_test.go b/internal/dao/postgres/testutil_test.go
+index c4c44e3..735c9d8 100644
+--- a/internal/dao/postgres/testutil_test.go
++++ b/internal/dao/postgres/testutil_test.go
+@@ -61,18 +61,42 @@ func splitSQLStatements(sqlText string) []string {
+ 	return out
+ }
+ 
+-// setupDB connects to TEST_POSTGRES_DSN (skipping the test if unset — real
+-// Postgres/CockroachDB verification is this package's own responsibility;
+-// LT-38's cross-backend suite proves behavior matches SQLite, not that
+-// this package can reach a database at all), applies the real migration
+-// files into a fresh, uniquely-named schema, and tears the schema down on
+-// test cleanup so tests never collide with each other.
+-func setupDB(t *testing.T) *sql.DB {
++// requireOrSkipDSN reads envVar, skipping the test if unset when running
++// locally (CI unset) but FAILING it (not skipping) if the CI env var is
++// set and envVar is still unset — GitHub Actions sets CI=true
++// unconditionally, so this is a reliable signal this test is running in
++// the gate, not on a developer's machine. See setupDB's own doc comment
++// for why this distinction matters.
++func requireOrSkipDSN(t *testing.T, envVar string) string {
+ 	t.Helper()
+-	dsn := os.Getenv("TEST_POSTGRES_DSN")
+-	if dsn == "" {
+-		t.Skip("TEST_POSTGRES_DSN not set — skipping Postgres integration test (see refinement/LT-36-LT-37.md: real-backend verification is this package's responsibility, run manually or in CI once wired)")
++	dsn := os.Getenv(envVar)
++	if dsn != "" {
++		return dsn
++	}
++	if os.Getenv("CI") != "" {
++		t.Fatalf("%s not set in CI — the conformance/integration gate is not running", envVar)
+ 	}
++	t.Skipf("%s not set — skipping (run manually, or set it locally, to exercise this backend)", envVar)
++	return ""
++}
++
++// setupDB connects to TEST_POSTGRES_DSN — skipping the test if unset
++// LOCALLY, but failing it (not skipping) if CI is set and unset anyway.
++// Naomi Voss's joint-review finding: this fixture's t.Skip made every
++// Postgres/CockroachDB conformance and integration test look green in
++// CI while never actually running against a real database at all — the
++// pr-check workflow never set these DSNs, so "passing" meant "skipped,"
++// indistinguishable from a real pass in the CI summary. A skipped
++// assertion that reads as a pass is worse than a red build (05's own §7
++// principle) — real Postgres/CockroachDB verification is this
++// package's own responsibility; LT-38's cross-backend suite proves
++// behavior matches SQLite, not that this package can reach a database
++// at all. Applies the real migration files into a fresh, uniquely-named
++// schema, and tears the schema down on test cleanup so tests never
++// collide with each other.
++func setupDB(t *testing.T) *sql.DB {
++	t.Helper()
++	dsn := requireOrSkipDSN(t, "TEST_POSTGRES_DSN")
+ 
+ 	db, err := sql.Open("pgx", dsn)
+ 	if err != nil {</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Now let's build/vet/test/staticcheck, and check the CI workflow file.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; find . -path ./node_modules -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; find . -path ./node_modules -prune -o -name '*.yml' -print -o -name '*.yaml' -print | grep -i workflow"
+}</pre><div class="lbl">result</div><pre>./.github/workflows/deploy.yml
+./.github/workflows/pr-check.yml</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; cat .github/workflows/*.yml 2</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; cat .github/workflows/*.yml 2&gt;/dev/null | head -200"
+}</pre><div class="lbl">result</div><pre>name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LOG.md"
+      - "PLAN.md"
+      - "PLANNING.md"
+      - "CASTING.md"
+      - "decisions/**"
+      - "0[1-5]-*/**"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    # Safe to cancel a stale build/push in favor of a newer commit's — an
+    # in-progress image build has no external effect worth preserving.
+    # Group MUST include matrix.service: without it, every matrix leg
+    # (api-service, idp-connector) shares one concurrency slot and starts
+    # cancelling EACH OTHER, not just older runs — this is what actually
+    # happened in runs 34736676470/34736893015 (api-service kept losing to
+    # "a higher priority waiting request" that was its own sibling leg, on
+    # every single run, so main HEAD never fully built).
+    concurrency:
+      group: deploy-build-${{ github.ref }}-${{ matrix.service }}
+      cancel-in-progress: true
+    strategy:
+      matrix:
+        service: [api-service, idp-connector, migrate]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # migrate's Dockerfile lives at deploy/migrate/Dockerfile (not
+      # cmd/&lt;service&gt;/Dockerfile like the two application images) since
+      # it isn't one of them — see deploy/migrate/Dockerfile.
+      - name: Resolve Dockerfile path for ${{ matrix.service }}
+        id: dockerfile
+        run: |
+          if [ "${{ matrix.service }}" = "migrate" ]; then
+            echo "path=deploy/migrate/Dockerfile" &gt;&gt; "$GITHUB_OUTPUT"
+          else
+            echo "path=cmd/${{ matrix.service }}/Dockerfile" &gt;&gt; "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.dockerfile.outputs.path }}
+          push: true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE_BASE }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_BASE }}/${{ matrix.service }}:latest
+
+  deploy:
+    name: Apply manifests to the lab cluster
+    runs-on: loginid-takehome
+    needs: [build-and-push]
+    # Deliberately NOT cancel-in-progress: cancelling a run that has already
+    # reached `kubectl apply` mid-flight can leave a Deployment rollout
+    # partially applied. A newer push queues behind an in-progress apply
+    # instead of aborting it; GitHub Actions has no "no runner available"
+    # failure state, so queuing here costs nothing but a short wait.
+    concurrency:
+      group: deploy-apply-${{ github.ref }}
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://loginid-takehome.uplifttech.org
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.0 # matches the cluster's server version (uplift-kub, v1.34.10)
+
+      - name: Render manifests for this commit
+        run: |
+          sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/manifests.yaml &gt; /tmp/rendered.yaml
+          sed "s/IMAGE_TAG/${{ github.sha }}/g" deploy/api-service.yaml &gt; /tmp/rendered-api-service.yaml
+
+      - name: Show planned change (kubectl diff)
+        run: |
+          kubectl diff -f /tmp/rendered.yaml || true
+          kubectl diff -f /tmp/rendered-api-service.yaml || true
+
+      # Job pod templates are immutable — delete the previous run before
+      # applying a new image tag. --ignore-not-found so the very first
+      # deploy (no db-migrate Job yet) doesn't fail here.
+      - name: Delete previous migration Job
+        run: kubectl -n loginid-takehome delete job db-migrate --ignore-not-found
+
+      # Everything except api-service: Postgres, the migration Job, the
+      # issuer/connector, NetworkPolicies, Ingress. api-service is applied
+      # separately below, after the migration Job completes (LT-52).
+      - name: Apply manifests (excluding api-service)
+        run: kubectl apply -f /tmp/rendered.yaml
+
+      - name: Wait for Postgres to be ready
+        run: kubectl -n loginid-takehome rollout status statefulset/postgres --timeout=180s
+
+      # `kubectl wait --for=condition=complete` does NOT fail fast on a
+      # Failed Job — verified empirically against the real cluster (a
+      # deliberately failing Job in a scratch namespace): it waits out the
+      # full --timeout regardless, then exits non-zero as a timeout, not
+      # as a detected failure. That still stops this workflow before
+      # api-service is applied (the safety property holds), but wastes
+      # the whole timeout on every real migration failure. Poll both
+      # conditions explicitly instead, so a genuine Failed exits within
+      # seconds of backoffLimit being exhausted.
+      - name: Wait for migration Job to complete
+        run: |
+          for i in $(seq 1 90); do
+            # Multiple conditions can be True at once (e.g. "SuccessCriteriaMet
+            # Complete", verified against the real cluster) — the jsonpath
+            # below returns a space-separated list, so this must be a word
+            # match, never exact string equality (an earlier version of this
+            # script used `= "Complete"` and would never have matched).
+            conditions=$(kubectl -n loginid-takehome get job db-migrate -o jsonpath='{.status.conditions[?(@.status=="True")].type}')
+            case " $conditions " in
+              *" Complete "*)
+                echo "db-migrate: Complete"
+                exit 0
+                ;;
+              *" Failed "*)
+                echo "::error::db-migrate Job failed"
+                kubectl -n loginid-takehome logs job/db-migrate --all-containers --tail=200
+                exit 1
+                ;;
+            esac
+            sleep 2
+          done
+          echo "::error::db-migrate did not reach Complete or Failed within the timeout"
+          exit 1
+
+      - name: Apply api-service
+        run: kubectl apply -f /tmp/rendered-api-service.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n loginid-takehome rollout status deployment/api-service --timeout=120s
+          kubectl -n loginid-takehome rollout status deployment/api-service-issuer --timeout=120s
+          kubectl -n loginid-takehome rollout status deployment/idp-connector --timeout=120s
+
+      - name: Print deploy summary
+        run: |
+          echo "## Deployed" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo "" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo "- **Public URL:** https://loginid-takehome.uplifttech.org/healthz" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo "- **Commit:** ${{ github.sha }}" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo "- **Author:** ${{ github.event.head_commit.author.name }}" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo "" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo '```' &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          curl -s https://loginid-takehome.uplifttech.org/healthz &gt;&gt; "$GITHUB_STEP_SUMMARY" || echo "(curl failed — DNS may not have propagated yet)" &gt;&gt; "$GITHUB_STEP_SUMMARY"
+          echo '```' &gt;&gt; "$GITHUB_STEP_SUMMARY"
+name: PR check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-lint-test:
+    name: Build, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,200p' .github/workf</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,200p' .github/workflows/pr-check.yml"
+}</pre><div class="lbl">result</div><pre>name: PR check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-lint-test:
+    name: Build, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          install-mode: goinstall # compiles against the job's Go 1.27 toolchain instead of a prebuilt (go1.24) release
+
+      - name: Test (race)
+        run: go test ./... -race -v
+
+  security-scan:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks needs full history, not a shallow clone
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  manifest-secret-guard:
+    name: Guard against the JWT signing-key Secret leaking into another manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deploy/manifests.yaml
+        run: |
+          # There is no admission controller (no Gatekeeper/Kyverno/OPA,
+          # no Pod Security label) on the target cluster restricting which
+          # Secret a Deployment spec can reference, per 01's LT-32 review —
+          # the physical-absence guarantee for api-service's pod spec (it
+          # must never mount api-service-jwt-signing-key) is otherwise
+          # enforced only by code review. This is the CI-side backstop:
+          # fail the build if that Secret name appears in any manifest
+          # document other than the api-service-issuer Deployment's own.
+          python3 - &lt;&lt;'PYEOF'
+          import sys
+          docs = open("deploy/manifests.yaml").read().split("\n---\n")
+          fail = False
+          for doc in docs:
+              if "api-service-jwt-signing-key" in doc and "name: api-service-issuer" not in doc:
+                  print("::error file=deploy/manifests.yaml::A manifest document references api-service-jwt-signing-key outside the api-service-issuer Deployment:")
+                  print(doc)
+                  fail = True
+          sys.exit(1 if fail else 0)
+          PYEOF
+
+  changes:
+    name: Detect whether image-buildable code changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Inverse of deploy.yml's paths-ignore: a docs-only PR (LOG.md,
+          # PLAN.md, track directories, decisions/**) shouldn't spin up
+          # Docker builds that can't have changed. build-lint-test,
+          # security-scan, and manifest-secret-guard above are NOT gated
+          # by this — they stay on every PR regardless of what changed.
+          filters: |
+            code:
+              - 'cmd/**'
+              - 'internal/**'
+              - 'migrations/**'
+              - 'deploy/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '**/Dockerfile'
+              - '.github/workflows/**'
+
+  build-images:
+    name: Build images (no push)
+    runs-on: ubuntu-latest
+    needs: [build-lint-test, changes]
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      matrix:
+        service: [api-service, idp-connector]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: cmd/${{ matrix.service }}/Dockerfile
+          push: false
+          tags: loginid-takehome/${{ matrix.service }}:pr-${{ github.event.pull_request.number }}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go build ./... 2&gt;&amp;1 | tail -5</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go build ./... 2&gt;&amp;1 | tail -50"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -50</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -50"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:08 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go test ./... 2&gt;&amp;1 | tail -80</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; go test ./... 2&gt;&amp;1 | tail -80"
+}</pre><div class="lbl">result</div><pre>ok  	loginid-takehome/cmd/api-service	(cached)
+?   	loginid-takehome/cmd/idp-connector	[no test files]
+ok  	loginid-takehome/internal/api	(cached)
+ok  	loginid-takehome/internal/app	(cached)
+ok  	loginid-takehome/internal/config	(cached)
+ok  	loginid-takehome/internal/dao	(cached)
+ok  	loginid-takehome/internal/dao/conformance	(cached)
+ok  	loginid-takehome/internal/dao/postgres	(cached)
+ok  	loginid-takehome/internal/dao/sqlite	(cached)
+?   	loginid-takehome/internal/model	[no test files]</pre></div></details><details><summary><span class="tn">Bash</span> which staticcheck || ls $(go env GOPATH)/bin/staticcheck 2&gt;&amp;1</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "which staticcheck || ls $(go env GOPATH)/bin/staticcheck 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>staticcheck not found
+/Users/warrenthompson/go/bin/staticcheck</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; /Users/warrenthompson/go/bin/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; /Users/warrenthompson/go/bin/staticcheck ./... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><div class="body">All clean. Now the key check: re-run with CI=true and no DSN set.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; unset TEST_POSTGRES_DSN TEST_</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; unset TEST_POSTGRES_DSN TEST_COCKROACHDB_DSN; CI=true go test ./internal/dao/conformance/... ./internal/dao/postgres/... ./internal/api/... 2&gt;&amp;1 | tail -100"
+}</pre><div class="lbl">result</div><pre>    --- FAIL: TestConformance_DeleteExpired_MaxRowsBounds/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_DeleteExpired_MaxRowsBounds/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_OldestSurvivingAt_NonNilWhenNothingOldEnough (0.00s)
+    --- FAIL: TestConformance_OldestSurvivingAt_NonNilWhenNothingOldEnough/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_OldestSurvivingAt_NonNilWhenNothingOldEnough/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_OldestSurvivingAt_NilWhenClassEmpty (0.00s)
+    --- FAIL: TestConformance_OldestSurvivingAt_NilWhenClassEmpty/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_OldestSurvivingAt_NilWhenClassEmpty/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_Drained_TrueOnFinalBatch (0.00s)
+    --- FAIL: TestConformance_Drained_TrueOnFinalBatch/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_Drained_TrueOnFinalBatch/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_DeleteWritesExactlyOneDeletionLogRow (0.00s)
+    --- FAIL: TestConformance_DeleteWritesExactlyOneDeletionLogRow/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_DeleteWritesExactlyOneDeletionLogRow/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing (0.00s)
+    --- FAIL: TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing/postgres (0.00s)
+        testutil_test.go:236: TEST_POSTGRES_DSN not set in CI — the postgres conformance gate is not running
+    --- FAIL: TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing/cockroachdb (0.00s)
+        testutil_test.go:239: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+--- FAIL: TestConformance_CockroachDB_RealSerializationRetry (0.00s)
+    conformance_test.go:626: TEST_COCKROACHDB_DSN not set in CI — the cockroachdb conformance gate is not running
+FAIL
+FAIL	loginid-takehome/internal/dao/conformance	0.254s
+--- FAIL: TestIntegration_ProfileCRUD (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_CreateWithCallerSuppliedID (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_UpdateMissingRow (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_UpsertExcludesCreatedAtFromUpdate (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_UpsertInsertsWhenAbsent (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_SearchLikeEscaping (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_SearchPagination (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_SearchEmptyQueryIsLegal (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_SearchInvalidQuery (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_CredentialCRUDAndErrorTranslation (0.00s)
+    integration_test.go:197: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_ListByUserID_EmptyNotError (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_CreateProfileWithCredential_Atomic (0.00s)
+    integration_test.go:265: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_CreateProfileWithCredential_IgnoresCallerSuppliedUserID (0.00s)
+    integration_test.go:313: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_DeleteExpiredAndOldestSurviving (0.00s)
+    integration_test.go:331: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_DeleteExpired_MaxRowsBounds (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_DeleteProfile_SubjectRequest (0.00s)
+    integration_test.go:395: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_DeleteProfile_NotFound (0.00s)
+    integration_test.go:16: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+--- FAIL: TestIntegration_ProfileDeleteCascadesToCredentials (0.00s)
+    integration_test.go:437: TEST_POSTGRES_DSN not set in CI — the conformance/integration gate is not running
+FAIL
+FAIL	loginid-takehome/internal/dao/postgres	0.212s
+--- FAIL: TestPostgresClientStore_Get_Found (0.00s)
+    clientstore_pg_test.go:125: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestPostgresClientStore_Get_NotFound (0.00s)
+    clientstore_pg_test.go:149: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestPostgresClientStore_Get_SecretStateNone_EmptyHash (0.00s)
+    clientstore_pg_test.go:162: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestPostgresClientStore_Get_DisabledStatus (0.00s)
+    clientstore_pg_test.go:179: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestPostgresClientStore_UpdateSecretHash (0.00s)
+    clientstore_pg_test.go:204: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestPostgresClientStore_UpdateSecretHash_NoSuchClient (0.00s)
+    clientstore_pg_test.go:233: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestOAuthClient_SchemaConstraints (0.00s)
+    clientstore_pg_test.go:245: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+--- FAIL: TestOAuthClient_UpdatedAtTrigger (0.00s)
+    clientstore_pg_test.go:307: TEST_POSTGRES_DSN not set in CI — the issuer-database integration gate is not running
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63604, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63604: status 500
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63606, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63606: status 500
+2026/09/13 07:09:09 api: JWKS unrefreshable (host=127.0.0.1:63606) for 4m0s across 1 consecutive failures (exceeds max staleness 3m0s) — failing closed
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63612, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63612: status 500
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63614, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63614: status 500
+2026/09/13 07:09:09 api: JWKS unrefreshable (host=127.0.0.1:63614) for 5m1s across 2 consecutive failures (exceeds max staleness 3m0s) — failing closed
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63625, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63625: status 503
+2026/09/13 07:09:09 api: JWKS fetch failed (host=127.0.0.1:63633, class=http_status_error): api: fetching JWKS from http://127.0.0.1:63633: status 503
+2026/09/13 07:09:09 api: JWKS fetch recovered (host=127.0.0.1:63633) after 1 consecutive failures
+2026/09/13 07:09:11 api: opportunistic rehash for client_id=drifted-client: storing failed: simulated issuer database write failure
+FAIL
+FAIL	loginid-takehome/internal/api	2.585s
+FAIL</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Confirmed: it fails loudly, naming the exact missing variable, in every affected package. Now grep the broader tree for other DSN-skip patterns not covered.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn "t.Skip" internal/ -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn \"t.Skip\" internal/ --include='*_test.go' | grep -iv \"requireOrSkipDSN\\|not.*implement\" "
+}</pre><div class="lbl">result</div><pre>internal/dao/postgres/testutil_test.go:79:	t.Skipf("%s not set — skipping (run manually, or set it locally, to exercise this backend)", envVar)
+internal/dao/postgres/testutil_test.go:85:// Naomi Voss's joint-review finding: this fixture's t.Skip made every
+internal/dao/conformance/testutil_test.go:102:// finding: this fixture's plain t.Skipf made every Postgres/CockroachDB
+internal/dao/conformance/testutil_test.go:118:	t.Skipf("%s not set — skipping %s conformance run", envVar, driver)
+internal/api/clientstore_pg_test.go:25:// t.Skip made this integration suite look green in CI while never
+internal/api/clientstore_pg_test.go:37:	t.Skipf("%s not set — skipping issuer-database integration test", envVar)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn "os.Getenv" internal</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn \"os.Getenv\" internal/ --include='*_test.go'"
+}</pre><div class="lbl">result</div><pre>internal/dao/postgres/testutil_test.go:72:	dsn := os.Getenv(envVar)
+internal/dao/postgres/testutil_test.go:76:	if os.Getenv("CI") != "" {
+internal/dao/conformance/testutil_test.go:111:	dsn := os.Getenv(envVar)
+internal/dao/conformance/testutil_test.go:115:	if os.Getenv("CI") != "" {
+internal/api/clientstore_pg_test.go:30:	dsn := os.Getenv(envVar)
+internal/api/clientstore_pg_test.go:34:	if os.Getenv("CI") != "" {</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Good — confirms nothing else in the tree follows the same pattern. Let me also check the `int(t.Skip(` other skip forms and any t.SkipNow, and double-check the conformance test's other skip at line ~626 area, and check for other testutil-like files (e.g. sqlite, redis, anything) that might skip for a different resource.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn "SkipNow\|t\.Skip(" </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; grep -rn \"SkipNow\\|t\\.Skip(\" internal/ --include='*_test.go'"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; find internal -name 'testutil</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; find internal -name 'testutil*_test.go' -o -name '*_test.go' | xargs grep -ln \"TEST_.*DSN\\|REDIS\\|VENDOR_URL\\|MOCK_SERVER\" "
+}</pre><div class="lbl">result</div><pre>internal/api/clientstore_pg_test.go
+internal/dao/postgres/testutil_test.go
+internal/dao/conformance/testutil_test.go
+internal/dao/conformance/conformance_test.go</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Good, confirms only the three files/fixtures, exactly as the PR claims. Now let me check the refinement doc and diff context for line numbers/doc comments accuracy.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; cat 03-engineering-delivery/r</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; cat 03-engineering-delivery/refinement/LT-38.md"
+}</pre><div class="lbl">result</div><pre># LT-38 refinement — S5: conformance suite (cross-backend behavioral conformance)
+
+**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03). **Source:** `03-engineering-delivery/backlog.md` S5 (LT-38).
+
+**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist; engineering counterpart Renata Cole.
+
+## Why pulled now
+
+LT-36 and LT-37's refinement (see `refinement/LT-36-LT-37.md`) cited this suite as the sole enforcement site for roughly half their own acceptance criteria and added a hard rule that neither story can be marked Done until LT-38 lands and those criteria actually pass. Pulling LT-38 now is what closes that gap — it's the next dependency in the chain (`Depends on: S3, S4`), and refining it now means it's ready to run the moment either backend PR lands, rather than sitting as a bottleneck after the fact.
+
+## Correction found before drafting (citation error in `backlog.md` itself, not introduced here)
+
+`backlog.md`'s S5 description cites "the secret-state rules (§5/§6.11)" for the `requires_secret`/`secret_state` relationship. Checked against `multi-db-strategy.md` directly: **§6.11 is item 11 in §6's numbered list — "`deletion_log` carries no PII" — a different guarantee entirely.** The `requires_secret`/`secret_state` relationship is item 12 (unlabeled with an explicit "§6.12" in the source doc's own prose, but numerically next in the same list, referred to there only as "item 12"). `is_active`'s citation as §6.10 is correct — that one checks out exactly. Fixed below by citing item 12 correctly and not repeating the backlog's §6.11 mislabel.
+
+## Acceptance outcome
+
+No public-URL surface (same as LT-35/36/37) — this is a test suite, not a deployable behavior change. "Done" means the suite exists once, runs against all three backends from one table-driven test, and every guarantee below is asserted as a specific, named test case (not a general "seems to work" pass) — modeled on the frozen-checksum-plus-structural-diff pattern Oren built for LT-35's conformance test, since 05's own §7 explicitly warns that signature conformance (LT-35) proves nothing about behavioral conformance (this story) — two implementations can match every declaration and still return different rows for the same call.
+
+## Acceptance criteria (restated from `backlog.md` S5, corrected and expanded)
+
+- [ ] The suite is written once against the `Repository` interface and executed against all three backends (postgres, cockroachdb, sqlite) from one table-driven test file, not duplicated per package. Enforcement site: a single test function parameterized over backend, not three near-identical copies.
+- [ ] Asserts identical `Search` result sets and ordering across backends for ASCII input — this suite is `multi-db-strategy.md`'s named enforcement site for this guarantee; there is no other. Named test case: a fixed dataset seeded identically on all three backends via each backend's own `Create` (not a caller-supplied ID, since neither backend exposes that path), a fixed query, asserting identical results and order. **Rows are compared by every `ProfileQuery`-relevant field except the DAO-generated `ID`**; the suite matches corresponding rows across backends by a fixed, test-controlled non-ID field (e.g., seeded `Name` or `Phone` values guaranteed unique in the fixture set) rather than assuming identical literal `ID` values, since ID generation is backend-specific (server-side on Postgres/CockroachDB, Go-side on SQLite, per LT-36/LT-37's own acceptance criteria) and a literal row-for-row comparison including `ID` would fail on every run regardless of whether `Search` itself behaves identically.
+- [ ] Asserts `errors.Is` sentinel parity for every condition in the §4 translation table, across all three backends — named test case per condition (not one combined test), consistent with LT-36/LT-37's "not-Done-until-LT-38" dependency: this is the specific enforcement site those stories were waiting on.
+- [ ] Asserts the `requires_secret`/`secret_state` relationship (§6, item 12 — corrected citation, see above) as a named test: creating a credential with `secret_state = 'set'` against a method whose `requires_secret = false` returns `ErrInvalidCredential`, on all three backends.
+- [ ] Asserts `is_active` enforcement (§6.10) as a named test: creating a credential against a deactivated `auth_method` returns `ErrInvalidMethod`, on all three backends — per the doc's own note that deactivation must not invalidate *existing* credentials, so the test also asserts an existing credential against a since-deactivated method still reads back successfully.
+- [ ] Asserts empty-string rejection on every `*string` filter field in `ProfileQuery` — one named test case per field (`Name`, `Phone`, `Region`, `Country`), not one combined test, per the "absent, never empty" convention.
+- [ ] Retention/deletion assertions from `multi-db-strategy.md` §7's own minimum list, each as a named test case: a zero-value `RetentionClass` (`""`) returns `ErrInvalidArgument`; `maxRows` outside `1..10_000` returns `ErrInvalidArgument`; `OldestSurvivingAt` is non-nil when rows remain (including when nothing was old enough to delete) and nil only when the class is empty; `Drained` is false while deletable rows remain at the batch limit and true on the final batch; every delete writes exactly one `deletion_log` row in the same transaction with the reason code the method itself asserts; an already-cancelled context returns before deleting anything; `deletion_log` carries no PII-shaped column (§6.11 — correctly cited here, this is the actual §6.11 guarantee).
+- [ ] The CockroachDB-specific retry path is exercised for real: at least one test forces a genuine SQLSTATE `40001` (e.g. two concurrent transactions racing on the same row) against a real CockroachDB instance/testcontainer and asserts the operation succeeds after retry, not a mocked retry.
+- [ ] CI (04's pipeline) runs this suite against every backend including CockroachDB, not just Postgres+SQLite — flagged to 04 if their pipeline configuration doesn't do this; enforcement site is the CI job matrix/config itself, not this suite's own code.
+- [ ] Following the model Oren built for LT-35: the suite's test data / expected-behavior assertions state, in a comment, which parts are derived directly from `multi-db-strategy.md`'s prose (the guarantees list in §7 and the numbered items in §6) and, where practical, carry the same frozen-copy-plus-checksum protection so a later revision to those sections forces a human re-check rather than the suite silently asserting a stale guarantee. Scoped down from LT-35's version since this suite asserts *behavior*, not *signatures* — a full checksum-gated transcription may not be practical for prose guarantees the way it was for Go signatures: LT-35's checksum worked because §1–§4 is one contiguous block, hashed once, while this suite's guarantees are scattered across §4, §6 (items 10/12), §7, and §3c — non-contiguous fragments that would each need a separately-pinned hash boundary, fragile to unrelated prose edits nearby. At minimum, each test case's doc comment names the specific `multi-db-strategy.md` line/item it enforces, so a future doc change is at least greppable.
+
+## Non-goals
+
+- No new backend implementation — this story only tests LT-36/LT-37's output.
+- No handler/API-layer testing — that's LT-39 and later, against fakes per `decisions/test-double-strategy.md`, not this suite.
+- No performance/load testing — "identical" here means identical correctness (rows, order, errors), not identical latency; SQLite's full-table-scan search is explicitly *not* required to be as fast as Postgres's indexed search, only as correct.
+
+## PO review script
+
+1. Confirm the suite is one table-driven test executed against all three backends, not three copies (read the test file structure).
+2. Confirm each guarantee above has its own named test case (grep test names against the list) — not one broad "conformance" test that silently covers several guarantees and can't tell you which one failed.
+3. Confirm the CockroachDB retry test forces a real `40001` against a real CockroachDB instance, not a mock — read the test setup.
+4. Confirm CI's job matrix actually includes CockroachDB as a target, not just Postgres+SQLite (04's pipeline config, once it exists).
+5. Once LT-36 and LT-37 are both implemented and this suite runs against them: confirm it's actually green on all three backends, and go back and mark the LT-38-dependent criteria in LT-36/LT-37's refinement doc as accepted, updating both stories out of "implemented, verification pending LT-38" status.
+
+## Research team review
+
+**Desmond Okafor — claims check:** Independently re-verified my §6 citation correction — confirmed correct (item 10 = `is_active`, item 11 = deletion_log-no-PII, item 12 = requires_secret/secret_state). Noted 05's own §7 summary under-cites item 12 but confirmed LT-38's criteria correctly test both items 10 and 12 regardless, which is more complete than a literal restatement of §7 would be — not a defect. Retention/deletion list checked word-for-word against §7's minimum list, exact match. Confirmed the "no other enforcement site" claim for Search ordering tracks 05's own framing, not overreach. Confirmed the frozen-checksum hedge was appropriately tentative, not overreach, and supplied a concrete technical reason (§1–§4 is one contiguous block vs. this suite's guarantees being scattered across non-contiguous sections) — added to the doc.
+
+**Tobias Lindqvist — objection:** The Search-parity criterion's "identical result sets" didn't say how rows are matched across backends given that each backend generates its own `ID` independently (server-side on Postgres/CockroachDB, Go-side on SQLite) — a literal row-for-row comparison including `ID` would fail every time regardless of whether `Search` behaves correctly, and whoever wrote the test would have had to invent an interpretation nobody downstream could see without reading the source. Counter-proposal accepted: rows are now explicitly compared by every `ProfileQuery`-relevant field except `ID`, matched across backends by a fixed non-ID field from the seeded fixture set.
+
+**Naomi Voss — ruling:** Both fixes applied (the citation correction independently confirmed; the ID-matching ambiguity closed). This refinement is accepted and ready to hand off. This is the third LT-3x pair in a row where the research team caught a real, specific ambiguity that would otherwise have been decided unilaterally and invisibly by whoever wrote the test first — the pattern is doing exactly what it's for.
+
+## Finding from the joint review — CI silently skipped every Postgres/CockroachDB run, fixed
+
+**2026-09-13, Naomi's live review.** `internal/dao/conformance`'s `newPostgresFamilyFixture` (and the equivalent fixtures in `internal/dao/postgres/testutil_test.go` and `internal/api/clientstore_pg_test.go`) `t.Skip`s when `TEST_POSTGRES_DSN`/`TEST_COCKROACHDB_DSN` are unset — and `pr-check` never set them. Every Postgres and CockroachDB conformance/integration test, including `TestConformance_CockroachDB_RealSerializationRetry` (this story's own named enforcement site for the retry-path criterion above), has been silently skipped in CI all along. A green `pr-check` run meant "SQLite conformance proven," never "all three backends proven" — exactly the gap criterion 4 in this doc's own PO review script asks to be confirmed, and it was never actually checked because nobody looked past the green checkmark to see three backends' worth of tests reporting `SKIP`, not `PASS`.
+
+**Root cause is 05's own §7 principle, applied to CI rather than to a database assertion:** a skipped assertion that reads as a pass in the CI summary is worse than a red build. `t.Skip` and `t.Fail` are visually similar in a passing/failing sense at the job level (both leave the overall `go test` exit code green when every non-skipped test also passes) but carry opposite meanings for what was actually verified.
+
+**Fixed:** all three fixtures now check the `CI` environment variable (which GitHub Actions sets unconditionally) before skipping. Unset locally (a developer's machine without a database configured) — unchanged behavior, still skips. Set in CI with the DSN still absent — `t.Fatalf`s, naming the exact missing variable, instead of skipping. Verified directly: ran each affected package's tests with `CI=true` and no DSN set, confirmed each one now fails loudly rather than silently passing.
+
+**Theo (04) is adding real Postgres/CockroachDB service containers to the CI workflow** so the DSNs are actually set going forward — this fix is what makes it impossible for that step to ever regress silently again: if a future workflow edit ever drops those service containers, the very next `pr-check` run fails loudly instead of quietly reverting to SQLite-only coverage with a green checkmark.</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,100p' internal/dao/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,100p' internal/dao/conformance/testutil_test.go"
+}</pre><div class="lbl">result</div><pre>// Package conformance is LT-38: 05's §7 requirement that behavioral
+// conformance (do the backends BEHAVE alike) is proven separately from
+// signature conformance (LT-35: do the Go shapes match). Two
+// implementations can match every declaration and still return different
+// rows for the same call — every guarantee below is asserted as a named
+// test case against all three backends from one table-driven suite.
+package conformance
+
+import (
+	"database/sql"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"loginid-takehome/internal/dao"
+	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+)
+
+// fixture is everything one backend's test run needs: the Repository
+// under test, plus an admin *sql.DB for the handful of operations the
+// Repository interface deliberately doesn't expose (creating/deactivating
+// auth_method rows — that table is read-only through the interface per
+// the contract; writes to it are "an operational action", not part of the
+// normal request path).
+type fixture struct {
+	driver string
+	repo   dao.Repository
+	admin  *sql.DB
+}
+
+// backend is one target this suite runs every guarantee against.
+type backend struct {
+	driver string // dao.New's driver argument
+	newFix func(t *testing.T) fixture
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not determine test file location")
+	}
+	// this file: &lt;repoRoot&gt;/internal/dao/conformance/testutil_test.go
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+}
+
+func migrationSQL(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading migration %s: %v", path, err)
+	}
+	content := string(b)
+	upStart := strings.Index(content, "-- +goose Up")
+	downStart := strings.Index(content, "-- +goose Down")
+	if upStart == -1 || downStart == -1 {
+		t.Fatalf("migration %s missing +goose Up/Down markers", path)
+	}
+	return content[upStart+len("-- +goose Up") : downStart]
+}
+
+// splitSQLStatements splits a migration's Up section into individual
+// statements on ";" — used for migrations that must not run as one
+// multi-statement transaction (see the 00002 phone-CHECK migration's own
+// comment: CockroachDB rejects an ADD CONSTRAINT reusing a name a DROP
+// CONSTRAINT removed earlier in the same implicit transaction). "--"
+// comment lines are stripped first: this file's own prose comments use
+// ordinary English semicolons, which a naive split-on-";" would otherwise
+// cut mid-sentence and misidentify as a statement boundary. None of the
+// actual SQL statements' string literals contain a ";", so splitting the
+// comment-free text is safe — this is not a general-purpose SQL parser.
+func splitSQLStatements(sqlText string) []string {
+	var codeOnly strings.Builder
+	for _, line := range strings.Split(sqlText, "\n") {
+		if idx := strings.Index(line, "--"); idx != -1 {
+			line = line[:idx]
+		}
+		codeOnly.WriteString(line)
+		codeOnly.WriteString("\n")
+	}
+
+	var out []string
+	for _, stmt := range strings.Split(codeOnly.String(), ";") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		out = append(out, stmt)
+	}
+	return out
+}
+
+// requireOrSkipDSN reads envVar, skipping the test if unset when running
+// locally (CI unset) but FAILING it (not skipping) if the CI env var is
+// set and envVar is still unset — GitHub Actions sets CI=true
+// unconditionally, so this is a reliable signal this test is running in</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,30p' internal/api/c</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix &amp;&amp; sed -n '1,30p' internal/api/clientstore_pg_test.go"
+}</pre><div class="lbl">result</div><pre>package api
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+)
+
+// requireOrSkipDSN reads envVar, skipping the test if unset when running
+// locally (CI unset) but FAILING it (not skipping) if the CI env var is
+// set and envVar is still unset — GitHub Actions sets CI=true
+// unconditionally, so this is a reliable signal this test is running in
+// the gate, not on a developer's machine. Naomi Voss's joint-review
+// finding (originally caught in internal/dao/conformance, applying the
+// same fix here since this file follows the identical pattern): a plain
+// t.Skip made this integration suite look green in CI while never
+// actually running against a real database — a skipped assertion that
+// reads as a pass is worse than a red build (05's own §7 principle).
+func requireOrSkipDSN(t *testing.T, envVar string) string {
+	t.Helper()
+	dsn := os.Getenv(envVar)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:09 AM PDT</span><span class="who">Oren Castellan</span><div class="body">I have everything I need. Here is my review for Renata.
+
+Renata — reviewed PR #46 (`fix/ci-skip-not-pass`) in the worktree. Ran `go build ./...`, `go vet ./...`, `go test ./...`, and `staticcheck ./...` (found already installed at `~/go/bin/staticcheck`) — all clean, no output. I also did not just trust the PR's own test-plan checkbox: I re-ran `CI=true go test ./internal/dao/conformance/... ./internal/dao/postgres/... ./internal/api/...` myself with both DSNs unset. It fails loudly and correctly in all three packages — every conformance/integration test, including `TestConformance_CockroachDB_RealSerializationRetry`, reports `t.Fatalf` naming the exact missing env var (`TEST_POSTGRES_DSN` or `TEST_COCKROACHDB_DSN`), not a silent skip. Confirmed as described.
+
+1. Duplication across three packages: I'd have reached for a shared `internal/dao/testsupport` package on instinct, but the codebase's existing precedent cuts the other way — `internal/dao/postgres/testutil_test.go` and `internal/dao/conformance/testutil_test.go` already independently duplicate `repoRoot`, `migrationSQL`, and `splitSQLStatements` rather than sharing them, and that precedent predates this PR. A four-line function (`os.Getenv` + branch + `t.Fatalf`/`t.Skipf`) crossing three packages to avoid ~12 duplicated lines is the wrong trade against introducing a new cross-package test-only import that all three would now depend on for something this small. I'd object if this were business logic; it's a test-fixture policy, and each copy's doc comment states the same rule verbatim so a future reader doesn't have to trust that all three stayed in sync. Acceptable as-is.
+
+2. `os.Getenv("CI")` signal: confirmed against `.github/workflows/pr-check.yml` — the `build-lint-test` job (the one that runs `go test ./...`) runs on `runs-on: ubuntu-latest`, a GitHub-hosted runner, where GitHub Actions sets `CI=true` unconditionally per their own documented behavior. This is the job that actually executes these tests, so the signal is reliable for this workflow specifically. Two edge cases worth naming to Renata even though neither applies here: (a) a self-hosted runner does not get `CI` set automatically unless the runner's own environment sets it — irrelevant today since `build-lint-test` isn't on `loginid-takehome` self-hosted, but if 04 ever moves this job to the self-hosted runner (used elsewhere in `deploy.yml`), this check goes silently inert again, same failure mode as the one being fixed. Worth a one-line comment or a follow-up ticket, not a blocker now. (b) A local developer setting `CI=true` in their own shell (some people do this to make a script behave "like CI") would flip local runs from skip to fail — acceptable per the fix's own stated intent, and it's the same signal a competent developer would recognize as self-inflicted.
+
+3. Grepped the whole `internal/` tree for `t.Skip`/`t.SkipNow`/`os.Getenv` across all `_test.go` files. Nothing else follows this pattern — the only three files touching a DSN-gated skip are the three named in the PR. No other resource-gated skip (Redis, a mock vendor URL, etc.) exists anywhere else in the tree. Confirmed complete, not just plausible.
+
+4. Sequencing risk: I agree with it exactly as described, and I don't see anything that makes it worse. This PR only changes behavior when `CI` is set (true starting the moment it merges) and a DSN is absent (true today, for every other in-flight PR, until Theo's containers land) — that's a deterministic, single-cause failure mode, not one compounded by anything else this diff touches. It doesn't change any non-test code path, doesn't touch build tags, and the failure message is specific per package, so anyone hitting it will know immediately it's the DSN gate and not a flaky test. Recommend merging together with or immediately after Theo's PR, as the PR body already says.
+
+5. Minor: `internal/dao/postgres/testutil_test.go`'s `requireOrSkipDSN` doc comment says "See setupDB's own doc comment for why this distinction matters," but `setupDB`'s comment is below it in the same diff and is the one that actually restates the reasoning — a small forward-reference that reads fine linearly but would confuse anyone who greps to the helper function first. Not worth blocking on. No nil/zero-value or error-swallowing issues — `t.Fatalf`/`t.Skipf` both halt the goroutine correctly, `t.Helper()` is present in all three, and the empty-string return path after `t.Fatalf`/`t.Skipf` is dead but harmless (both calls halt execution; the `return ""` is only there to satisfy the compiler's control-flow requirement).
+
+Approve. No blocking findings.
+
+Files reviewed:
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix/internal/dao/conformance/testutil_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix/internal/dao/postgres/testutil_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix/internal/api/clientstore_pg_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix/.github/workflows/pr-check.yml`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix/03-engineering-delivery/refinement/LT-38.md`</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

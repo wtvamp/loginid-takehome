@@ -1,0 +1,2615 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 25 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 12:35 PM PDT – Sep 13, 2026 12:38 PM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 12:35 PM PDT</span><span class="who">Lead</span><div class="body">Please review PR #71 in the loginid-takehome repo (`gh pr diff 71` and/or `gh pr view 71` from `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint`, branch `feature/sweep-metrics-endpoint`): "LT-49: persist sweep results and expose /metrics on api-service".
+
+Context you need (you have no memory of this project's recent history, so read this carefully):
+
+- The sweep CronJob (a periodic retention-deletion job across three "classes" of data) used to only log to stdout. Prometheus can't scrape a CronJob's short-lived pod, so the fix is: the sweep now writes a row to a new `retention_sweep_run` table (one row per class per run, written twice — INSERT at start with `finished_at` NULL, UPDATE at completion), and `api-service` (the always-up pod) re-reads that table and re-exposes it as Prometheus gauges on a new `/metrics` HTTP endpoint on port `:9101`.
+- New files: `migrations/{postgres,cockroachdb}/00003_retention_sweep_run.sql`, `migrations/sqlite/00002_retention_sweep_run.sql`, `internal/sweepstore/{sweepstore.go,handler.go,sweepstore_test.go,testmain_test.go}`.
+- Modified: `internal/sweep/sweep.go` (new `RunRecorder` interface, threaded through `Run`/`runClass`, nil-tolerant — a recorder failure must never turn a real successful deletion into a reported failure), `internal/sweep/sweep_test.go`, `cmd/api-service/main.go` (wires the recorder into `APP_MODE=sweep`, wires a `/metrics` server into `APP_MODE=verifier`), `internal/config/config.go` (doc-comment fix only).
+
+Please focus your review especially on:
+1. `internal/sweepstore/sweepstore.go` — particularly the driver-aware placeholder/timestamp handling (`ph()`, `encodeTime`/`encodeTimePtr`, `scanNullableTime`), the `preciseTimeLayout` timestamp-as-string approach for cross-backend (Postgres/CockroachDB use native `time.Time`, SQLite uses this custom fixed-width string layout) ordering and precision correctness, and the `LatestSnapshots` aggregation logic (it scans all rows ordered by `started_at DESC` and aggregates "latest overall" vs. "latest drained" in Go, since SQLite has no `DISTINCT ON`).
+2. Nullability and off-by-one issues in the `missed_slots` computation and the three-state (never-started / started-and-died / completed) row semantics.
+3. `internal/sweep/sweep.go`'s `RunRecorder` wiring — confirm a `StartRun`/`FinishRun` failure genuinely can't fail the real sweep, and that `FinishRun` is only called on the actual success (drained) path, leaving `finished_at` NULL otherwise (deliberate, not a bug).
+4. `internal/sweepstore/handler.go` — the Prometheus metric definitions and the fail-closed (500) behavior on a read error.
+
+Give me your standard second-pass review: error semantics, nullability, off-by-one issues, anything else you'd flag. I'm about to merge this and want your findings before or shortly after merge.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:35 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- **Before declaring anything handed off, merged-ready, or done, run `git status` and `git diff origin/main -- &lt;your track&gt;/`.** Four times in this project a finished artifact sat unpushed or on a dead branch while its author reported it complete (2026-09-12/13). The author is the worst-placed person to notice, because they can see the work; the reviewer looking at `origin/main` sees the truth. Also check `gh pr view &lt;n&gt; --json state` before pushing to a story branch — once the PM merges, that branch is dead and pushes to it go nowhere.
+69	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+70	
+71	## Status
+72	
+73	Planning (Phases 0–4) closed 2026-09-12: five track plans, 18 hires, three cross-track consistency passes (`decisions/cross-track-consistency.md`), and a Jira backlog (`LT-1`…`LT-52`). Implementation began the same evening as an agile loop (`LOG.md` from "Implementation go" onward). As of 2026-09-13 06:00 PDT: **Done end to end** (deployed to the public URL and PO-reviewed) — LT-34 walking skeleton, LT-32 issuer split-Deployment, LT-52 in-namespace Postgres + migrations. **Live:** `https://loginid-takehome.uplifttech.org/healthz` (build SHA == `main`, `db: ok`); `/profiles/search` and `/profiles/{id}` deployed behind RS256 JWT verification and failing closed; `/auth/token` a 501 placeholder until LT-51. **In Test** awaiting one joint live review with a real token: LT-36/37 (Postgres/CockroachDB and SQLite DAOs), LT-38 (conformance suite), LT-39 (REST search/read), LT-40 (auth middleware). **In dev:** LT-51 (client-credentials issuance; PRs #34 + #36), LT-41 (idp-connector, Q3). PRs #1–#37 merged. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`).
+74	
+75	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+76	@profiles/dana-whitfield/dana-whitfield.md
+77	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+78	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:35 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+37	
+38	&lt;!-- profile-gen:start slug=renata-cole --&gt;
+39	@profiles/renata-cole/renata-cole.md
+40	&lt;!-- profile-gen:end slug=renata-cole --&gt;
+41	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; pwd &amp;&amp; git status &amp;&amp; gh </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; pwd &amp;&amp; git status &amp;&amp; gh pr view 71"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint
+On branch feature/sweep-metrics-endpoint
+Your branch is up to date with 'origin/feature/sweep-metrics-endpoint'.
+
+nothing to commit, working tree clean
+title:	LT-49: persist sweep results and expose /metrics on api-service
+state:	OPEN
+author:	wtvamp (Warren Thompson)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	71
+url:	https://github.com/wtvamp/loginid-takehome/pull/71
+additions:	1463
+deletions:	24
+auto-merge:	disabled
+--
+## Summary
+
+Amber's observability inventory (`04-infra-devops/handoff-amber-observability-inventory.md`) found Prometheus can't scrape the sweep CronJob's stdout — it scrapes HTTP endpoints only, and the CronJob's pod is gone long before any scrape interval could reach it.
+
+This implements the fix agreed for that finding, per amendment A7 (`05-data-ops/multi-db-strategy.md` §3d):
+
+- Three new per-backend migrations (`retention_sweep_run`, not `migrations/shared/` — this is DDL). The row is written **twice** per run (INSERT with `finished_at` NULL at start, UPDATE at completion) so "never started", "started and died", and "completed" are all distinguishable without a separate status column — mirrors the existing `secret_state` pattern. `missed_slots` is computed by the *next* run against the gap since the previous completion, since a skipped run under `concurrencyPolicy: Forbid` has no pod to record its own skip.
+- New `internal/sweepstore` package: `Store` writes/reads the table; `NewMetricsHandler` serves a fresh `prometheus.Registry`, rebuilt from the table's current state on every scrape (never a cached poller), failing the scrape (500) rather than serving an empty-but-200 response on a database error.
+- `internal/sweep` gained a `RunRecorder` seam (nil-tolerant, matching the existing `MetricEmitter` convention — a recorder failure is logged and never turns a real, successful deletion into a reported sweep failure) and an `interval` parameter for `missed_slots`.
+- `cmd/api-service` wires the recorder into `APP_MODE=sweep`, and the `/metrics` server (`:9101`, Service port name `metrics`, agreed with Theo Bergman for his ServiceMonitor/NetworkPolicy in PR #68) into `APP_MODE=verifier`, reusing the existing ping-DB handle.
+
+**Final metric set**, reconciled against Naomi Voss's ruling (my first draft had two mismatches with it, caught by re-reading the shared doc before opening this PR):
+- `retention_sweep_last_finished_timestamp_seconds{class}` — ungated on `Drained` (a died-but-undrained run still counts as "the sweep is reporting" for `RetentionSweepNotReporting`)
+- `oldest_surviving_row_age_seconds{class}` — unchanged, drained-only, per LT-44
+- `retention_sweep_last_run_duration_seconds{class}` — new, agreed with Theo, feeds Priya's early-warning rule at 0.5x interval
+- `retention_sweep_missed_slots{class}` — the latest run's own point-in-time value, **not** a pre-summed `retention_sweep_skipped_total` (Theo's `RetentionSweepSkipping` rule does its own `sum_over_time()`)
+- `rows_examined{class}` / `rows_deleted{class}` — unchanged
+
+No metric or label contains the substring `"health"` (Filebeat drop-rule constraint from Amber's inventory).
+
+## Verification
+
+- `go build`/`go vet`/`go test`/`staticcheck`/`gofmt`/`gitleaks` all clean.
+- `internal/sweepstore`'s own cross-backend suite (real Postgres + in-memory SQLite, same fail-not-skip-in-CI convention as `internal/dao/postgres`) green on both backends.
+- **One real bug found by live end-to-end testing, not by any unit test**: running the actual binary against a real Postgres and curling `/metrics` turned up occasional negative durations. Root cause: bridging a pgx-native `time.Time` through plain `RFC3339` truncates sub-second precision asymmetrically, and a fast sweep can finish within the same second it started. Fixed with a fixed-width, full-nanosecond `preciseTimeLayout` used consistently everywhere this package converts a timestamp to/from a string — this also avoids the variable-width lexicographic-sort trap a naive `RFC3339Nano` would reintroduce on SQLite (Priya's own named conformance concern). Regression tests: `TestLastRunDuration_SubSecondPrecisionNeverNegative`, `TestTimestampOrdering_SpreadAcrossAMonth`.
+- Live-verified end to end: ran `api-service` in `APP_MODE=sweep` against a throwaway Postgres to populate the table, then `APP_MODE=verifier` to confirm `/metrics` reads genuine, correctly-computed values back from it.
+- Rebased cleanly onto latest `origin/main`.
+
+## Who did the work
+
+- **Renata Cole** (03, lead) — persistence layer, `/metrics` endpoint, cross-backend precision fix, all implementation and tests.
+- **Priya Nandakumar** (05) — persistence-contract addendum A7, alert-formula ruling.
+- **Theo Bergman** (04) — port/metric-name agreement, ServiceMonitor/PrometheusRule consumer (PR #68).
+- **Naomi Voss** (PO) — metric-design ruling that corrected the initial draft.
+
+Model: Claude Sonnet 5 (Claude Code), single-track implementation with live infrastructure verification (throwaway Docker Postgres, real compiled binary, real HTTP scrapes) rather than unit tests alone.
+
+Refinement doc: `04-infra-devops/refinement/LT-49.md`
+
+---
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_011Cuba4JUvrsQCrTdUj4yzk</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:35 PM PDT</span><span class="who">Oren Castellan</span><div class="body">Now let me look at the actual diff, focusing on the files called out.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; gh pr diff 71 &gt; /private</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; gh pr diff 71 &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr71.diff &amp;&amp; wc -l /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr71.diff"
+}</pre><div class="lbl">result</div><pre>    1722 /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr71.diff</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:35 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore.go"
+}</pre><div class="lbl">result</div><pre>1	// Package sweepstore persists LT-44's retention sweep's per-class
+2	// results (05-data-ops/multi-db-strategy.md §3d, amendment A7) so
+3	// api-service — the always-up pod — can expose them to Prometheus over
+4	// /metrics. The sweep's own CronJob pod and the scraper never overlap in
+5	// time (04-infra-devops/handoff-amber-observability-inventory.md:
+6	// Prometheus scrapes HTTP endpoints and cannot ingest stdout, and a
+7	// short-lived CronJob pod is typically gone before a scrape interval
+8	// could catch it), so the result has to live somewhere the scraper can
+9	// read it — a table, not a metric held only in the sweep process's own
+10	// memory.
+11	package sweepstore
+12	
+13	import (
+14		"context"
+15		"database/sql"
+16		"fmt"
+17		"time"
+18	
+19		"github.com/google/uuid"
+20	
+21		"loginid-takehome/internal/dao"
+22	)
+23	
+24	// preciseTimeLayout is used everywhere this package converts a
+25	// time.Time to/from a string — both SQLite's own TEXT-column storage
+26	// and this package's internal pgx-native-time-to-string bridging (used
+27	// only inside LatestSnapshots, to give both backends one shared
+28	// aggregation code path).
+29	//
+30	// Deliberately NOT time.RFC3339 (whole seconds only) or time.RFC3339Nano
+31	// (Go's stdlib "trim trailing zero digits" fractional-second format,
+32	// meaning two different timestamps serialize to DIFFERENT STRING
+33	// LENGTHS depending on how many trailing zero nanosecond digits they
+34	// happen to have) — both are wrong here for the same underlying reason,
+35	// each in a different way this package hit for real:
+36	//   - Plain RFC3339 silently truncates sub-second precision. This
+37	//     produced a genuine bug caught by live-testing (not a unit test):
+38	//     two timestamps a few milliseconds apart, once one is truncated to
+39	//     whole seconds and the other isn't, can round to the SAME second
+40	//     or even swap order, corrupting the finished-minus-started
+41	//     duration calculation into a small negative number.
+42	//   - RFC3339Nano's variable-width fractional seconds would defeat 05's
+43	//     own §3d ordering requirement for SQLite's TEXT column: "a text
+44	//     timestamp sorts chronologically only if it is zero-padded,
+45	//     fixed-width and in one offset" — variable width breaks
+46	//     lexicographic sort exactly the way that warning describes.
+47	//
+48	// "2006-01-02T15:04:05.000000000Z07:00": the "000000000" (not
+49	// "999999999") forces Go's time.Format to always print all 9 fractional
+50	// digits, zero-padded — fixed-width AND full nanosecond precision,
+51	// closing both problems with one layout. Every value this package ever
+52	// writes goes through this same layout (encodeTime, below), so every
+53	// stored value always has the fixed 9-digit fractional part — verified
+54	// this layout round-trips exactly (formatted, then parsed back,
+55	// including the zero-fractional-second case) before relying on it here.
+56	// A value from any OTHER source (hand-written test fixtures, a manual
+57	// psql INSERT) that omits the fractional part entirely would fail to
+58	// parse against this exact layout — not a concern for this table today
+59	// (no prior data predates this layout; every row is written by this
+60	// package alone), but worth knowing if that ever changes.
+61	const preciseTimeLayout = "2006-01-02T15:04:05.000000000Z07:00"
+62	
+63	// Store is a *sql.DB-backed implementation of internal/sweep.RunRecorder
+64	// and of SnapshotReader (this package's own read seam for the /metrics
+65	// handler) — one Go type usable against any of the three backends
+66	// dao.New already selects between, since retention_sweep_run exists
+67	// identically (same columns, same constraint names) in all three
+68	// migration directories per §3d. driver is the underlying database/sql
+69	// driver name ("pgx" or "sqlite" — cmd/api-service's own
+70	// sqlDriverNameFor's output), since the two require different
+71	// placeholder syntax and different timestamp encodings (pgx binds
+72	// time.Time natively; SQLite's column is TEXT, so this package formats
+73	// UTC in its own fixed-width, full-precision layout itself — see
+74	// preciseTimeLayout's own doc comment for why plain RFC3339, and
+75	// internal/dao/sqlite's own timeLayout, both fall short here).
+76	type Store struct {
+77		db     *sql.DB
+78		isPgx  bool
+79		driver string
+80	}
+81	
+82	// NewStore wraps db. driver must be "pgx" or "sqlite" (cmd/api-service's
+83	// sqlDriverNameFor's own output) — an unrecognized value is a
+84	// programming error, not a runtime one, so callers should only ever
+85	// pass one of the two.
+86	func NewStore(db *sql.DB, driver string) *Store {
+87		return &amp;Store{db: db, isPgx: driver == "pgx", driver: driver}
+88	}
+89	
+90	// ClassSnapshot is one class's current observable state, as read by the
+91	// /metrics handler — everything a scrape needs, decoupled from the
+92	// underlying table's own column shape.
+93	type ClassSnapshot struct {
+94		Class dao.RetentionClass
+95	
+96		// OldestSurvivingAt comes from this class's most recent DRAINED row
+97		// only — nil if no drained row exists yet. Matches LT-44/49's own
+98		// established rule: meaningful only from a Drained result, never an
+99		// intermediate/failed one (the table's own
+100		// ck_retention_sweep_run_drained CHECK makes the opposite
+101		// unrepresentable).
+102		OldestSurvivingAt *time.Time
+103	
+104		// LastFinishedAt, RowsExamined, RowsDeleted, LastRunDurationSeconds,
+105		// and MissedSlots all come from this class's single MOST RECENT row
+106		// overall (by started_at), regardless of whether it drained — "from
+107		// the last run," not "from the last successful run." Deliberately
+108		// NOT gated on Drained: Priya Nandakumar's (05) RetentionSweepNotReporting
+109		// alert rule keys on "the age of the latest non-NULL finished_at
+110		// per class — a genuine absence of rows, not a stale scrape,"
+111		// which must see a died-but-not-drained run's completion just as
+112		// much as a successful one. LastFinishedAt and LastRunDurationSeconds
+113		// are both nil whenever that row hasn't finished yet (finished_at
+114		// NULL — started and either still running or died).
+115		LastFinishedAt         *time.Time
+116		RowsExamined           int
+117		RowsDeleted            int
+118		LastRunDurationSeconds *float64
+119		MissedSlots            int
+120	}
+121	
+122	// SnapshotReader is the seam the /metrics handler depends on — narrowed
+123	// to just the one read this package's HTTP handler needs, per
+124	// decisions/test-double-strategy.md's own convention, so that handler's
+125	// own tests use a small fake instead of a real *Store.
+126	type SnapshotReader interface {
+127		LatestSnapshots(ctx context.Context) ([]ClassSnapshot, error)
+128	}
+129	
+130	func (s *Store) ph(i int) string {
+131		if s.isPgx {
+132			return fmt.Sprintf("$%d", i)
+133		}
+134		return "?"
+135	}
+136	
+137	func (s *Store) encodeTime(t time.Time) any {
+138		if s.isPgx {
+139			return t
+140		}
+141		return t.UTC().Format(preciseTimeLayout)
+142	}
+143	
+144	func (s *Store) encodeTimePtr(t *time.Time) any {
+145		if t == nil {
+146			return nil
+147		}
+148		return s.encodeTime(*t)
+149	}
+150	
+151	// StartRun records the beginning of one class's sweep attempt — the
+152	// first of the two writes per run (05's §3d: insert at start with
+153	// finished_at NULL, update at completion) that lets "no row," "a row
+154	// with NULL finished_at," and "a row with finished_at" distinguish
+155	// skipped-or-dead, started-and-died, and completed.
+156	//
+157	// interval is the CronJob's own schedule (cfg.SweepIntervalSeconds,
+158	// parsed) — used only to compute missedSlots (§3d: floor(gap/I) - 1,
+159	// zero in the normal case) against the gap since this class's last
+160	// completed run. interval &lt;= 0 (unset/unknown) means missedSlots is
+161	// always 0 — this package doesn't guess at a schedule it was never told.
+162	func (s *Store) StartRun(ctx context.Context, class dao.RetentionClass, startedAt time.Time, interval time.Duration) (runID string, missedSlots int, err error) {
+163		if interval &gt; 0 {
+164			lastFinished, ok, err := s.lastFinishedAt(ctx, class)
+165			if err != nil {
+166				return "", 0, fmt.Errorf("sweepstore: querying last finished_at for class %q: %w", class, err)
+167			}
+168			if ok {
+169				gap := startedAt.Sub(lastFinished)
+170				slots := int(gap/interval) - 1
+171				if slots &gt; 0 {
+172					missedSlots = slots
+173				}
+174			}
+175		}
+176	
+177		id := uuid.NewString()
+178		query := fmt.Sprintf(
+179			"INSERT INTO retention_sweep_run (id, class, started_at, missed_slots) VALUES (%s, %s, %s, %s)",
+180			s.ph(1), s.ph(2), s.ph(3), s.ph(4),
+181		)
+182		if _, err := s.db.ExecContext(ctx, query, id, string(class), s.encodeTime(startedAt), missedSlots); err != nil {
+183			return "", 0, fmt.Errorf("sweepstore: inserting run start for class %q: %w", class, err)
+184		}
+185		return id, missedSlots, nil
+186	}
+187	
+188	// FinishRun records the second of the two writes per run — the
+189	// completion. oldestSurvivingAt is nil whenever drained's own
+190	// SweepResult.OldestSurvivingAt was nil (matching the DAO's own
+191	// zero-rows-remain semantics; the table's own
+192	// ck_retention_sweep_run_drained CHECK requires oldestSurvivingAt be nil
+193	// whenever drained is false, enforced at the database, not just here).
+194	func (s *Store) FinishRun(ctx context.Context, runID string, finishedAt time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error {
+195		drainedValue := any(drained)
+196		if !s.isPgx {
+197			if drained {
+198				drainedValue = 1
+199			} else {
+200				drainedValue = 0
+201			}
+202		}
+203		query := fmt.Sprintf(
+204			`UPDATE retention_sweep_run SET finished_at = %s, rows_examined = %s, rows_deleted = %s, drained = %s, oldest_surviving_at = %s WHERE id = %s`,
+205			s.ph(1), s.ph(2), s.ph(3), s.ph(4), s.ph(5), s.ph(6),
+206		)
+207		_, err := s.db.ExecContext(ctx, query, s.encodeTime(finishedAt), rowsExamined, rowsDeleted, drainedValue, s.encodeTimePtr(oldestSurvivingAt), runID)
+208		if err != nil {
+209			return fmt.Errorf("sweepstore: recording run finish for run %q: %w", runID, err)
+210		}
+211		return nil
+212	}
+213	
+214	// PruneOlderThan deletes every row whose started_at is before cutoff —
+215	// this table's own retention (§3d: 30 days, self-pruned by the sweep at
+216	// the end of each run, deliberately NOT a RetentionClass and NOT
+217	// written to deletion_log, since it holds operational metadata, not
+218	// PII).
+219	func (s *Store) PruneOlderThan(ctx context.Context, cutoff time.Time) error {
+220		query := fmt.Sprintf("DELETE FROM retention_sweep_run WHERE started_at &lt; %s", s.ph(1))
+221		if _, err := s.db.ExecContext(ctx, query, s.encodeTime(cutoff)); err != nil {
+222			return fmt.Errorf("sweepstore: pruning rows older than %s: %w", cutoff, err)
+223		}
+224		return nil
+225	}
+226	
+227	func (s *Store) lastFinishedAt(ctx context.Context, class dao.RetentionClass) (time.Time, bool, error) {
+228		query := fmt.Sprintf(
+229			"SELECT finished_at FROM retention_sweep_run WHERE class = %s AND finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1",
+230			s.ph(1),
+231		)
+232		row := s.db.QueryRowContext(ctx, query, string(class))
+233		t, ok, err := s.scanNullableTime(row.Scan)
+234		if err != nil {
+235			if err == sql.ErrNoRows {
+236				return time.Time{}, false, nil
+237			}
+238			return time.Time{}, false, err
+239		}
+240		if !ok {
+241			return time.Time{}, false, nil
+242		}
+243		return *t, true, nil
+244	}
+245	
+246	// scanNullableTime scans a single nullable timestamp column via scan
+247	// (either *sql.Row.Scan or *sql.Rows.Scan) — pgx returns a real
+248	// time.Time (scanned through sql.NullTime, since the column may be
+249	// NULL); SQLite returns the preciseTimeLayout string this package
+250	// itself wrote (scanned through sql.NullString, then parsed).
+251	func (s *Store) scanNullableTime(scan func(dest ...any) error) (*time.Time, bool, error) {
+252		if s.isPgx {
+253			var nt sql.NullTime
+254			if err := scan(&amp;nt); err != nil {
+255				return nil, false, err
+256			}
+257			if !nt.Valid {
+258				return nil, false, nil
+259			}
+260			t := nt.Time
+261			return &amp;t, true, nil
+262		}
+263		var ns sql.NullString
+264		if err := scan(&amp;ns); err != nil {
+265			return nil, false, err
+266		}
+267		if !ns.Valid {
+268			return nil, false, nil
+269		}
+270		t, err := time.Parse(preciseTimeLayout, ns.String)
+271		if err != nil {
+272			return nil, false, fmt.Errorf("parsing timestamp %q: %w", ns.String, err)
+273		}
+274		return &amp;t, true, nil
+275	}
+276	
+277	// LatestSnapshots implements SnapshotReader — one row per class (all
+278	// three RetentionClass values, even one with no rows at all yet:
+279	// aggregation happens in Go over every row currently in the table
+280	// rather than via backend-specific SQL (DISTINCT ON is Postgres/
+281	// CockroachDB-only; SQLite has no equivalent), so this one
+282	// implementation works identically against all three backends. The
+283	// table is bounded by its own 30-day self-prune, so scanning every row
+284	// on each scrape is cheap at this project's scale — no window functions,
+285	// no per-backend query variants beyond placeholder/timestamp encoding.
+286	func (s *Store) LatestSnapshots(ctx context.Context) ([]ClassSnapshot, error) {
+287		rows, err := s.db.QueryContext(ctx, `
+288			SELECT class, started_at, finished_at, rows_examined, rows_deleted, oldest_surviving_at, drained, missed_slots
+289			FROM retention_sweep_run
+290			ORDER BY started_at DESC`)
+291		if err != nil {
+292			return nil, fmt.Errorf("sweepstore: querying retention_sweep_run: %w", err)
+293		}
+294		defer func() { _ = rows.Close() }()
+295	
+296		byClass := make(map[dao.RetentionClass]*ClassSnapshot)
+297		haveLatestOverall := make(map[dao.RetentionClass]bool)
+298		haveLatestDrained := make(map[dao.RetentionClass]bool)
+299	
+300		for rows.Next() {
+301			var classStr string
+302			var finishedRaw, oldestRaw sql.NullString // overwritten below for pgx
+303			var rowsExamined, rowsDeleted, missedSlots int
+304			var drainedRaw any
+305			var startedAtTime time.Time
+306	
+307			if s.isPgx {
+308				var startedAt time.Time
+309				var finishedAt sql.NullTime
+310				var oldestAt sql.NullTime
+311				var drained bool
+312				if err := rows.Scan(&amp;classStr, &amp;startedAt, &amp;finishedAt, &amp;rowsExamined, &amp;rowsDeleted, &amp;oldestAt, &amp;drained, &amp;missedSlots); err != nil {
+313					return nil, fmt.Errorf("sweepstore: scanning retention_sweep_run row: %w", err)
+314				}
+315				startedAtTime = startedAt
+316				if finishedAt.Valid {
+317					finishedRaw = sql.NullString{String: finishedAt.Time.UTC().Format(preciseTimeLayout), Valid: true}
+318				}
+319				if oldestAt.Valid {
+320					oldestRaw = sql.NullString{String: oldestAt.Time.UTC().Format(preciseTimeLayout), Valid: true}
+321				}
+322				drainedRaw = drained
+323			} else {
+324				var startedAtStr string
+325				var drainedInt int
+326				if err := rows.Scan(&amp;classStr, &amp;startedAtStr, &amp;finishedRaw, &amp;rowsExamined, &amp;rowsDeleted, &amp;oldestRaw, &amp;drainedInt, &amp;missedSlots); err != nil {
+327					return nil, fmt.Errorf("sweepstore: scanning retention_sweep_run row: %w", err)
+328				}
+329				t, err := time.Parse(preciseTimeLayout, startedAtStr)
+330				if err != nil {
+331					return nil, fmt.Errorf("sweepstore: parsing started_at %q: %w", startedAtStr, err)
+332				}
+333				startedAtTime = t
+334				drainedRaw = drainedInt != 0
+335			}
+336	
+337			class := dao.RetentionClass(classStr)
+338			snap := byClass[class]
+339			if snap == nil {
+340				snap = &amp;ClassSnapshot{Class: class}
+341				byClass[class] = snap
+342			}
+343	
+344			if !haveLatestOverall[class] {
+345				snap.RowsExamined = rowsExamined
+346				snap.RowsDeleted = rowsDeleted
+347				snap.MissedSlots = missedSlots
+348				if finishedRaw.Valid {
+349					finishedAtTime, err := time.Parse(preciseTimeLayout, finishedRaw.String)
+350					if err != nil {
+351						return nil, fmt.Errorf("sweepstore: parsing finished_at %q: %w", finishedRaw.String, err)
+352					}
+353					snap.LastFinishedAt = &amp;finishedAtTime
+354					duration := finishedAtTime.Sub(startedAtTime).Seconds()
+355					snap.LastRunDurationSeconds = &amp;duration
+356				}
+357				haveLatestOverall[class] = true
+358			}
+359	
+360			drained, _ := drainedRaw.(bool)
+361			if drained &amp;&amp; !haveLatestDrained[class] {
+362				if oldestRaw.Valid {
+363					t, err := time.Parse(preciseTimeLayout, oldestRaw.String)
+364					if err != nil {
+365						return nil, fmt.Errorf("sweepstore: parsing oldest_surviving_at %q: %w", oldestRaw.String, err)
+366					}
+367					snap.OldestSurvivingAt = &amp;t
+368				}
+369				haveLatestDrained[class] = true
+370			}
+371		}
+372		if err := rows.Err(); err != nil {
+373			return nil, fmt.Errorf("sweepstore: iterating retention_sweep_run rows: %w", err)
+374		}
+375	
+376		out := make([]ClassSnapshot, 0, len(byClass))
+377		for _, snap := range byClass {
+378			out = append(out, *snap)
+379		}
+380		return out, nil
+381	}
+382	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:36 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/handler.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/handler.go"
+}</pre><div class="lbl">result</div><pre>1	package sweepstore
+2	
+3	import (
+4		"context"
+5		"log"
+6		"net/http"
+7		"time"
+8	
+9		"github.com/prometheus/client_golang/prometheus"
+10		"github.com/prometheus/client_golang/prometheus/promhttp"
+11	)
+12	
+13	// NewMetricsHandler builds api-service's /metrics endpoint — a fresh
+14	// prometheus.Registry populated from reader.LatestSnapshots on EVERY
+15	// scrape (not a background poller updating a shared registry), so a
+16	// scrape always reflects the persisted table's current state rather
+17	// than some earlier snapshot this process cached. Served on api-service
+18	// because it's the always-up pod (04-infra-devops/
+19	// handoff-amber-observability-inventory.md); the sweep's own CronJob pod
+20	// is gone long before Prometheus's scrape interval could reach it.
+21	//
+22	// Metric names deliberately avoid the substring "health" anywhere —
+23	// Amber's inventory found Filebeat silently drops any log line matching
+24	// that pattern, and while this handler's own output never reaches
+25	// Filebeat (it's scraped by Prometheus, not logged), the same naming
+26	// discipline is kept here for consistency with every other metric this
+27	// project emits.
+28	func NewMetricsHandler(reader SnapshotReader) http.Handler {
+29		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+30			reg := prometheus.NewRegistry()
+31	
+32			lastFinished := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+33				Name: "retention_sweep_last_finished_timestamp_seconds",
+34				Help: "Unix timestamp of this class's most recent sweep run's completion, whether or not it drained. Absent (no series) for a class whose most recent run hasn't finished yet. Feeds RetentionSweepNotReporting (Priya Nandakumar, 05): a genuine absence of completions, not gated on success, so a died-but-never-drained run still counts as reporting.",
+35			}, []string{"class"})
+36			oldestSurvivingAge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+37				Name: "oldest_surviving_row_age_seconds",
+38				Help: "Age of the oldest surviving row in this class, from the most recent drained sweep only. Absent when that class has zero rows remaining, or has never drained.",
+39			}, []string{"class"})
+40			missedSlots := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+41				Name: "retention_sweep_missed_slots",
+42				Help: "Scheduled runs missed since this class's previous completion, as recorded by its single most recent run (05's §3d: computed at start, since a skipped run under concurrencyPolicy: Forbid has no pod to record itself). A point-in-time value, not a pre-summed total — Theo Bergman's (04) RetentionSweepSkipping alert rule aggregates this itself via sum_over_time() across its own rolling window, per Priya Nandakumar's (05) ruling that superseded an earlier retention_sweep_skipped_total design.",
+43			}, []string{"class"})
+44			rowsExamined := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+45				Name: "rows_examined",
+46				Help: "Rows examined by this class's single most recent sweep run, whether or not it drained.",
+47			}, []string{"class"})
+48			rowsDeleted := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+49				Name: "rows_deleted",
+50				Help: "Rows deleted by this class's single most recent sweep run, whether or not it drained.",
+51			}, []string{"class"})
+52			lastRunDuration := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+53				Name: "retention_sweep_last_run_duration_seconds",
+54				Help: "Wall-clock duration of this class's single most recent sweep run (finished_at minus started_at). Absent when that run hasn't finished yet (still running, or died before finishing) — Priya Nandakumar's (05) early-warning rule at 0.5x the sweep interval.",
+55			}, []string{"class"})
+56			reg.MustRegister(lastFinished, oldestSurvivingAge, missedSlots, rowsExamined, rowsDeleted, lastRunDuration)
+57	
+58			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+59			defer cancel()
+60			snapshots, err := reader.LatestSnapshots(ctx)
+61			if err != nil {
+62				// A scrape that can't reach the database is a real signal —
+63				// fail the scrape (500), don't serve an empty-but-200
+64				// response that would look identical to "genuinely nothing
+65				// to report yet."
+66				log.Printf("api-service: /metrics: reading sweep snapshots: %v", err)
+67				http.Error(w, "reading sweep snapshots", http.StatusInternalServerError)
+68				return
+69			}
+70	
+71			for _, snap := range snapshots {
+72				class := string(snap.Class)
+73				if snap.LastFinishedAt != nil {
+74					lastFinished.WithLabelValues(class).Set(float64(snap.LastFinishedAt.Unix()))
+75				}
+76				if snap.OldestSurvivingAt != nil {
+77					oldestSurvivingAge.WithLabelValues(class).Set(time.Since(*snap.OldestSurvivingAt).Seconds())
+78				}
+79				missedSlots.WithLabelValues(class).Set(float64(snap.MissedSlots))
+80				rowsExamined.WithLabelValues(class).Set(float64(snap.RowsExamined))
+81				rowsDeleted.WithLabelValues(class).Set(float64(snap.RowsDeleted))
+82				if snap.LastRunDurationSeconds != nil {
+83					lastRunDuration.WithLabelValues(class).Set(*snap.LastRunDurationSeconds)
+84				}
+85			}
+86	
+87			promhttp.HandlerFor(reg, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+88		})
+89	}
+90	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep.go"
+}</pre><div class="lbl">result</div><pre>1	// Package sweep is LT-44's caller for 05's already-built, already-tested
+2	// retention primitives (dao.Repository.DeleteExpired/DeleteProfile,
+3	// internal/dao/conformance's own suite) — a designed-but-not-operational
+4	// control until this package wires a scheduled invocation. See
+5	// refinement/LT-44.md for the full acceptance criteria this implements.
+6	package sweep
+7	
+8	import (
+9		"context"
+10		"fmt"
+11		"io"
+12		"log"
+13		"time"
+14	
+15		"github.com/prometheus/client_golang/prometheus"
+16		"github.com/prometheus/common/expfmt"
+17	
+18		"loginid-takehome/internal/dao"
+19	)
+20	
+21	// maxRowsPerBatch is the DAO's own already-validated bound
+22	// (multi-db-strategy.md §3c: DeleteExpired rejects anything outside
+23	// 1..10_000) — this story doesn't invent a new batching parameter, it
+24	// picks one value inside that existing range.
+25	const maxRowsPerBatch = 1000
+26	
+27	// cutoffFor computes the "older than" cutoff for class as of now — the
+28	// retention windows themselves are sourced from pii-governance.md's
+29	// table (24 months for direct, 30 days for idp_cache, 7 days for
+30	// idp_cache_orphan), stated there as "Proposed," not "Ruled" — this
+31	// package implements the numbers as given; deciding whether they're the
+32	// right numbers is Priya's/legal's call, not this function's. Using
+33	// calendar-based AddDate for the 24-month window rather than a fixed
+34	// multiple of 30*24h (which would drift from a true "24 months ago" by
+35	// several days depending on which months are in the window) — the other
+36	// two classes are exact-day windows, where AddDate and a fixed duration
+37	// agree exactly, so AddDate is used uniformly for all three rather than
+38	// mixing two different arithmetic strategies across classes. Not
+39	// perfectly calendar-correct at every boundary: AddDate normalizes a
+40	// nonexistent target date (e.g. "Feb 31") forward per its own documented
+41	// behavior, shifting the cutoff by a day or two in that specific case —
+42	// immaterial at a 24-month granularity (Oren Castellan, PR #55 review).
+43	
+44	func cutoffFor(now time.Time, class dao.RetentionClass) (time.Time, bool) {
+45		switch class {
+46		case dao.RetentionDirect:
+47			return now.AddDate(0, -24, 0), true
+48		case dao.RetentionIDPCache:
+49			return now.AddDate(0, 0, -30), true
+50		case dao.RetentionIDPCacheOrphan:
+51			return now.AddDate(0, 0, -7), true
+52		default:
+53			return time.Time{}, false
+54		}
+55	}
+56	
+57	// allClasses is the fixed, ordered set this sweep runs every invocation
+58	// — one class at a time, never a mixed/shared predicate, per this
+59	// story's own criterion. Order doesn't matter functionally (each class's
+60	// DeleteExpired call is independent), but iterating orphans last means a
+61	// row promoted out of "orphan" by a fresh credential mid-run (a genuine
+62	// race, vanishingly unlikely at this project's scale but worth naming)
+63	// is examined under its correct class rather than a stale one from
+64	// earlier in the same run.
+65	var allClasses = []dao.RetentionClass{
+66		dao.RetentionDirect,
+67		dao.RetentionIDPCache,
+68		dao.RetentionIDPCacheOrphan,
+69	}
+70	
+71	// ExpirySweeper is the narrow seam this package depends on — just the
+72	// one dao.Repository method it actually calls, per
+73	// decisions/test-double-strategy.md's own convention of depending on the
+74	// smallest interface a caller needs rather than the full composite, so
+75	// this package's own tests use a minimal hand-written fake instead of a
+76	// full Repository double.
+77	type ExpirySweeper interface {
+78		DeleteExpired(ctx context.Context, class dao.RetentionClass, olderThan time.Time, maxRows int) (dao.SweepResult, error)
+79	}
+80	
+81	// MetricEmitter is the seam Run reports through. EmitClassMetrics is
+82	// called exactly once per class, and ONLY when that class's sweep
+83	// reaches Drained == true — never from an intermediate batch.
+84	// oldestSurvivingRowAgeSeconds is nil when Drained's own
+85	// SweepResult.OldestSurvivingAt is nil (zero rows remaining in the
+86	// class after this run), matching observability.md's own warning: a
+87	// non-drained result publishing this field would fire the alert on
+88	// every sweep and get muted, worse than not having the metric at all.
+89	//
+90	// MarkRunStarted is called exactly once, unconditionally, at the very
+91	// top of Run — before any class is attempted, regardless of whether any
+92	// class later errors or the whole run is cancelled. Raised by Tobias
+93	// Lindqvist's original skip-visibility objection (carried from LT-44),
+94	// but its actual alerting role was settled by Priya Nandakumar's (05)
+95	// later alert-formula ruling: her design gets the skip-vs-dead
+96	// distinction from per-class staleness of oldest_surviving_row_age_seconds
+97	// itself (no fresh sample in more than 2 sweep intervals), deliberately
+98	// property-based rather than mechanism-based — so MarkRunStarted's
+99	// timestamp is NOT wired into any alert rule. It exists as a
+100	// supplementary, kubectl-logs-level debugging signal only (confirmed
+101	// with Theo Bergman, 04, PR #59): distinguishing "no process even
+102	// started this cycle" from "a process started but errored before any
+103	// class drained" is useful for a human diagnosing a specific incident,
+104	// even though neither of Priya's alert rules needs the distinction to
+105	// fire correctly.
+106	type MetricEmitter interface {
+107		MarkRunStarted(now time.Time)
+108		EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64)
+109	}
+110	
+111	// ClassResult is RunSweep's own per-class outcome — RowsExamined/
+112	// RowsDeleted are summed across every batch DeleteExpired took to reach
+113	// Drained for this class; Err is set (and the class's own metrics are
+114	// NOT emitted) if any batch in this class's loop failed, so one class's
+115	// database error can't produce a misleadingly-labeled partial metric —
+116	// the run continues to the next class regardless, rather than aborting
+117	// the whole sweep over one class's failure.
+118	type ClassResult struct {
+119		Class        dao.RetentionClass
+120		RowsExamined int
+121		RowsDeleted  int
+122		Drained      bool
+123		Err          error
+124	}
+125	
+126	// RunRecorder persists each class's result to 05's retention_sweep_run
+127	// table (multi-db-strategy.md §3d, amendment A7) — the seam that lets
+128	// api-service, the always-up pod, expose these results to Prometheus
+129	// long after this short-lived sweep process has exited
+130	// (04-infra-devops/handoff-amber-observability-inventory.md:
+131	// Prometheus scrapes HTTP endpoints, cannot ingest this process's
+132	// stdout, and a CronJob pod is typically gone before a scrape interval
+133	// could reach it anyway). internal/sweepstore.Store satisfies this
+134	// interface; this package depends only on the narrow seam it actually
+135	// calls, per decisions/test-double-strategy.md's own convention.
+136	//
+137	// StartRun writes the first of §3d's two required writes per run
+138	// (INSERT with finished_at NULL) and returns the new row's id plus the
+139	// missedSlots this call computed against interval (0 if interval &lt;= 0,
+140	// meaning "unknown/not configured" — this package never guesses at a
+141	// schedule it wasn't told). FinishRun writes the second (UPDATE at
+142	// completion) — called only when a class actually drains; an error
+143	// leaves that class's row at finished_at == NULL, correctly recording
+144	// "started and died" rather than "completed," per §3d's own three-state
+145	// design. PruneOlderThan is this table's own 30-day self-prune (§3d:
+146	// operational metadata, not PII, not a RetentionClass, never written to
+147	// deletion_log), called once per Run, after every class has been
+148	// attempted.
+149	//
+150	// A persistence failure anywhere here is logged and otherwise ignored —
+151	// this table exists to make sweep results observable to Prometheus, not
+152	// to gate the sweep's own actual retention work; a database hiccup on
+153	// this seam must never turn a real, successful deletion into a reported
+154	// failure.
+155	type RunRecorder interface {
+156		StartRun(ctx context.Context, class dao.RetentionClass, startedAt time.Time, interval time.Duration) (runID string, missedSlots int, err error)
+157		FinishRun(ctx context.Context, runID string, finishedAt time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error
+158		PruneOlderThan(ctx context.Context, cutoff time.Time) error
+159	}
+160	
+161	// retentionSweepRunRetention is retention_sweep_run's own self-prune
+162	// window (§3d: 30 days — comfortably covers the widest alert window,
+163	// 24h, with a month of history left for debugging).
+164	const retentionSweepRunRetention = 30 * 24 * time.Hour
+165	
+166	// Run executes one full sweep: every class in allClasses, looping
+167	// DeleteExpired per class until Drained, bounded by maxRowsPerBatch per
+168	// call (the DAO's own already-validated bound, not a new parameter this
+169	// package invents). ctx must be the caller's own job/scheduler context
+170	// — never a request-scoped one, since a CronJob-invoked process has no
+171	// request to derive a context from in the first place, and passing an
+172	// already-cancelled ctx here (verified by this package's own tests, not
+173	// just the DAO layer's already-covered case) must stop before deleting
+174	// anything, in every class, not just the first.
+175	//
+176	// recorder may be nil (persistence not configured) — every call site
+177	// below is guarded accordingly, matching emit's own existing nil
+178	// tolerance. interval is the CronJob's own schedule, passed through to
+179	// recorder.StartRun for its missedSlots computation; &lt;= 0 means unknown.
+180	func Run(ctx context.Context, repo ExpirySweeper, now time.Time, emit MetricEmitter, recorder RunRecorder, interval time.Duration) []ClassResult {
+181		if emit != nil {
+182			emit.MarkRunStarted(now)
+183		}
+184		results := make([]ClassResult, 0, len(allClasses))
+185		for _, class := range allClasses {
+186			results = append(results, runClass(ctx, repo, class, now, emit, recorder, interval))
+187		}
+188		if recorder != nil {
+189			if err := recorder.PruneOlderThan(ctx, now.Add(-retentionSweepRunRetention)); err != nil {
+190				log.Printf("sweep: pruning retention_sweep_run rows older than %s: %v", retentionSweepRunRetention, err)
+191			}
+192		}
+193		return results
+194	}
+195	
+196	func runClass(ctx context.Context, repo ExpirySweeper, class dao.RetentionClass, now time.Time, emit MetricEmitter, recorder RunRecorder, interval time.Duration) ClassResult {
+197		cutoff, ok := cutoffFor(now, class)
+198		if !ok {
+199			return ClassResult{Class: class, Err: fmt.Errorf("sweep: no cutoff defined for class %q", class)}
+200		}
+201	
+202		var runID string
+203		if recorder != nil {
+204			id, missedSlots, err := recorder.StartRun(ctx, class, now, interval)
+205			if err != nil {
+206				log.Printf("sweep: recording run start for class %q: %v", class, err)
+207			} else {
+208				runID = id
+209				if missedSlots &gt; 0 {
+210					log.Printf("sweep: class %q missed %d scheduled run(s) since its last completion", class, missedSlots)
+211				}
+212			}
+213		}
+214	
+215		result := ClassResult{Class: class}
+216		for {
+217			if err := ctx.Err(); err != nil {
+218				result.Err = err
+219				// runID's row is deliberately left at finished_at == NULL —
+220				// §3d's "started and died" state, not overwritten here.
+221				return result
+222			}
+223	
+224			batch, err := repo.DeleteExpired(ctx, class, cutoff, maxRowsPerBatch)
+225			if err != nil {
+226				result.Err = err
+227				return result
+228			}
+229			result.RowsExamined += batch.RowsExamined
+230			result.RowsDeleted += batch.RowsDeleted
+231	
+232			if batch.Drained {
+233				result.Drained = true
+234				var ageSeconds *float64
+235				if batch.OldestSurvivingAt != nil {
+236					age := now.Sub(*batch.OldestSurvivingAt).Seconds()
+237					ageSeconds = &amp;age
+238				}
+239				if emit != nil {
+240					emit.EmitClassMetrics(class, result.RowsExamined, result.RowsDeleted, ageSeconds)
+241				}
+242				if recorder != nil &amp;&amp; runID != "" {
+243					if err := recorder.FinishRun(ctx, runID, time.Now(), result.RowsExamined, result.RowsDeleted, true, batch.OldestSurvivingAt); err != nil {
+244						log.Printf("sweep: recording run finish for class %q: %v", class, err)
+245					}
+246				}
+247				return result
+248			}
+249			// Not drained: loop again, same class, same cutoff — never a
+250			// mixed predicate across classes within one call to Run.
+251		}
+252	}
+253	
+254	// PrometheusMetricEmitter backs MetricEmitter with real
+255	// github.com/prometheus/client_golang Gauge objects registered in their
+256	// own prometheus.Registry — LT-49's own criterion that these values
+257	// reach an actual prometheus.Client registration, not just a
+258	// log.Printf or an internal struct field (superseding LT-44's original
+259	// StdoutMetricEmitter, which only ever produced ad hoc log lines).
+260	// Render renders the registry's current state in real Prometheus text
+261	// exposition format — agreed with Theo Bergman (04, PR #59 review):
+262	// stdout, not a Pushgateway push, is the accepted mechanism for this
+263	// project's scale (no Pushgateway runs on the real cluster, and
+264	// standing one up is disproportionate scope for this story, same
+265	// disposition as LT-44's own metrics-mechanism call) — Theo's own
+266	// sink reads these lines from the pod's log output via `kubectl logs`
+267	// today, with Pushgateway named as the documented production next step.
+268	type PrometheusMetricEmitter struct {
+269		registry     *prometheus.Registry
+270		rowsExamined *prometheus.GaugeVec
+271		rowsDeleted  *prometheus.GaugeVec
+272		oldestAge    *prometheus.GaugeVec
+273		lastRunTS    prometheus.Gauge
+274	}
+275	
+276	// NewPrometheusMetricEmitter constructs a ready-to-use emitter with its
+277	// own private registry — never the global default registry, so this
+278	// package's metrics can never collide with another package's
+279	// same-process registration (moot for a one-shot batch binary today,
+280	// but a self-contained registry costs nothing and rules the class of
+281	// bug out structurally rather than by convention).
+282	func NewPrometheusMetricEmitter() *PrometheusMetricEmitter {
+283		reg := prometheus.NewRegistry()
+284		e := &amp;PrometheusMetricEmitter{
+285			registry: reg,
+286			rowsExamined: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+287				Name: "rows_examined",
+288				Help: "Rows examined by the most recent retention sweep for this class, summed across every batch it took to drain.",
+289			}, []string{"class"}),
+290			rowsDeleted: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+291				Name: "rows_deleted",
+292				Help: "Rows deleted by the most recent retention sweep for this class, summed across every batch it took to drain.",
+293			}, []string{"class"}),
+294			oldestAge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+295				Name: "oldest_surviving_row_age_seconds",
+296				Help: "Age of the oldest surviving row in this class, published only when the sweep drained (never from an intermediate batch).",
+297			}, []string{"class"}),
+298			lastRunTS: prometheus.NewGauge(prometheus.GaugeOpts{
+299				Name: "sweep_last_run_timestamp_seconds",
+300				Help: "Unix timestamp of the most recent sweep invocation's start, set unconditionally regardless of whether any class succeeded. Supplementary/debugging signal only (kubectl-logs-level inspection) — deliberately NOT wired into any alert rule: Priya Nandakumar's (05) alert-formula ruling is property-based (is data surviving, is the sweep still reporting per class), and an alert consuming a mechanism-level 'did a process start' signal is exactly what her ruling argues against. Confirmed with Theo Bergman (04, PR #59) that none of the three alert rules reference this metric.",
+301			}),
+302		}
+303		reg.MustRegister(e.rowsExamined, e.rowsDeleted, e.oldestAge, e.lastRunTS)
+304		return e
+305	}
+306	
+307	func (e *PrometheusMetricEmitter) MarkRunStarted(now time.Time) {
+308		e.lastRunTS.Set(float64(now.Unix()))
+309	}
+310	
+311	func (e *PrometheusMetricEmitter) EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64) {
+312		e.rowsExamined.WithLabelValues(string(class)).Set(float64(rowsExamined))
+313		e.rowsDeleted.WithLabelValues(string(class)).Set(float64(rowsDeleted))
+314		if oldestSurvivingRowAgeSeconds != nil {
+315			e.oldestAge.WithLabelValues(string(class)).Set(*oldestSurvivingRowAgeSeconds)
+316		}
+317	}
+318	
+319	// Render renders every metric this emitter has recorded so far, in
+320	// real Prometheus text exposition format, to w — called once, after
+321	// Run returns, by cmd/api-service's own runSweepMode, so the values
+322	// reach the pod's stdout (and therefore `kubectl logs`) exactly once
+323	// per invocation rather than interleaved with per-class log lines.
+324	func (e *PrometheusMetricEmitter) Render(w io.Writer) error {
+325		mfs, err := e.registry.Gather()
+326		if err != nil {
+327			return fmt.Errorf("sweep: gathering metrics: %w", err)
+328		}
+329		enc := expfmt.NewEncoder(w, expfmt.NewFormat(expfmt.TypeTextPlain))
+330		for _, mf := range mfs {
+331			if err := enc.Encode(mf); err != nil {
+332				return fmt.Errorf("sweep: encoding metric family %q: %w", mf.GetName(), err)
+333			}
+334		}
+335		return nil
+336	}
+337	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:36 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep_test.go"
+}</pre><div class="lbl">result</div><pre>1	package sweep
+2	
+3	import (
+4		"bytes"
+5		"context"
+6		"errors"
+7		"fmt"
+8		"testing"
+9		"time"
+10	
+11		"github.com/prometheus/common/expfmt"
+12		"github.com/prometheus/common/model"
+13	
+14		"loginid-takehome/internal/dao"
+15	)
+16	
+17	// fakeExpirySweeper is a minimal hand-written fake, per
+18	// decisions/test-double-strategy.md — scripted per-class batch
+19	// sequences, so tests can assert exactly how many DeleteExpired calls
+20	// happened and in what order.
+21	type fakeExpirySweeper struct {
+22		// batches[class] is consumed in order, one entry per call to
+23		// DeleteExpired for that class. Running out of scripted batches for
+24		// a class is a test-authoring error (panics), not a valid "keep
+25		// looping" signal — every test scripts exactly the batches it
+26		// expects to be consumed.
+27		batches map[dao.RetentionClass][]batchResult
+28		calls   map[dao.RetentionClass]int
+29	}
+30	
+31	type batchResult struct {
+32		result dao.SweepResult
+33		err    error
+34	}
+35	
+36	func newFakeExpirySweeper() *fakeExpirySweeper {
+37		return &amp;fakeExpirySweeper{
+38			batches: make(map[dao.RetentionClass][]batchResult),
+39			calls:   make(map[dao.RetentionClass]int),
+40		}
+41	}
+42	
+43	func (f *fakeExpirySweeper) script(class dao.RetentionClass, batches ...batchResult) {
+44		f.batches[class] = batches
+45	}
+46	
+47	func (f *fakeExpirySweeper) DeleteExpired(_ context.Context, class dao.RetentionClass, _ time.Time, _ int) (dao.SweepResult, error) {
+48		i := f.calls[class]
+49		f.calls[class] = i + 1
+50		scripted := f.batches[class]
+51		if i &gt;= len(scripted) {
+52			panic("fakeExpirySweeper: ran out of scripted batches for class " + string(class))
+53		}
+54		b := scripted[i]
+55		return b.result, b.err
+56	}
+57	
+58	// fakeMetricEmitter records every EmitClassMetrics call, so tests can
+59	// assert exactly which classes got metrics and with what values —
+60	// including, critically, that a non-drained batch never triggers a call
+61	// at all.
+62	type fakeMetricEmitter struct {
+63		calls          []emittedMetric
+64		runStartedAt   []time.Time
+65		runStartedCall int
+66	}
+67	
+68	type emittedMetric struct {
+69		class                        dao.RetentionClass
+70		rowsExamined, rowsDeleted    int
+71		oldestSurvivingRowAgeSeconds *float64
+72	}
+73	
+74	func (f *fakeMetricEmitter) MarkRunStarted(now time.Time) {
+75		f.runStartedCall++
+76		f.runStartedAt = append(f.runStartedAt, now)
+77	}
+78	
+79	func (f *fakeMetricEmitter) EmitClassMetrics(class dao.RetentionClass, rowsExamined, rowsDeleted int, oldestSurvivingRowAgeSeconds *float64) {
+80		f.calls = append(f.calls, emittedMetric{class, rowsExamined, rowsDeleted, oldestSurvivingRowAgeSeconds})
+81	}
+82	
+83	// allDrainedFake scripts every class to drain in exactly one batch —
+84	// the common case most tests build on before overriding one class's
+85	// script for their own specific scenario.
+86	func allDrainedFake() *fakeExpirySweeper {
+87		f := newFakeExpirySweeper()
+88		for _, c := range allClasses {
+89			f.script(c, batchResult{result: dao.SweepResult{RowsExamined: 1, RowsDeleted: 1, Drained: true}})
+90		}
+91		return f
+92	}
+93	
+94	func TestRun_LoopsUntilDrained(t *testing.T) {
+95		f := allDrainedFake()
+96		// direct takes 3 batches before draining — RowsExamined/RowsDeleted
+97		// must sum across all 3, not just report the last batch's numbers.
+98		f.script(dao.RetentionDirect,
+99			batchResult{result: dao.SweepResult{RowsExamined: 100, RowsDeleted: 100, Drained: false}},
+100			batchResult{result: dao.SweepResult{RowsExamined: 100, RowsDeleted: 100, Drained: false}},
+101			batchResult{result: dao.SweepResult{RowsExamined: 40, RowsDeleted: 40, Drained: true}},
+102		)
+103		emit := &amp;fakeMetricEmitter{}
+104	
+105		results := Run(context.Background(), f, time.Now(), emit, nil, 0)
+106	
+107		var direct ClassResult
+108		for _, r := range results {
+109			if r.Class == dao.RetentionDirect {
+110				direct = r
+111			}
+112		}
+113		if !direct.Drained {
+114			t.Fatalf("direct.Drained = false, want true")
+115		}
+116		if direct.RowsExamined != 240 || direct.RowsDeleted != 240 {
+117			t.Errorf("direct RowsExamined/RowsDeleted = %d/%d, want 240/240 (summed across all 3 batches)", direct.RowsExamined, direct.RowsDeleted)
+118		}
+119		if f.calls[dao.RetentionDirect] != 3 {
+120			t.Errorf("DeleteExpired called %d times for direct, want 3 (one per scripted batch)", f.calls[dao.RetentionDirect])
+121		}
+122	}
+123	
+124	func TestRun_EveryClassCalledOnceEachWithItsOwnPredicate(t *testing.T) {
+125		f := allDrainedFake()
+126		Run(context.Background(), f, time.Now(), &amp;fakeMetricEmitter{}, nil, 0)
+127	
+128		for _, c := range allClasses {
+129			if f.calls[c] != 1 {
+130				t.Errorf("class %q called %d times, want exactly 1 (each class drains in its own scripted single batch)", c, f.calls[c])
+131			}
+132		}
+133		if len(f.calls) != len(allClasses) {
+134			t.Errorf("DeleteExpired called for %d distinct classes, want exactly %d — never a mixed/shared predicate", len(f.calls), len(allClasses))
+135		}
+136	}
+137	
+138	func TestRun_MetricsOnlyEmittedOnDrained(t *testing.T) {
+139		f := newFakeExpirySweeper()
+140		f.script(dao.RetentionDirect,
+141			batchResult{result: dao.SweepResult{RowsExamined: 5, RowsDeleted: 5, Drained: false}},
+142			batchResult{result: dao.SweepResult{RowsExamined: 5, RowsDeleted: 5, Drained: true}},
+143		)
+144		f.script(dao.RetentionIDPCache, batchResult{result: dao.SweepResult{RowsExamined: 1, RowsDeleted: 1, Drained: true}})
+145		f.script(dao.RetentionIDPCacheOrphan, batchResult{result: dao.SweepResult{RowsExamined: 1, RowsDeleted: 1, Drained: true}})
+146		emit := &amp;fakeMetricEmitter{}
+147	
+148		Run(context.Background(), f, time.Now(), emit, nil, 0)
+149	
+150		if len(emit.calls) != len(allClasses) {
+151			t.Fatalf("EmitClassMetrics called %d times, want %d (exactly once per class, only on the drained batch — the direct class's first, non-drained batch must not have triggered a call)", len(emit.calls), len(allClasses))
+152		}
+153		for _, c := range emit.calls {
+154			if c.class == dao.RetentionDirect &amp;&amp; (c.rowsExamined != 10 || c.rowsDeleted != 10) {
+155				t.Errorf("direct metrics = examined=%d deleted=%d, want 10/10 (summed across both batches, emitted once at Drained)", c.rowsExamined, c.rowsDeleted)
+156			}
+157		}
+158	}
+159	
+160	func TestRun_OldestSurvivingAtNilWhenNoRowsRemain(t *testing.T) {
+161		f := allDrainedFake() // default: OldestSurvivingAt nil on every class
+162		emit := &amp;fakeMetricEmitter{}
+163	
+164		Run(context.Background(), f, time.Now(), emit, nil, 0)
+165	
+166		for _, c := range emit.calls {
+167			if c.oldestSurvivingRowAgeSeconds != nil {
+168				t.Errorf("class %q: oldestSurvivingRowAgeSeconds = %v, want nil (SweepResult.OldestSurvivingAt was nil)", c.class, *c.oldestSurvivingRowAgeSeconds)
+169			}
+170		}
+171	}
+172	
+173	func TestRun_OldestSurvivingAtConvertedToAgeSeconds(t *testing.T) {
+174		now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+175		oldest := now.Add(-2 * time.Hour)
+176		f := newFakeExpirySweeper()
+177		f.script(dao.RetentionDirect, batchResult{result: dao.SweepResult{RowsExamined: 1, RowsDeleted: 0, Drained: true, OldestSurvivingAt: &amp;oldest}})
+178		f.script(dao.RetentionIDPCache, batchResult{result: dao.SweepResult{Drained: true}})
+179		f.script(dao.RetentionIDPCacheOrphan, batchResult{result: dao.SweepResult{Drained: true}})
+180		emit := &amp;fakeMetricEmitter{}
+181	
+182		Run(context.Background(), f, now, emit, nil, 0)
+183	
+184		var got *float64
+185		for _, c := range emit.calls {
+186			if c.class == dao.RetentionDirect {
+187				got = c.oldestSurvivingRowAgeSeconds
+188			}
+189		}
+190		if got == nil {
+191			t.Fatalf("direct: oldestSurvivingRowAgeSeconds = nil, want ~7200 (2 hours)")
+192		}
+193		if *got != 2*60*60 {
+194			t.Errorf("direct: oldestSurvivingRowAgeSeconds = %v, want 7200", *got)
+195		}
+196	}
+197	
+198	func TestRun_AlreadyCancelledContextDeletesNothing(t *testing.T) {
+199		f := allDrainedFake() // would panic if DeleteExpired is ever actually called, past the first cancellation check
+200		emit := &amp;fakeMetricEmitter{}
+201	
+202		ctx, cancel := context.WithCancel(context.Background())
+203		cancel()
+204	
+205		results := Run(ctx, f, time.Now(), emit, nil, 0)
+206	
+207		for _, r := range results {
+208			if r.Err == nil {
+209				t.Errorf("class %q: Err = nil, want context.Canceled — an already-cancelled context must stop before deleting anything", r.Class)
+210			}
+211			if !errors.Is(r.Err, context.Canceled) {
+212				t.Errorf("class %q: Err = %v, want context.Canceled", r.Class, r.Err)
+213			}
+214		}
+215		for c, n := range f.calls {
+216			if n != 0 {
+217				t.Errorf("class %q: DeleteExpired called %d times against an already-cancelled context, want 0", c, n)
+218			}
+219		}
+220		if len(emit.calls) != 0 {
+221			t.Errorf("EmitClassMetrics called %d times, want 0 — nothing drained, nothing to report", len(emit.calls))
+222		}
+223		if emit.runStartedCall != 1 {
+224			t.Errorf("MarkRunStarted called %d times, want exactly 1 — the skip-visibility heartbeat must fire even when every class fails immediately on an already-cancelled context", emit.runStartedCall)
+225		}
+226	}
+227	
+228	func TestRun_OneClassErrorDoesNotBlockTheOthers(t *testing.T) {
+229		f := allDrainedFake()
+230		f.script(dao.RetentionIDPCache, batchResult{err: errors.New("connection reset by peer")})
+231		emit := &amp;fakeMetricEmitter{}
+232	
+233		results := Run(context.Background(), f, time.Now(), emit, nil, 0)
+234	
+235		byClass := make(map[dao.RetentionClass]ClassResult)
+236		for _, r := range results {
+237			byClass[r.Class] = r
+238		}
+239		if byClass[dao.RetentionIDPCache].Err == nil {
+240			t.Errorf("idp_cache: Err = nil, want the scripted error")
+241		}
+242		if !byClass[dao.RetentionDirect].Drained || !byClass[dao.RetentionIDPCacheOrphan].Drained {
+243			t.Errorf("direct/idp_cache_orphan must still complete even though idp_cache failed: %+v / %+v", byClass[dao.RetentionDirect], byClass[dao.RetentionIDPCacheOrphan])
+244		}
+245	
+246		for _, c := range emit.calls {
+247			if c.class == dao.RetentionIDPCache {
+248				t.Errorf("idp_cache metrics were emitted despite the class ending in error — a failed class must never report a (misleadingly partial) metric")
+249			}
+250		}
+251	}
+252	
+253	// TestPrometheusMetricEmitter_WriteToProducesRealExpositionFormat is
+254	// LT-49's own criterion that these values reach an actual
+255	// prometheus.Client registration, not just a log.Printf — asserts the
+256	// rendered text is genuinely parseable Prometheus exposition format
+257	// (not merely "some bytes were written"), carries the exact metric
+258	// names/label values observability.md specifies, and that
+259	// sweep_last_run_timestamp_seconds is present even for a class that
+260	// never drained (the skip-visibility heartbeat, set unconditionally by
+261	// MarkRunStarted, independent of any class's own success).
+262	func TestPrometheusMetricEmitter_WriteToProducesRealExpositionFormat(t *testing.T) {
+263		now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+264		e := NewPrometheusMetricEmitter()
+265		e.MarkRunStarted(now)
+266		age := 3600.0
+267		e.EmitClassMetrics(dao.RetentionDirect, 10, 5, &amp;age)
+268		e.EmitClassMetrics(dao.RetentionIDPCacheOrphan, 0, 0, nil)
+269		// idp_cache deliberately never emitted here — simulating a class
+270		// that errored before draining; its own metrics must simply be
+271		// absent, not present-with-zero-values.
+272	
+273		var buf bytes.Buffer
+274		if err := e.Render(&amp;buf); err != nil {
+275			t.Fatalf("WriteTo: %v", err)
+276		}
+277	
+278		parser := expfmt.NewTextParser(model.LegacyValidation)
+279		families, err := parser.TextToMetricFamilies(&amp;buf)
+280		if err != nil {
+281			t.Fatalf("rendered output is not valid Prometheus exposition format: %v\noutput:\n%s", err, buf.String())
+282		}
+283	
+284		for _, name := range []string{"rows_examined", "rows_deleted", "oldest_surviving_row_age_seconds", "sweep_last_run_timestamp_seconds"} {
+285			if _, ok := families[name]; !ok {
+286				t.Errorf("metric family %q missing from rendered output", name)
+287			}
+288		}
+289	
+290		ts := families["sweep_last_run_timestamp_seconds"].GetMetric()
+291		if len(ts) != 1 || ts[0].GetGauge().GetValue() != float64(now.Unix()) {
+292			t.Errorf("sweep_last_run_timestamp_seconds = %+v, want a single sample = %d", ts, now.Unix())
+293		}
+294	
+295		found := map[string]bool{}
+296		for _, m := range families["rows_examined"].GetMetric() {
+297			for _, lp := range m.GetLabel() {
+298				if lp.GetName() == "class" {
+299					found[lp.GetValue()] = true
+300				}
+301			}
+302		}
+303		if found["idp_cache"] {
+304			t.Errorf("rows_examined has a sample for class=idp_cache, but that class was never emitted (simulating a failed, undrained class) — a failed class must never appear, even at zero")
+305		}
+306		if !found["direct"] || !found["idp_cache_orphan"] {
+307			t.Errorf("rows_examined missing expected class labels: found=%v", found)
+308		}
+309	}
+310	
+311	// fakeRunRecorder is a minimal hand-written fake for RunRecorder, per
+312	// decisions/test-double-strategy.md.
+313	type fakeRunRecorder struct {
+314		nextRunID     int
+315		startCalls    []dao.RetentionClass
+316		finishCalls   []finishCall
+317		pruneCalls    []time.Time
+318		startErr      error
+319		finishErr     error
+320		pruneErr      error
+321		missedSlotsFn func(class dao.RetentionClass) int
+322	}
+323	
+324	type finishCall struct {
+325		runID             string
+326		rowsExamined      int
+327		rowsDeleted       int
+328		drained           bool
+329		oldestSurvivingAt *time.Time
+330	}
+331	
+332	func (f *fakeRunRecorder) StartRun(_ context.Context, class dao.RetentionClass, _ time.Time, _ time.Duration) (string, int, error) {
+333		f.startCalls = append(f.startCalls, class)
+334		if f.startErr != nil {
+335			return "", 0, f.startErr
+336		}
+337		f.nextRunID++
+338		missed := 0
+339		if f.missedSlotsFn != nil {
+340			missed = f.missedSlotsFn(class)
+341		}
+342		return fmt.Sprintf("run-%d", f.nextRunID), missed, nil
+343	}
+344	
+345	func (f *fakeRunRecorder) FinishRun(_ context.Context, runID string, _ time.Time, rowsExamined, rowsDeleted int, drained bool, oldestSurvivingAt *time.Time) error {
+346		f.finishCalls = append(f.finishCalls, finishCall{runID, rowsExamined, rowsDeleted, drained, oldestSurvivingAt})
+347		return f.finishErr
+348	}
+349	
+350	func (f *fakeRunRecorder) PruneOlderThan(_ context.Context, cutoff time.Time) error {
+351		f.pruneCalls = append(f.pruneCalls, cutoff)
+352		return f.pruneErr
+353	}
+354	
+355	func TestRun_RecorderStartedAndFinishedOncePerDrainedClass(t *testing.T) {
+356		f := allDrainedFake()
+357		recorder := &amp;fakeRunRecorder{}
+358	
+359		Run(context.Background(), f, time.Now(), &amp;fakeMetricEmitter{}, recorder, time.Hour)
+360	
+361		if len(recorder.startCalls) != len(allClasses) {
+362			t.Fatalf("StartRun called %d times, want %d (once per class)", len(recorder.startCalls), len(allClasses))
+363		}
+364		if len(recorder.finishCalls) != len(allClasses) {
+365			t.Fatalf("FinishRun called %d times, want %d (every class drained)", len(recorder.finishCalls), len(allClasses))
+366		}
+367		for i, c := range recorder.finishCalls {
+368			if !c.drained {
+369				t.Errorf("finishCalls[%d].drained = false, want true", i)
+370			}
+371			if c.runID == "" {
+372				t.Errorf("finishCalls[%d].runID is empty, want the id StartRun returned", i)
+373			}
+374		}
+375	}
+376	
+377	func TestRun_RecorderNotFinishedWhenClassErrors(t *testing.T) {
+378		f := allDrainedFake()
+379		f.script(dao.RetentionIDPCache, batchResult{err: errors.New("connection reset")})
+380		recorder := &amp;fakeRunRecorder{}
+381	
+382		Run(context.Background(), f, time.Now(), &amp;fakeMetricEmitter{}, recorder, time.Hour)
+383	
+384		if len(recorder.startCalls) != len(allClasses) {
+385			t.Fatalf("StartRun called %d times, want %d — every class gets a start row even if it later errors", len(recorder.startCalls), len(allClasses))
+386		}
+387		// Only 2 of 3 classes drain (idp_cache errors) — its row must stay
+388		// at finished_at == NULL (§3d's "started and died" state), so
+389		// FinishRun must NOT be called for it.
+390		if len(recorder.finishCalls) != len(allClasses)-1 {
+391			t.Errorf("FinishRun called %d times, want %d (idp_cache errored and must not be finished)", len(recorder.finishCalls), len(allClasses)-1)
+392		}
+393	}
+394	
+395	func TestRun_RecorderPrunedOncePerRun(t *testing.T) {
+396		f := allDrainedFake()
+397		recorder := &amp;fakeRunRecorder{}
+398		now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+399	
+400		Run(context.Background(), f, now, &amp;fakeMetricEmitter{}, recorder, time.Hour)
+401	
+402		if len(recorder.pruneCalls) != 1 {
+403			t.Fatalf("PruneOlderThan called %d times, want exactly 1 (once per Run, not per class)", len(recorder.pruneCalls))
+404		}
+405		wantCutoff := now.Add(-retentionSweepRunRetention)
+406		if !recorder.pruneCalls[0].Equal(wantCutoff) {
+407			t.Errorf("PruneOlderThan called with cutoff %v, want %v (30 days before now)", recorder.pruneCalls[0], wantCutoff)
+408		}
+409	}
+410	
+411	func TestRun_RecorderErrorsAreNonFatal(t *testing.T) {
+412		f := allDrainedFake()
+413		recorder := &amp;fakeRunRecorder{startErr: errors.New("db write failed"), finishErr: errors.New("db write failed"), pruneErr: errors.New("db write failed")}
+414	
+415		results := Run(context.Background(), f, time.Now(), &amp;fakeMetricEmitter{}, recorder, time.Hour)
+416	
+417		// The sweep's own real work (deletion) must succeed regardless of
+418		// whether the observability persistence layer is healthy — a
+419		// database hiccup on retention_sweep_run must never be reported as
+420		// a failed sweep.
+421		for _, r := range results {
+422			if r.Err != nil {
+423				t.Errorf("class %q: Err = %v, want nil — a RunRecorder failure must not fail the sweep itself", r.Class, r.Err)
+424			}
+425			if !r.Drained {
+426				t.Errorf("class %q: Drained = false, want true", r.Class)
+427			}
+428		}
+429	}
+430	</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; find migrations -iname '</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; find migrations -iname '*retention_sweep_run*' -exec echo {} \\; -exec cat {} \\;"
+}</pre><div class="lbl">result</div><pre>migrations/sqlite/00002_retention_sweep_run.sql
+-- +goose Up
+-- Amendment A7 (05-data-ops/multi-db-strategy.md §3d) — same table and
+-- constraint names as migrations/postgres/00003_retention_sweep_run.sql
+-- and migrations/cockroachdb/00003_retention_sweep_run.sql, in SQLite
+-- types: TEXT for UUID/TIMESTAMPTZ (stored RFC3339, UTC, "Z" suffix —
+-- required for chronological sort on this backend, per §3d's own
+-- conformance note: a local-offset or variable-width rendering sorts
+-- lexicographically into the wrong order here alone), INTEGER for
+-- BOOLEAN, matching this project's existing convention (see
+-- 00001_initial_schema.sql).
+CREATE TABLE retention_sweep_run (
+	id TEXT,
+	class TEXT NOT NULL,
+	started_at TEXT NOT NULL,
+	finished_at TEXT,
+	rows_examined INTEGER NOT NULL DEFAULT 0,
+	rows_deleted INTEGER NOT NULL DEFAULT 0,
+	oldest_surviving_at TEXT,
+	drained INTEGER NOT NULL DEFAULT 0,
+	missed_slots INTEGER NOT NULL DEFAULT 0,
+	CONSTRAINT pk_retention_sweep_run PRIMARY KEY (id),
+	CONSTRAINT ck_retention_sweep_run_class CHECK (class IN ('direct', 'idp_cache', 'idp_cache_orphan')),
+	CONSTRAINT ck_retention_sweep_run_drained CHECK (drained != 0 OR oldest_surviving_at IS NULL)
+);
+
+CREATE INDEX idx_retention_sweep_run_class_finished_at ON retention_sweep_run (class, finished_at DESC);
+
+-- +goose Down
+DROP TABLE retention_sweep_run;
+migrations/postgres/00003_retention_sweep_run.sql
+-- +goose Up
+-- Amendment A7 (05-data-ops/multi-db-strategy.md §3d): the retention
+-- sweep persists its per-class result here so api-service (the always-up
+-- pod) can expose it to Prometheus over /metrics — the sweep's CronJob
+-- pod and the scraper never overlap in time, so the result has to live
+-- somewhere the scraper can read it. Written twice per run (INSERT at
+-- start with finished_at NULL, UPDATE at completion) so no row, a row
+-- with NULL finished_at, and a row with finished_at distinguish skipped-
+-- or-dead, started-and-died, and completed — the same three-states-in-
+-- one-null defect secret_state exists to prevent. Not a RetentionClass,
+-- not written to deletion_log, self-pruned by the sweep at 30 days (all
+-- per §3d — this table holds operational metadata, no PII).
+CREATE TABLE retention_sweep_run (
+	id UUID DEFAULT gen_random_uuid(),
+	class TEXT NOT NULL,
+	started_at TIMESTAMPTZ NOT NULL,
+	finished_at TIMESTAMPTZ,
+	rows_examined INTEGER NOT NULL DEFAULT 0,
+	rows_deleted INTEGER NOT NULL DEFAULT 0,
+	oldest_surviving_at TIMESTAMPTZ,
+	drained BOOLEAN NOT NULL DEFAULT false,
+	missed_slots INTEGER NOT NULL DEFAULT 0,
+	CONSTRAINT pk_retention_sweep_run PRIMARY KEY (id),
+	CONSTRAINT ck_retention_sweep_run_class CHECK (class IN ('direct', 'idp_cache', 'idp_cache_orphan')),
+	-- oldest_surviving_at is meaningful only from a drained result (§3c)
+	-- — a non-drained row carrying one must be unrepresentable, not
+	-- merely discouraged. NULL with drained stays legal (an empty class).
+	CONSTRAINT ck_retention_sweep_run_drained CHECK (drained OR oldest_surviving_at IS NULL)
+);
+
+-- Serves both reads: latest-per-class for the gauges, and the rolling-day
+-- scan for the skip rate.
+CREATE INDEX idx_retention_sweep_run_class_finished_at ON retention_sweep_run (class, finished_at DESC);
+
+-- +goose Down
+DROP TABLE retention_sweep_run;
+migrations/cockroachdb/00003_retention_sweep_run.sql
+-- +goose Up
+-- Amendment A7 (05-data-ops/multi-db-strategy.md §3d) — identical to
+-- migrations/postgres/00003_retention_sweep_run.sql; this table has no
+-- COLLATE clause or trigram index for A5's own split to apply to, so
+-- there is no divergence between the two engines here. Same constraint
+-- names as migrations/postgres/ and migrations/sqlite/ so all three stay
+-- diffable against each other.
+CREATE TABLE retention_sweep_run (
+	id UUID DEFAULT gen_random_uuid(),
+	class TEXT NOT NULL,
+	started_at TIMESTAMPTZ NOT NULL,
+	finished_at TIMESTAMPTZ,
+	rows_examined INTEGER NOT NULL DEFAULT 0,
+	rows_deleted INTEGER NOT NULL DEFAULT 0,
+	oldest_surviving_at TIMESTAMPTZ,
+	drained BOOLEAN NOT NULL DEFAULT false,
+	missed_slots INTEGER NOT NULL DEFAULT 0,
+	CONSTRAINT pk_retention_sweep_run PRIMARY KEY (id),
+	CONSTRAINT ck_retention_sweep_run_class CHECK (class IN ('direct', 'idp_cache', 'idp_cache_orphan')),
+	CONSTRAINT ck_retention_sweep_run_drained CHECK (drained OR oldest_surviving_at IS NULL)
+);
+
+CREATE INDEX idx_retention_sweep_run_class_finished_at ON retention_sweep_run (class, finished_at DESC);
+
+-- +goose Down
+DROP TABLE retention_sweep_run;</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:36 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore_test.go"
+}</pre><div class="lbl">result</div><pre>1	package sweepstore
+2	
+3	import (
+4		"context"
+5		"database/sql"
+6		"fmt"
+7		"math/rand"
+8		"os"
+9		"path/filepath"
+10		"runtime"
+11		"strings"
+12		"testing"
+13		"time"
+14	
+15		"loginid-takehome/internal/dao"
+16	)
+17	
+18	func repoRoot(t *testing.T) string {
+19		t.Helper()
+20		_, thisFile, _, ok := runtime.Caller(0)
+21		if !ok {
+22			t.Fatal("could not determine test file location")
+23		}
+24		return filepath.Join(filepath.Dir(thisFile), "..", "..")
+25	}
+26	
+27	// migrationSQL reads a goose-format migration file's Up section — the
+28	// real migration file, per this project's own established convention
+29	// (see internal/dao/postgres/testutil_test.go), not a hand-copied
+30	// schema.
+31	func migrationSQL(t *testing.T, path string) string {
+32		t.Helper()
+33		b, err := os.ReadFile(path)
+34		if err != nil {
+35			t.Fatalf("reading migration %s: %v", path, err)
+36		}
+37		content := string(b)
+38		upStart := strings.Index(content, "-- +goose Up")
+39		downStart := strings.Index(content, "-- +goose Down")
+40		if upStart == -1 || downStart == -1 {
+41			t.Fatalf("migration %s missing +goose Up/Down markers", path)
+42		}
+43		return content[upStart+len("-- +goose Up") : downStart]
+44	}
+45	
+46	// setupPostgres connects to this package's throwaway database (see
+47	// testmain_test.go), applies the real retention_sweep_run migration
+48	// into a fresh schema, and returns a ready-to-use *Store plus a raw
+49	// *sql.DB for test-side assertions/fixtures. Fails loudly (not skips)
+50	// if TEST_POSTGRES_DSN is unset in CI, matching this project's own
+51	// established fail-not-skip convention.
+52	func setupPostgres(t *testing.T) (*Store, *sql.DB) {
+53		t.Helper()
+54		if testDBDSN == "" {
+55			if os.Getenv("CI") != "" {
+56				t.Fatalf("TEST_POSTGRES_DSN not set in CI — the sweepstore integration gate is not running")
+57			}
+58			t.Skip("TEST_POSTGRES_DSN not set — skipping sweepstore Postgres integration test")
+59		}
+60	
+61		db, err := sql.Open("pgx", testDBDSN)
+62		if err != nil {
+63			t.Fatalf("opening TEST_POSTGRES_DSN: %v", err)
+64		}
+65		t.Cleanup(func() { _ = db.Close() })
+66		db.SetMaxOpenConns(1)
+67	
+68		schemaName := fmt.Sprintf("test_sweepstore_%d", rand.Int63())
+69		if _, err := db.Exec("CREATE SCHEMA " + schemaName); err != nil {
+70			t.Fatalf("creating test schema: %v", err)
+71		}
+72		t.Cleanup(func() { _, _ = db.Exec("DROP SCHEMA " + schemaName + " CASCADE") })
+73		if _, err := db.Exec("SET search_path TO " + schemaName); err != nil {
+74			t.Fatalf("setting search_path: %v", err)
+75		}
+76	
+77		root := repoRoot(t)
+78		migration := migrationSQL(t, filepath.Join(root, "migrations", "postgres", "00003_retention_sweep_run.sql"))
+79		if _, err := db.Exec(migration); err != nil {
+80			t.Fatalf("applying retention_sweep_run migration: %v", err)
+81		}
+82	
+83		return NewStore(db, "pgx"), db
+84	}
+85	
+86	// setupSQLite is trivial by comparison — an in-memory, shared-cache
+87	// database, no schema isolation needed since each test gets its own.
+88	func setupSQLite(t *testing.T) (*Store, *sql.DB) {
+89		t.Helper()
+90		dsn := fmt.Sprintf("file:sweepstore_%d?mode=memory&amp;cache=shared", rand.Int63())
+91		db, err := sql.Open("sqlite", dsn)
+92		if err != nil {
+93			t.Fatalf("opening sqlite: %v", err)
+94		}
+95		t.Cleanup(func() { _ = db.Close() })
+96		db.SetMaxOpenConns(1)
+97	
+98		root := repoRoot(t)
+99		migration := migrationSQL(t, filepath.Join(root, "migrations", "sqlite", "00002_retention_sweep_run.sql"))
+100		if _, err := db.Exec(migration); err != nil {
+101			t.Fatalf("applying retention_sweep_run migration: %v", err)
+102		}
+103	
+104		return NewStore(db, "sqlite"), db
+105	}
+106	
+107	// backends lets every guarantee below run against both real
+108	// implementations from one table-driven test, per this project's own
+109	// conformance-suite convention.
+110	func backends(t *testing.T) []struct {
+111		name  string
+112		store *Store
+113		db    *sql.DB
+114	} {
+115		pgStore, pgDB := setupPostgres(t)
+116		sqliteStore, sqliteDB := setupSQLite(t)
+117		return []struct {
+118			name  string
+119			store *Store
+120			db    *sql.DB
+121		}{
+122			{"postgres", pgStore, pgDB},
+123			{"sqlite", sqliteStore, sqliteDB},
+124		}
+125	}
+126	
+127	func TestStartRunFinishRun_RoundTrip(t *testing.T) {
+128		for _, b := range backends(t) {
+129			t.Run(b.name, func(t *testing.T) {
+130				ctx := context.Background()
+131				startedAt := time.Date(2026, 9, 13, 3, 0, 0, 0, time.UTC)
+132	
+133				runID, missedSlots, err := b.store.StartRun(ctx, dao.RetentionDirect, startedAt, time.Hour)
+134				if err != nil {
+135					t.Fatalf("StartRun: %v", err)
+136				}
+137				if runID == "" {
+138					t.Fatal("StartRun returned an empty runID")
+139				}
+140				if missedSlots != 0 {
+141					t.Errorf("missedSlots = %d, want 0 (no prior completed run for this class)", missedSlots)
+142				}
+143	
+144				finishedAt := startedAt.Add(5 * time.Second)
+145				oldest := startedAt.Add(-48 * time.Hour)
+146				if err := b.store.FinishRun(ctx, runID, finishedAt, 42, 10, true, &amp;oldest); err != nil {
+147					t.Fatalf("FinishRun: %v", err)
+148				}
+149	
+150				snaps, err := b.store.LatestSnapshots(ctx)
+151				if err != nil {
+152					t.Fatalf("LatestSnapshots: %v", err)
+153				}
+154				var got *ClassSnapshot
+155				for i := range snaps {
+156					if snaps[i].Class == dao.RetentionDirect {
+157						got = &amp;snaps[i]
+158					}
+159				}
+160				if got == nil {
+161					t.Fatalf("no snapshot for class %q", dao.RetentionDirect)
+162				}
+163				if got.RowsExamined != 42 || got.RowsDeleted != 10 {
+164					t.Errorf("RowsExamined/RowsDeleted = %d/%d, want 42/10", got.RowsExamined, got.RowsDeleted)
+165				}
+166				if got.LastFinishedAt == nil || !got.LastFinishedAt.Equal(finishedAt) {
+167					t.Errorf("LastFinishedAt = %v, want %v", got.LastFinishedAt, finishedAt)
+168				}
+169				if got.OldestSurvivingAt == nil || !got.OldestSurvivingAt.Equal(oldest) {
+170					t.Errorf("OldestSurvivingAt = %v, want %v", got.OldestSurvivingAt, oldest)
+171				}
+172				if got.LastRunDurationSeconds == nil || *got.LastRunDurationSeconds != 5 {
+173					t.Errorf("LastRunDurationSeconds = %v, want 5", got.LastRunDurationSeconds)
+174				}
+175			})
+176		}
+177	}
+178	
+179	// TestLastRunDuration_SubSecondPrecisionNeverNegative is a regression
+180	// test for a real bug caught by live end-to-end testing, not by any
+181	// unit test (every other test in this file used gaps of a second or
+182	// more, which happened not to exercise it): converting a pgx-native
+183	// time.Time to a string via plain RFC3339 truncates sub-second
+184	// precision, so a started_at/finished_at pair a few milliseconds apart
+185	// — the realistic case for a fast, near-empty sweep — could round to
+186	// the same second or swap order, producing a small NEGATIVE duration.
+187	// preciseTimeLayout (fixed-width nanosecond precision) fixes this; this
+188	// test pins the fix with a sub-second gap specifically, on both
+189	// backends, so the exact bug can't silently return.
+190	func TestLastRunDuration_SubSecondPrecisionNeverNegative(t *testing.T) {
+191		for _, b := range backends(t) {
+192			t.Run(b.name, func(t *testing.T) {
+193				ctx := context.Background()
+194				startedAt := time.Date(2026, 9, 13, 19, 16, 8, 168726000, time.UTC)
+195				finishedAt := time.Date(2026, 9, 13, 19, 16, 8, 191736000, time.UTC) // 23.01ms later
+196	
+197				runID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, startedAt, 0)
+198				if err != nil {
+199					t.Fatalf("StartRun: %v", err)
+200				}
+201				if err := b.store.FinishRun(ctx, runID, finishedAt, 1, 1, true, nil); err != nil {
+202					t.Fatalf("FinishRun: %v", err)
+203				}
+204	
+205				snaps, err := b.store.LatestSnapshots(ctx)
+206				if err != nil {
+207					t.Fatalf("LatestSnapshots: %v", err)
+208				}
+209				var got *ClassSnapshot
+210				for i := range snaps {
+211					if snaps[i].Class == dao.RetentionDirect {
+212						got = &amp;snaps[i]
+213					}
+214				}
+215				if got == nil {
+216					t.Fatalf("no snapshot for class %q", dao.RetentionDirect)
+217				}
+218				if got.LastRunDurationSeconds == nil {
+219					t.Fatalf("LastRunDurationSeconds is nil, want ~0.023")
+220				}
+221				if *got.LastRunDurationSeconds &lt; 0 {
+222					t.Errorf("LastRunDurationSeconds = %v, want a small POSITIVE value — negative means sub-second precision was lost somewhere in the round trip", *got.LastRunDurationSeconds)
+223				}
+224				const want = 0.023010
+225				const tolerance = 0.001
+226				if diff := *got.LastRunDurationSeconds - want; diff &lt; -tolerance || diff &gt; tolerance {
+227					t.Errorf("LastRunDurationSeconds = %v, want ~%v (±%v)", *got.LastRunDurationSeconds, want, tolerance)
+228				}
+229			})
+230		}
+231	}
+232	
+233	func TestStartRun_UnfinishedRunHasNoLastFinishedOrDuration(t *testing.T) {
+234		for _, b := range backends(t) {
+235			t.Run(b.name, func(t *testing.T) {
+236				ctx := context.Background()
+237				_, _, err := b.store.StartRun(ctx, dao.RetentionIDPCache, time.Now(), time.Hour)
+238				if err != nil {
+239					t.Fatalf("StartRun: %v", err)
+240				}
+241				// Deliberately never call FinishRun — simulating "started
+242				// and died" (§3d's second distinguishable state).
+243	
+244				snaps, err := b.store.LatestSnapshots(ctx)
+245				if err != nil {
+246					t.Fatalf("LatestSnapshots: %v", err)
+247				}
+248				var got *ClassSnapshot
+249				for i := range snaps {
+250					if snaps[i].Class == dao.RetentionIDPCache {
+251						got = &amp;snaps[i]
+252					}
+253				}
+254				if got == nil {
+255					t.Fatalf("no snapshot for class %q", dao.RetentionIDPCache)
+256				}
+257				if got.LastFinishedAt != nil {
+258					t.Errorf("LastFinishedAt = %v, want nil (never finished)", got.LastFinishedAt)
+259				}
+260				if got.LastRunDurationSeconds != nil {
+261					t.Errorf("LastRunDurationSeconds = %v, want nil (never finished)", *got.LastRunDurationSeconds)
+262				}
+263				if got.RowsExamined != 0 || got.RowsDeleted != 0 {
+264					t.Errorf("RowsExamined/RowsDeleted = %d/%d, want 0/0 (row's own DEFAULT, never updated)", got.RowsExamined, got.RowsDeleted)
+265				}
+266			})
+267		}
+268	}
+269	
+270	func TestStartRun_MissedSlotsComputedAgainstInterval(t *testing.T) {
+271		for _, b := range backends(t) {
+272			t.Run(b.name, func(t *testing.T) {
+273				ctx := context.Background()
+274				interval := time.Hour
+275	
+276				first := time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)
+277				runID, missed, err := b.store.StartRun(ctx, dao.RetentionIDPCacheOrphan, first, interval)
+278				if err != nil {
+279					t.Fatalf("StartRun (first): %v", err)
+280				}
+281				if missed != 0 {
+282					t.Errorf("first run: missedSlots = %d, want 0 (no prior completed run)", missed)
+283				}
+284				if err := b.store.FinishRun(ctx, runID, first.Add(time.Minute), 1, 1, true, nil); err != nil {
+285					t.Fatalf("FinishRun (first): %v", err)
+286				}
+287	
+288				// Normal case: next run starts almost exactly one interval
+289				// later — zero missed slots.
+290				normalNext := first.Add(time.Minute).Add(interval)
+291				_, missed, err = b.store.StartRun(ctx, dao.RetentionIDPCacheOrphan, normalNext, interval)
+292				if err != nil {
+293					t.Fatalf("StartRun (normal): %v", err)
+294				}
+295				if missed != 0 {
+296					t.Errorf("normal-cadence run: missedSlots = %d, want 0", missed)
+297				}
+298	
+299				// Skipped case: a run starting 3 intervals after the last
+300				// completion should report 2 missed slots (floor(gap/I) - 1).
+301				skippedNext := first.Add(time.Minute).Add(3 * interval)
+302				_, missed, err = b.store.StartRun(ctx, dao.RetentionIDPCacheOrphan, skippedNext, interval)
+303				if err != nil {
+304					t.Fatalf("StartRun (skipped): %v", err)
+305				}
+306				if missed != 2 {
+307					t.Errorf("3-interval-gap run: missedSlots = %d, want 2", missed)
+308				}
+309			})
+310		}
+311	}
+312	
+313	// TestFinishedButNotDrained_ReportsCompletionButNeverOldestSurviving
+314	// covers a run that FINISHED without draining (RetentionSweepNotReporting
+315	// must still see it as "the sweep is reporting" — Priya Nandakumar's (05)
+316	// own framing: "a genuine absence of rows, not a stale scrape," ungated
+317	// on Drained), while OldestSurvivingAt — meaningful only from a Drained
+318	// result — must stay nil, per the table's own tying CHECK.
+319	func TestFinishedButNotDrained_ReportsCompletionButNeverOldestSurviving(t *testing.T) {
+320		for _, b := range backends(t) {
+321			t.Run(b.name, func(t *testing.T) {
+322				ctx := context.Background()
+323				finishedAt := time.Now()
+324				runID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, finishedAt.Add(-time.Second), 0)
+325				if err != nil {
+326					t.Fatalf("StartRun: %v", err)
+327				}
+328				if err := b.store.FinishRun(ctx, runID, finishedAt, 5, 0, false, nil); err != nil {
+329					t.Fatalf("FinishRun: %v", err)
+330				}
+331	
+332				snaps, err := b.store.LatestSnapshots(ctx)
+333				if err != nil {
+334					t.Fatalf("LatestSnapshots: %v", err)
+335				}
+336				for _, s := range snaps {
+337					if s.Class != dao.RetentionDirect {
+338						continue
+339					}
+340					if s.LastFinishedAt == nil || !s.LastFinishedAt.Equal(finishedAt) {
+341						t.Errorf("LastFinishedAt = %v, want %v — a finished-but-not-drained run must still be visible as a completion", s.LastFinishedAt, finishedAt)
+342					}
+343					if s.OldestSurvivingAt != nil {
+344						t.Errorf("OldestSurvivingAt = %v, want nil — this run finished but did not drain, so this field must stay unset", s.OldestSurvivingAt)
+345					}
+346				}
+347			})
+348		}
+349	}
+350	
+351	// TestMissedSlots_ReflectsOnlyTheLatestRun is Priya Nandakumar's (05)
+352	// own correction (refinement/LT-49.md's "Update — mechanism superseded"
+353	// pass): MissedSlots is a point-in-time value from the single most
+354	// recent run, NOT a pre-summed running total across every retained row
+355	// — Theo Bergman's (04) RetentionSweepSkipping alert rule does its own
+356	// sum_over_time() aggregation across a rolling window from repeated
+357	// scrapes, the standard Prometheus pattern, rather than this package
+358	// pre-aggregating server-side (which is what an earlier, since-replaced
+359	// retention_sweep_skipped_total design did).
+360	func TestMissedSlots_ReflectsOnlyTheLatestRun(t *testing.T) {
+361		for _, b := range backends(t) {
+362			t.Run(b.name, func(t *testing.T) {
+363				ctx := context.Background()
+364				interval := time.Minute
+365				t0 := time.Now()
+366	
+367				runID, _, err := b.store.StartRun(ctx, dao.RetentionIDPCache, t0, interval)
+368				if err != nil {
+369					t.Fatalf("StartRun 1: %v", err)
+370				}
+371				if err := b.store.FinishRun(ctx, runID, t0, 1, 1, true, nil); err != nil {
+372					t.Fatalf("FinishRun 1: %v", err)
+373				}
+374	
+375				// Second run skips 2 slots (a 3-interval gap since the
+376				// first's completion).
+377				t1 := t0.Add(3 * interval)
+378				runID, missed1, err := b.store.StartRun(ctx, dao.RetentionIDPCache, t1, interval)
+379				if err != nil {
+380					t.Fatalf("StartRun 2: %v", err)
+381				}
+382				if missed1 != 2 {
+383					t.Fatalf("second run's own missedSlots = %d, want 2 (test setup assumption)", missed1)
+384				}
+385				if err := b.store.FinishRun(ctx, runID, t1, 1, 1, true, nil); err != nil {
+386					t.Fatalf("FinishRun 2: %v", err)
+387				}
+388	
+389				// Third run is on-schedule (missedSlots = 0) — the LATEST
+390				// run's own value, which must be what LatestSnapshots
+391				// reports, not 2 (the previous run's value) and not 2
+392				// (a sum of the two).
+393				t2 := t1.Add(interval)
+394				_, missed2, err := b.store.StartRun(ctx, dao.RetentionIDPCache, t2, interval)
+395				if err != nil {
+396					t.Fatalf("StartRun 3: %v", err)
+397				}
+398				if missed2 != 0 {
+399					t.Fatalf("third run's own missedSlots = %d, want 0 (test setup assumption)", missed2)
+400				}
+401	
+402				snaps, err := b.store.LatestSnapshots(ctx)
+403				if err != nil {
+404					t.Fatalf("LatestSnapshots: %v", err)
+405				}
+406				var got *ClassSnapshot
+407				for i := range snaps {
+408					if snaps[i].Class == dao.RetentionIDPCache {
+409						got = &amp;snaps[i]
+410					}
+411				}
+412				if got == nil {
+413					t.Fatalf("no snapshot for class %q", dao.RetentionIDPCache)
+414				}
+415				if got.MissedSlots != 0 {
+416					t.Errorf("MissedSlots = %d, want 0 (the LATEST run's own value, not the previous run's 2, and not a sum)", got.MissedSlots)
+417				}
+418			})
+419		}
+420	}
+421	
+422	func TestPruneOlderThan_RemovesOldRowsOnly(t *testing.T) {
+423		for _, b := range backends(t) {
+424			t.Run(b.name, func(t *testing.T) {
+425				ctx := context.Background()
+426				now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+427	
+428				oldRunID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, now.Add(-40*24*time.Hour), 0)
+429				if err != nil {
+430					t.Fatalf("StartRun (old): %v", err)
+431				}
+432				if err := b.store.FinishRun(ctx, oldRunID, now.Add(-40*24*time.Hour), 1, 1, true, nil); err != nil {
+433					t.Fatalf("FinishRun (old): %v", err)
+434				}
+435	
+436				recentRunID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, now.Add(-1*time.Hour), 0)
+437				if err != nil {
+438					t.Fatalf("StartRun (recent): %v", err)
+439				}
+440				if err := b.store.FinishRun(ctx, recentRunID, now, 2, 2, true, nil); err != nil {
+441					t.Fatalf("FinishRun (recent): %v", err)
+442				}
+443	
+444				if err := b.store.PruneOlderThan(ctx, now.Add(-30*24*time.Hour)); err != nil {
+445					t.Fatalf("PruneOlderThan: %v", err)
+446				}
+447	
+448				snaps, err := b.store.LatestSnapshots(ctx)
+449				if err != nil {
+450					t.Fatalf("LatestSnapshots: %v", err)
+451				}
+452				for _, s := range snaps {
+453					if s.Class == dao.RetentionDirect {
+454						if s.RowsExamined != 2 {
+455							t.Errorf("RowsExamined = %d, want 2 (the recent row) — old row should have been pruned", s.RowsExamined)
+456						}
+457					}
+458				}
+459			})
+460		}
+461	}
+462	
+463	// TestTimestampOrdering_SpreadAcrossAMonth is Priya Nandakumar's (05)
+464	// own named priority conformance assertion (multi-db-strategy.md §3d):
+465	// "the one that bites on exactly one backend." SQLite stores
+466	// TIMESTAMPTZ as TEXT; a text timestamp sorts chronologically only if
+467	// it's zero-padded, fixed-width, and in one offset (RFC3339 UTC, "Z"
+468	// suffix) — a local-offset or variable-width rendering would sort
+469	// lexicographically into the wrong order on SQLite alone, silently
+470	// returning the wrong "latest" row while Postgres/CockroachDB (native
+471	// TIMESTAMPTZ) look fine. Spread over a month, not a single-value round
+472	// trip, since a narrow spread could accidentally still sort correctly
+473	// even with a subtly wrong format.
+474	func TestTimestampOrdering_SpreadAcrossAMonth(t *testing.T) {
+475		for _, b := range backends(t) {
+476			t.Run(b.name, func(t *testing.T) {
+477				ctx := context.Background()
+478				base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+479				var lastRunID string
+480				var lastFinishedAt time.Time
+481				for i := 0; i &lt; 10; i++ {
+482					startedAt := base.AddDate(0, 0, i*3) // spread across ~a month
+483					runID, _, err := b.store.StartRun(ctx, dao.RetentionDirect, startedAt, 0)
+484					if err != nil {
+485						t.Fatalf("StartRun %d: %v", i, err)
+486					}
+487					finishedAt := startedAt.Add(time.Minute)
+488					if err := b.store.FinishRun(ctx, runID, finishedAt, i, i, true, nil); err != nil {
+489						t.Fatalf("FinishRun %d: %v", i, err)
+490					}
+491					lastRunID = runID
+492					lastFinishedAt = finishedAt
+493				}
+494				_ = lastRunID
+495	
+496				snaps, err := b.store.LatestSnapshots(ctx)
+497				if err != nil {
+498					t.Fatalf("LatestSnapshots: %v", err)
+499				}
+500				var got *ClassSnapshot
+501				for i := range snaps {
+502					if snaps[i].Class == dao.RetentionDirect {
+503						got = &amp;snaps[i]
+504					}
+505				}
+506				if got == nil {
+507					t.Fatalf("no snapshot for class %q", dao.RetentionDirect)
+508				}
+509				// The LAST-inserted row (i=9) has the highest RowsExamined
+510				// (9) and the latest started_at — if timestamp ordering is
+511				// wrong on this backend, an earlier row would win instead.
+512				if got.RowsExamined != 9 {
+513					t.
+… truncated (20 KB cap)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; grep -n "APP_MODE\|sweep</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; grep -n \"APP_MODE\\|sweepstore\\|RunRecorder\\|SweepIntervalSeconds\\|metrics\\|sqlDriverNameFor\" cmd/api-service/main.go | head -80"
+}</pre><div class="lbl">result</div><pre>27:	"loginid-takehome/internal/sweepstore"
+38:// sqlDriverNameFor maps cfg.DBDriver ("postgres"/"cockroachdb"/"sqlite" —
+45:func sqlDriverNameFor(daoDriver string) string {
+82:		// "verifier"/"issuer" (config.Load's APP_MODE validation), so
+151:// metricsAddr is the /metrics listener's own address, agreed with Theo
+152:// Bergman (04, PR #68): port 9101, Service port name "metrics" — a
+156:const metricsAddr = ":9101"
+158:// startMetricsServer launches LT-49's /metrics endpoint in its own
+159:// goroutine — a distinct http.Server on metricsAddr, never sharing a
+160:// mux with the main API router. db backs a sweepstore.Store read only
+165:	store := sweepstore.NewStore(db, driverName)
+167:	mux.Handle("GET /metrics", sweepstore.NewMetricsHandler(store))
+169:		if err := http.ListenAndServe(metricsAddr, mux); err != nil {
+170:			log.Printf("api-service: /metrics server on %s stopped: %v", metricsAddr, err)
+173:	log.Printf("api-service: /metrics listening on %s", metricsAddr)
+195:// runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
+214:	intervalDisplay := cfg.SweepIntervalSeconds
+220:	// interval feeds RunRecorder.StartRun's missedSlots computation
+225:	if cfg.SweepIntervalSeconds != "" {
+226:		if secs, err := strconv.Atoi(cfg.SweepIntervalSeconds); err != nil {
+227:			log.Printf("api-service: sweep: SWEEP_INTERVAL_SECONDS=%q is not a valid integer, missed-run tracking disabled for this run: %v", cfg.SweepIntervalSeconds, err)
+248:	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+278:	// not fatal — sweepstore.NewStore is still constructed (its own
+283:	var recorder sweep.RunRecorder
+284:	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+289:			recorder = sweepstore.NewStore(storeDB, driverName)
+293:	metrics := sweep.NewPrometheusMetricEmitter()
+294:	results := sweep.Run(ctx, repo, time.Now(), metrics, recorder, interval)
+313:	// otherwise-successful sweep into a failed Job — the metrics are an
+315:	if err := metrics.Render(os.Stdout); err != nil {
+316:		log.Printf("api-service: sweep: writing metrics: %v", err)
+335:		// APP_MODE=sweep never builds a router or listens on a port.
+377:		if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+405:		// LT-49: /metrics on its own port, per team-lead's routing of
+417:			startMetricsServer(pingDB, sqlDriverNameFor(cfg.DBDriver))
+419:			log.Printf("api-service: /metrics not started — no database configured yet")</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go",
+  "offset": 195,
+  "limit": 130
+}</pre><div class="lbl">result</div><pre>195	// runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
+196	// sweep exactly once against the real database and exit — never starts
+197	// an HTTP server, never builds a router. ctx is derived from
+198	// signal.NotifyContext, not context.Background() alone, so a CronJob
+199	// pod termination (SIGTERM, the normal way Kubernetes asks a Job's pod
+200	// to stop) cancels cleanly through the same path a genuinely-expired
+201	// deadline would, rather than the process being killed mid-batch with
+202	// no chance for internal/sweep's own per-batch loop to notice. This is
+203	// the sweep's own job/scheduler context, never a request-scoped one —
+204	// there is no HTTP request anywhere in this invocation to derive one
+205	// from in the first place.
+206	//
+207	// Exits non-zero if any class's sweep ended in error (not merely
+208	// "still had rows to examine" — internal/sweep.runClass's own loop
+209	// already keeps calling DeleteExpired until Drained or an error, so by
+210	// the time Run returns, every class either drained successfully or hit
+211	// a real error) — a non-zero exit is what makes a failed sweep show up
+212	// as a failed Kubernetes Job, not a silently-succeeding one.
+213	func runSweepMode(cfg config.Config) {
+214		intervalDisplay := cfg.SweepIntervalSeconds
+215		if intervalDisplay == "" {
+216			intervalDisplay = "unset"
+217		}
+218		log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", intervalDisplay)
+219	
+220		// interval feeds RunRecorder.StartRun's missedSlots computation
+221		// (05's §3d) — 0 (unknown) if SWEEP_INTERVAL_SECONDS is unset or
+222		// unparseable, rather than guessing at a schedule this process was
+223		// never told.
+224		var interval time.Duration
+225		if cfg.SweepIntervalSeconds != "" {
+226			if secs, err := strconv.Atoi(cfg.SweepIntervalSeconds); err != nil {
+227				log.Printf("api-service: sweep: SWEEP_INTERVAL_SECONDS=%q is not a valid integer, missed-run tracking disabled for this run: %v", cfg.SweepIntervalSeconds, err)
+228			} else {
+229				interval = time.Duration(secs) * time.Second
+230			}
+231		}
+232	
+233		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+234		if err != nil {
+235			log.Fatalf("api-service: sweep: opening DAO repository: %v", err)
+236		}
+237		defer func() { _ = repo.Close() }()
+238	
+239		// A bounded connectivity check BEFORE anything else touches the
+240		// database — sql.Open above never dials, so without this,
+241		// sweep.Run's own first DeleteExpired call would be the actual
+242		// first connection attempt, made with the signal-derived context
+243		// below (SIGTERM/SIGINT only, no deadline of its own) and no
+244		// timeout of its own either — exactly the hang this fixes. A
+245		// separate *sql.DB, not repo itself: dao.Repository exposes no
+246		// Ping (05's contract doesn't have one), mirroring the same
+247		// pattern the verifier's /healthz probe already uses.
+248		if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+249			pingDB, err := sql.Open(driverName, cfg.DBDSN)
+250			if err != nil {
+251				log.Fatalf("api-service: sweep: opening DB ping handle: %v", err)
+252			}
+253			pingCtx, cancel := context.WithTimeout(context.Background(), sweepDBConnectTimeout)
+254			pingErr := pingDB.PingContext(pingCtx)
+255			cancel()
+256			_ = pingDB.Close()
+257			if pingErr != nil {
+258				log.Printf("api-service: sweep: database unreachable (class=%s) after %s: %v", classifySweepDBConnectError(pingErr), sweepDBConnectTimeout, pingErr)
+259				// os.Exit skips the repo.Close() deferred above (dao.New
+260				// already opened repo's own *sql.DB by this point) —
+261				// deliberate, not an oversight: the process is exiting
+262				// immediately, the OS reclaims the fd/goroutines on exit,
+263				// and sql.DB.Close() has nothing durable to flush. Do not
+264				// "fix" this into a manual repo.Close() call before Exit —
+265				// that would add ordering risk for no real benefit
+266				// (Oren Castellan's review, PR #64).
+267				os.Exit(1)
+268			}
+269		}
+270	
+271		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+272		defer stop()
+273	
+274		// A separate *sql.DB for retention_sweep_run persistence (05's §3d,
+275		// amendment A7) — same reasoning as pingDB above: dao.Repository
+276		// exposes no way to run this package's own raw SQL against its
+277		// underlying connection. A failure to open this handle is logged,
+278		// not fatal — sweepstore.NewStore is still constructed (its own
+279		// calls will simply error per-call, each already handled as a
+280		// logged, non-fatal best-effort in internal/sweep), so a database
+281		// glitch on this one auxiliary table never blocks the sweep's own
+282		// real retention work.
+283		var recorder sweep.RunRecorder
+284		if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+285			if storeDB, err := sql.Open(driverName, cfg.DBDSN); err != nil {
+286				log.Printf("api-service: sweep: opening retention_sweep_run store handle: %v", err)
+287			} else {
+288				defer func() { _ = storeDB.Close() }()
+289				recorder = sweepstore.NewStore(storeDB, driverName)
+290			}
+291		}
+292	
+293		metrics := sweep.NewPrometheusMetricEmitter()
+294		results := sweep.Run(ctx, repo, time.Now(), metrics, recorder, interval)
+295	
+296		failed := false
+297		for _, r := range results {
+298			if r.Err != nil {
+299				failed = true
+300				log.Printf("api-service: sweep: class %q failed after examining %d row(s), deleting %d: %v", r.Class, r.RowsExamined, r.RowsDeleted, r.Err)
+301				continue
+302			}
+303			log.Printf("api-service: sweep: class %q drained, examined %d row(s), deleted %d", r.Class, r.RowsExamined, r.RowsDeleted)
+304		}
+305	
+306		// Rendered once, after every class has been attempted, so the real
+307		// Prometheus-formatted metric lines land together in the pod's
+308		// stdout rather than interleaved with the per-class log lines above
+309		// — LT-49's agreed mechanism with Theo Bergman (04): stdout via
+310		// real client_golang Gauge objects, not a Pushgateway push (none
+311		// runs on this cluster; see PrometheusMetricEmitter's own doc
+312		// comment). A failure to render is logged but never turns an
+313		// otherwise-successful sweep into a failed Job — the metrics are an
+314		// observability nicety this run's own success doesn't depend on.
+315		if err := metrics.Render(os.Stdout); err != nil {
+316			log.Printf("api-service: sweep: writing metrics: %v", err)
+317		}
+318	
+319		if failed {
+320			os.Exit(1)
+321		}
+322	}
+323	
+324	func main() {</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go",
+  "offset": 30,
+  "limit": 55
+}</pre><div class="lbl">result</div><pre>30		// registers the "pgx" database/sql driver this file uses directly
+31		// for the issuer database below — Go dedupes an import by package
+32		// path, so this isn't a second registration, and no separate blank
+33		// import of that package is needed here.
+34		_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+35		_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+36	)
+37	
+38	// sqlDriverNameFor maps cfg.DBDriver ("postgres"/"cockroachdb"/"sqlite" —
+39	// dao.Register's driver names, per dao/factory.go) to the underlying
+40	// database/sql driver name each backend package registers itself under
+41	// (internal/dao/postgres/postgres.go: "pgx"; internal/dao/sqlite/sqlite.go:
+42	// "sqlite") — needed only for LT-52's separate /healthz ping handle, since
+43	// dao.Repository itself exposes no Ping and this is a thin sql.Open, not a
+44	// second copy of either backend's connection logic.
+45	func sqlDriverNameFor(daoDriver string) string {
+46		switch daoDriver {
+47		case "postgres", "cockroachdb":
+48			return "pgx"
+49		case "sqlite":
+50			return "sqlite"
+51		default:
+52			return ""
+53		}
+54	}
+55	
+56	// validateAuthConfig catches exactly the two live-review findings that
+57	// motivated it — first AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE, then
+58	// AUTH_JWKS_URL, silently absent from the deployed manifests, each time
+59	// letting a verifier or issuer come up cleanly and fail in a way that
+60	// looked like an ordinary token-rejection rather than a configuration
+61	// gap. A verifier that quietly 401s everything, or an issuer that mints
+62	// structurally-incomplete tokens, is worse than a crash-loop that names
+63	// the exact missing variable.
+64	//
+65	// Reads config.RequiredAuthEnvVars(service, mode) — the single source of
+66	// truth also read by internal/config's own manifest test — rather than
+67	// hardcoding its own list, so this check and that test can never drift
+68	// apart from each other. Checks the raw environment directly (not cfg's
+69	// already-loaded fields): the manifest test checks for the same env var
+70	// NAMES in the manifest text, so both sides operate on the identical
+71	// primitive.
+72	//
+73	// Kept out of internal/config's shared Load() because AUTH_JWT_AUDIENCE
+74	// is meaningless to cmd/idp-connector (which has its own
+75	// ConnectorJWTAudience instead) and a blanket check in the shared loader
+76	// would wrongly fail that binary's startup too — idp-connector runs the
+77	// equivalent check itself, against its own required list.
+78	func validateAuthConfig(mode app.Mode) error {
+79		required, recognized := config.RequiredAuthEnvVars("api-service", string(mode))
+80		if !recognized {
+81			// app.Mode's own constructor already rejects anything but
+82			// "verifier"/"issuer" (config.Load's APP_MODE validation), so
+83			// reaching this branch means RequiredAuthEnvVars itself has
+84			// drifted out of sync with app.Mode's real values — a bug in</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go",
+  "offset": 150,
+  "limit": 45
+}</pre><div class="lbl">result</div><pre>150	
+151	// metricsAddr is the /metrics listener's own address, agreed with Theo
+152	// Bergman (04, PR #68): port 9101, Service port name "metrics" — a
+153	// separate port from the main API port, since the NetworkPolicy admits
+154	// ns monitoring only here, never to the authenticated search/read
+155	// surface.
+156	const metricsAddr = ":9101"
+157	
+158	// startMetricsServer launches LT-49's /metrics endpoint in its own
+159	// goroutine — a distinct http.Server on metricsAddr, never sharing a
+160	// mux with the main API router. db backs a sweepstore.Store read only
+161	// through SnapshotReader; the reader used here is the exact same
+162	// *sql.DB pingDB already opened for /healthz's own connectivity probe,
+163	// not a third connection pool.
+164	func startMetricsServer(db *sql.DB, driverName string) {
+165		store := sweepstore.NewStore(db, driverName)
+166		mux := http.NewServeMux()
+167		mux.Handle("GET /metrics", sweepstore.NewMetricsHandler(store))
+168		go func() {
+169			if err := http.ListenAndServe(metricsAddr, mux); err != nil {
+170				log.Printf("api-service: /metrics server on %s stopped: %v", metricsAddr, err)
+171			}
+172		}()
+173		log.Printf("api-service: /metrics listening on %s", metricsAddr)
+174	}
+175	
+176	// classifySweepDBConnectError names the failure class in the one
+177	// structured log line runSweepMode emits on a connect failure — a
+178	// human triaging a failed CronJob run needs "timeout" vs "refused" vs
+179	// "unknown" at a glance, without parsing a raw driver error string.
+180	func classifySweepDBConnectError(err error) string {
+181		if errors.Is(err, context.DeadlineExceeded) {
+182			return "connect_timeout"
+183		}
+184		msg := err.Error()
+185		switch {
+186		case strings.Contains(msg, "connection refused"):
+187			return "connection_refused"
+188		case strings.Contains(msg, "no such host"):
+189			return "dns_error"
+190		default:
+191			return "unknown"
+192		}
+193	}
+194	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go",
+  "offset": 360,
+  "limit": 65
+}</pre><div class="lbl">result</div><pre>360			// over a dependency only two of its routes need. repo stays nil;
+361			// NewVerifierRouter fails those two routes closed with 503
+362			// instead of panicking on a nil Repository.
+363			repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+364			if err != nil {
+365				log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+366				repo = nil
+367			}
+368	
+369			// A second, independent *sql.DB purely for /healthz's bounded
+370			// connectivity probe (LT-52 criterion 5) — sql.Open never dials,
+371			// it only validates the driver/DSN, so this never blocks
+372			// startup; PingContext at request time is what actually checks
+373			// connectivity, bounded to dbPingTimeout. Deliberately separate
+374			// from repo above rather than routed through dao.Repository,
+375			// which 05's contract doesn't expose a Ping through.
+376			var pingDB *sql.DB
+377			if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+378				pingDB, err = sql.Open(driverName, cfg.DBDSN)
+379				if err != nil {
+380					log.Printf("api-service: opening /healthz DB ping handle: %v — /healthz will report db=down", err)
+381					pingDB = nil
+382				}
+383			}
+384	
+385			// LT-33: api-service's own outbound call to cmd/idp-connector.
+386			// Constructed here ONLY as a startup-time config smoke test — no
+387			// handler exists yet that calls it (no assignment question asks
+388			// for an onboarding endpoint, and this story's own non-goals rule
+389			// one out), so the constructed *onboarding.Service below is
+390			// deliberately discarded, not stored anywhere reachable. This is
+391			// NOT the same pattern as repo/pingDB above: those two ARE
+392			// consumed by NewVerifierRouter's handlers; this exists only so
+393			// a missing/malformed CONNECTOR_CLIENT_ID, ISSUER_TOKEN_URL, etc.
+394			// is visible in this process's own log the moment it starts,
+395			// rather than only when a future onboarding-flow handler first
+396			// tries to use it (Oren Castellan's review, PR #54: the original
+397			// "ready" wording here overstated this — nothing is actually
+398			// wired to use it yet).
+399			if _, err := newOnboardingService(cfg); err != nil {
+400				log.Printf("api-service: onboarding (LT-33) config check failed, no consumer wired yet: %v", err)
+401			} else {
+402				log.Printf("api-service: onboarding (LT-33) config check passed, no consumer wired yet")
+403			}
+404	
+405			// LT-49: /metrics on its own port, per team-lead's routing of
+406			// Amber's observability inventory — api-service is the always-up
+407			// pod, so it (not the short-lived sweep CronJob) is what
+408			// Prometheus scrapes. A separate port, not a route on the main
+409			// API port, because the NetworkPolicy admits ns monitoring only
+410			// to this one port (Theo Bergman, 04, PR #68), never to the
+411			// authenticated search/read API surface. Reuses pingDB — the
+412			// same lightweight *sql.DB /healthz already opened — rather than
+413			// a third connection pool; if pingDB is nil (DB not configured
+414			// yet), there is nothing for this endpoint to read, so it simply
+415			// doesn't start rather than serving a permanently-failing route.
+416			if pingDB != nil {
+417				startMetricsServer(pingDB, sqlDriverNameFor(cfg.DBDriver))
+418			} else {
+419				log.Printf("api-service: /metrics not started — no database configured yet")
+420			}
+421	
+422			handler = app.NewVerifierRouter(cfg, repo, pingDB)
+423		case app.ModeIssuer:
+424			// config.Load already fails startup if JWT_SIGNING_KEY_FILE is</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:37 PM PDT</span><span class="who">Oren Castellan</span><div class="body">Good, this is handled reasonably. This all looks solid — no closing of pingDB elsewhere visible that would race with the metrics server. Let me check handler.go's `os.Exit`/error paths for cardinality — one more check on the `oldestSurvivingAge` gauge computed via `time.Since` at scrape time rather than at write time, which is correct (age should be live, not frozen at write time).</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; git log --oneline -5 &amp;&amp; </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint &amp;&amp; git log --oneline -5 &amp;&amp; git diff origin/main --stat | tail -20"
+}</pre><div class="lbl">result</div><pre>504ec01 LT-49: persist sweep results and expose /metrics on api-service
+99821ca 04: LT-49 - document persisted-metrics implementation (03 side)
+7226f16 Merge PR #69: LT-48 — local api-service-issuer compose service, postgres under every profile, migration/seed script, GOTOOLCHAIN=auto for air; live-verified token mint and 403 on search
+d45aeed LT-48: add real token-issuer service, fix dev-loop auth crash-loop
+8359685 Merge branch 'main' of https://github.com/wtvamp/loginid-takehome
+ cmd/api-service/main.go                            |  86 +++-
+ go.sum                                             |   4 +
+ internal/config/config.go                          |  20 +-
+ internal/sweep/sweep.go                            |  77 ++-
+ internal/sweep/sweep_test.go                       | 135 +++++-
+ internal/sweepstore/handler.go                     |  89 ++++
+ internal/sweepstore/sweepstore.go                  | 381 +++++++++++++++
+ internal/sweepstore/sweepstore_test.go             | 520 +++++++++++++++++++++
+ internal/sweepstore/testmain_test.go               |  84 ++++
+ .../cockroachdb/00003_retention_sweep_run.sql      |  26 ++
+ migrations/postgres/00003_retention_sweep_run.sql  |  36 ++
+ migrations/sqlite/00002_retention_sweep_run.sql    |  29 ++
+ 12 files changed, 1463 insertions(+), 24 deletions(-)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 12:37 PM PDT</span><span class="who">Oren Castellan</span><div class="body">## Review: PR #71 (LT-49 sweepstore/metrics) — Oren Castellan
+
+Read `internal/sweepstore/{sweepstore,handler}.go`, `internal/sweep/sweep.go`, both test files, `main.go`'s wiring, and all three `retention_sweep_run` migrations. This is careful work — the precision bug narrative in the PR description is exactly the kind of thing I'd have gone looking for, and it's already caught and regression-tested. My findings, in order of what I'd actually want changed vs. noted:
+
+1. **`runClass`'s `FinishRun` call uses `time.Now()`, not the `now` parameter threaded everywhere else in `Run`/`runClass`.** `now` is the single clock of record for `StartRun`'s `startedAt`, `cutoffFor`, and the oldest-surviving-age calculation — but the finish timestamp bypasses it with a fresh wall-clock read (`sweep.go:243`). This is likely the *correct* behavior (a multi-batch drain genuinely takes real elapsed time, so finish should reflect real completion, not the frozen invocation-time `now`), but it's undocumented as a deliberate exception to an otherwise-consistent single-clock discipline, and it is genuinely untested: `fakeRunRecorder.FinishRun` discards its `time.Time` argument with `_` (sweep_test.go:345), so nothing asserts `finishedAt &gt;= startedAt` or that it's wired at all at this layer. The real coverage lives one layer down in `sweepstore_test.go` against literal timestamps, which is fine, but leaves the `sweep→sweepstore` glue itself unverified for the one field this story exists to fix. Ask: either add a one-line comment at the call site explaining the deliberate divergence from `now`, or thread `now` through and let `sweepstore_test.go` carry all timestamp-correctness assertions instead. Not a blocker, but I'd want it on record before I stop thinking about it.
+
+2. **Nullability / three-state semantics: correct.** `StartRun`/`FinishRun` split matches the documented three states cleanly; `scanNullableTime` correctly branches on driver family via `sql.NullTime` vs `sql.NullString`; the CHECK constraints on `drained`/`oldest_surviving_at` are consistent across all three migrations (integer vs. boolean idiom aside, which is correctly handled).
+
+3. **`missed_slots` off-by-one: correct.** `floor(gap/interval) - 1` clamped to ≥0 — verified against the `TestStartRun_MissedSlotsComputedAgainstInterval` cases by hand (0/1-interval gap → 0, 3-interval gap → 2). `TestMissedSlots_ReflectsOnlyTheLatestRun` is the right test to have; confirms this isn't accidentally cumulative.
+
+4. **`LatestSnapshots` aggregation: correct**, and the SQLite lexicographic-sort trap is real and properly closed — `encodeTime` always formats UTC with a literal `Z` suffix and fixed 9-digit fractional width, so `ORDER BY started_at DESC` sorts identically to a native `TIMESTAMPTZ` compare. `TestTimestampOrdering_SpreadAcrossAMonth` is the right regression test for this, not a toy single-pair check.
+
+5. **`handler.go`: fail-closed behavior is correct** — a `LatestSnapshots` error returns 500, not an empty-but-200 body that would be indistinguishable from "genuinely nothing recorded yet." Metric definitions look right; no accidental gating of `retention_sweep_last_finished_timestamp_seconds` on `drained`, matching the stated design against Priya's alert rule.
+
+6. **Minor, non-blocking:** `id UUID DEFAULT gen_random_uuid()` in the Postgres/CockroachDB migrations is dead — Go always supplies `id` via `uuid.NewString()` before insert, so the column default never fires. Harmless, but worth a one-line note or drop if you want the DDL to reflect actual write behavior.
+
+7. `drainedRaw.(bool)` in `LatestSnapshots` discards its `ok` — safe here since the type is always constructed as `bool` two lines earlier in both branches, so I'm not asking for a change, just naming why I looked at it twice.
+
+Nothing here blocks merge on its own; #1 is the one item I'd want either fixed or explicitly justified in a comment before I'd call this closed.
+
+Files reviewed (absolute paths):
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/handler.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweepstore/sweepstore_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/internal/sweep/sweep_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/cmd/api-service/main.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-49-metrics-endpoint/migrations/{postgres,cockroachdb}/00003_retention_sweep_run.sql`, `/migrations/sqlite/00002_retention_sweep_run.sql`</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

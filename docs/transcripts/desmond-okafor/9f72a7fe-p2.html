@@ -1,0 +1,863 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desmond Okafor — transcript p2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Desmond Okafor</h1><div class="sub">Hire (track 01) · session 2 of 6 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 11:21 AM PDT – Sep 13, 2026 9:55 AM PDT</div><div class="nav"><a href="9f72a7fe-p1.html">← prev</a>  <a href="../index.html">index</a> <span class="pill">page 2 of 2</span></div></div></header>
+<div class="wrap">
+<div class="msg assistant"><span class="when">Sep 13, 9:26 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; sed -n '268,330p' internal/connector/handlers.go"
+}</pre><div class="lbl">result</div><pre>		// phone+name), not just per caller (attack-tree leaf 5, Tomasz
+		// Wrede's cold review of PR #40). Not one of the three
+		// timing-oracle branches (an overt 429, same as the caller-level
+		// gate above) — no floor.
+		attemptedIdentity := []string{body.Phone, body.Name} // hashed as separate components, never pre-joined (Oren Castellan, PR #40 review)
+		identityAllowed, err := identityGateAllow(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, identityErrorBody{Error: "server_error"})
+			return
+		}
+		if !identityAllowed {
+			writeJSON(w, http.StatusTooManyRequests, identityErrorBody{Error: "slow_down"})
+			return
+		}
+
+		token := strings.TrimSpace(r.Header.Get(vendorAccessTokenHeader))
+		if token == "" {
+			deps.Limiter.RecordFailure(ctx, ac.Sub, sourceIP)
+			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
+			logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditAuthnFailure)
+			waitForFloor(start)
+			writeIdentityFailure(w)
+			return
+		}
+
+		// token is scoped to this function only, passed by value into
+		// FetchIdentity, and never assigned to any variable outside
+		// this block or returned — attack-tree leaf 4's control
+		// (connector-security.md §1/Attack-tree row 4).
+		identity, err := deps.Vendor.FetchIdentity(ctx, token, body.Phone, body.Name)
+		if err != nil {
+			deps.Limiter.RecordFailure(ctx, ac.Sub, sourceIP)
+			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
+			logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditAuthnFailure)
+			waitForFloor(start)
+			writeIdentityFailure(w)
+			return
+		}
+		deps.Limiter.RecordSuccess(ctx, ac.Sub, sourceIP)
+		identityGateRecordSuccess(ctx, deps.IdentityLimiter, ac.Sub, attemptedIdentity...)
+		logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditSuccess)
+
+		// Success is not part of the timing-oracle concern — no floor.
+		// identityResponseBody's fields are identical in name/order/type
+		// to Identity (only the json tags differ), so a direct type
+		// conversion is both valid and clearer than restating every
+		// field (staticcheck S1016).
+		writeJSON(w, http.StatusOK, identityResponseBody(identity))
+	}
+}
+
+// logAuditOutcome logs caller sub/scope/timestamp/outcome only — never
+// the vendor username/password, vendor access_token, or any PII field
+// value, per connector-security.md §3/§5's audit discipline.
+func logAuditOutcome(ctx context.Context, auditLog api.AuditLogger, sub string, kind api.AuditEventKind) {
+	if auditLog == nil {
+		return
+	}
+	auditLog.Log(ctx, api.AuditEvent{
+		Sub:       sub,
+		Scope:     api.ScopeConnectorIdentityLookup,
+		Kind:      kind,
+		Timestamp: time.Now().UTC(),
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:27 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; sed -n '/func NewAuthHandler/,/^}/p' internal/connector/handlers.go | head -60"
+}</pre><div class="lbl">result</div><pre>func NewAuthHandler(deps Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		ac, _ := api.AuthContextFromContext(ctx)
+		sourceIP := sourceIPFrom(r)
+
+		allowed, err := deps.Limiter.Allow(ctx, ac.Sub, sourceIP)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, identityErrorBody{Error: "server_error"})
+			return
+		}
+		if !allowed {
+			writeJSON(w, http.StatusTooManyRequests, identityErrorBody{Error: "slow_down"})
+			return
+		}
+
+		var body authRequestBody
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1&lt;&lt;16)).Decode(&amp;body); err != nil {
+			writeJSON(w, http.StatusBadRequest, identityErrorBody{Error: "invalid_request"})
+			return
+		}
+
+		// Second rate-limit dimension — per (caller, attempted vendor
+		// username), not just per caller (attack-tree leaf 5, Tomasz
+		// Wrede's cold review of PR #40): gates BEFORE the vendor call,
+		// same as the caller-level Limiter above.
+		identityAllowed, err := identityGateAllow(ctx, deps.IdentityLimiter, ac.Sub, body.Username)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, identityErrorBody{Error: "server_error"})
+			return
+		}
+		if !identityAllowed {
+			writeJSON(w, http.StatusTooManyRequests, identityErrorBody{Error: "slow_down"})
+			return
+		}
+
+		// accessToken is scoped to this block only — read from the
+		// vendor call's return value, written straight into the
+		// response, never assigned to any wider-scoped variable or
+		// logged. This IS the narrowest this value can be scoped given
+		// /auth's own contract: its job is delivering the token to the
+		// caller, so it necessarily reaches the response writer, but
+		// nothing else.
+		accessToken, err := deps.Vendor.Authenticate(ctx, body.Username, body.Password)
+		if err != nil {
+			deps.Limiter.RecordFailure(ctx, ac.Sub, sourceIP)
+			identityGateRecordFailure(ctx, deps.IdentityLimiter, ac.Sub, body.Username)
+			logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditAuthnFailure)
+			// Generic failure regardless of *why* the vendor rejected
+			// it (unknown username vs. wrong password vs. vendor
+			// unreachable) — connector-security.md §4: "must not leak
+			// which part of the credential was wrong."
+			writeJSON(w, http.StatusUnauthorized, identityErrorBody{Error: "vendor_authentication_failed"})
+			return
+		}
+		deps.Limiter.RecordSuccess(ctx, ac.Sub, sourceIP)
+		identityGateRecordSuccess(ctx, deps.IdentityLimiter, ac.Sub, body.Username)
+		logAuditOutcome(ctx, deps.AuditLog, ac.Sub, api.AuditSuccess)
+
+		writeJSON(w, http.StatusOK, authResponseBody{AccessToken: accessToken})
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:27 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; grep -n \"func Test\" internal/connector/httpvendorclient_test.go internal/connector/stubvendorclient_test.go internal/connector/identitylimiter_test.go\necho \"---Deps struct---\"\ngrep -n -A 10 \"^type Deps struct\" internal/connector/handlers.go"
+}</pre><div class="lbl">result</div><pre>internal/connector/httpvendorclient_test.go:13:func TestNewHTTPVendorClient_RejectsNonHTTPS(t *testing.T) {
+internal/connector/httpvendorclient_test.go:30:func TestHTTPVendorClient_FetchIdentity_FreshAuthorizationHeaderPerRequest(t *testing.T) {
+internal/connector/httpvendorclient_test.go:68:func TestHTTPVendorClient_Authenticate_SendsCredentialsAndReturnsToken(t *testing.T) {
+internal/connector/httpvendorclient_test.go:93:func TestHTTPVendorClient_Authenticate_VendorRejects_GenericError(t *testing.T) {
+internal/connector/httpvendorclient_test.go:107:func TestHTTPVendorClient_RespectsContextTimeout(t *testing.T) {
+internal/connector/stubvendorclient_test.go:8:func TestStubVendorClient_AuthenticateThenFetchIdentity(t *testing.T) {
+internal/connector/stubvendorclient_test.go:29:func TestStubVendorClient_WrongPassword(t *testing.T) {
+internal/connector/stubvendorclient_test.go:38:func TestStubVendorClient_UnknownUsername(t *testing.T) {
+internal/connector/stubvendorclient_test.go:45:func TestStubVendorClient_FetchIdentity_UnknownToken(t *testing.T) {
+internal/connector/stubvendorclient_test.go:52:func TestStubVendorClient_DistinctTokensPerAuthenticateCall(t *testing.T) {
+internal/connector/identitylimiter_test.go:18:func TestIdentityRateLimiter_StolenIdentitiesSurviveAnUnrelatedSuccess(t *testing.T) {
+internal/connector/identitylimiter_test.go:67:func TestIdentityRateLimiter_TypoIsolation(t *testing.T) {
+internal/connector/identitylimiter_test.go:94:func TestIdentityRateLimiter_DifferentCallersSameIdentityDoNotShareState(t *testing.T) {
+internal/connector/identitylimiter_test.go:133:func TestIdentityRateLimiter_BoundedCardinality_OverflowsToSharedBucket(t *testing.T) {
+internal/connector/identitylimiter_test.go:184:func TestIdentityRateLimiter_TrackedIdentityUnaffectedByOverflowPressure(t *testing.T) {
+---Deps struct---
+59:type Deps struct {
+60-	Vendor          VendorClient
+61-	Limiter         vendorLimiter
+62-	IdentityLimiter *identityRateLimiter
+63-	AuditLog        api.AuditLogger
+64-}
+65-
+66-// identityGateAllow/RecordFailure/RecordSuccess are deps.IdentityLimiter's
+67-// call sites, tolerant of a nil IdentityLimiter (tests that only care
+68-// about the caller-level Limiter dimension can omit it — the identity
+69-// dimension then simply isn't enforced, never a panic). identityParts is
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:27 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check/internal/connector/stubvendorclient_test.go",
+  "offset": 1,
+  "limit": 70
+}</pre><div class="lbl">result</div><pre>1	package connector
+2	
+3	import (
+4		"context"
+5		"testing"
+6	)
+7	
+8	func TestStubVendorClient_AuthenticateThenFetchIdentity(t *testing.T) {
+9		stub := NewStubVendorClient()
+10		stub.Seed("demo-user", "demo-password", Identity{Name: "Jane Demo", Country: "US"})
+11	
+12		token, err := stub.Authenticate(context.Background(), "demo-user", "demo-password")
+13		if err != nil {
+14			t.Fatalf("Authenticate: %v", err)
+15		}
+16		if token == "" {
+17			t.Fatalf("Authenticate returned an empty token")
+18		}
+19	
+20		identity, err := stub.FetchIdentity(context.Background(), token, "ignored-phone", "ignored-name")
+21		if err != nil {
+22			t.Fatalf("FetchIdentity: %v", err)
+23		}
+24		if identity.Name != "Jane Demo" || identity.Country != "US" {
+25			t.Errorf("unexpected identity: %+v", identity)
+26		}
+27	}
+28	
+29	func TestStubVendorClient_WrongPassword(t *testing.T) {
+30		stub := NewStubVendorClient()
+31		stub.Seed("demo-user", "demo-password", Identity{Name: "Jane Demo"})
+32	
+33		if _, err := stub.Authenticate(context.Background(), "demo-user", "wrong-password"); err != ErrVendorAuthFailed {
+34			t.Errorf("err = %v, want ErrVendorAuthFailed", err)
+35		}
+36	}
+37	
+38	func TestStubVendorClient_UnknownUsername(t *testing.T) {
+39		stub := NewStubVendorClient()
+40		if _, err := stub.Authenticate(context.Background(), "nobody", "whatever"); err != ErrVendorAuthFailed {
+41			t.Errorf("err = %v, want ErrVendorAuthFailed — must not distinguish unknown username from wrong password", err)
+42		}
+43	}
+44	
+45	func TestStubVendorClient_FetchIdentity_UnknownToken(t *testing.T) {
+46		stub := NewStubVendorClient()
+47		if _, err := stub.FetchIdentity(context.Background(), "never-issued-token", "phone", "name"); err != ErrVendorIdentityNotFound {
+48			t.Errorf("err = %v, want ErrVendorIdentityNotFound", err)
+49		}
+50	}
+51	
+52	func TestStubVendorClient_DistinctTokensPerAuthenticateCall(t *testing.T) {
+53		stub := NewStubVendorClient()
+54		stub.Seed("demo-user", "demo-password", Identity{Name: "Jane Demo"})
+55	
+56		t1, err := stub.Authenticate(context.Background(), "demo-user", "demo-password")
+57		if err != nil {
+58			t.Fatalf("first Authenticate: %v", err)
+59		}
+60		t2, err := stub.Authenticate(context.Background(), "demo-user", "demo-password")
+61		if err != nil {
+62			t.Fatalf("second Authenticate: %v", err)
+63		}
+64		if t1 == t2 {
+65			t.Errorf("two Authenticate calls returned the same token %q, want distinct tokens per call", t1)
+66		}
+67	}
+68	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:27 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">## LT-42 claims check
+
+**Part 1 — same-PR fake-update rule visibility. Confirmed as a real gap, not just an unverified claim.** I checked the whole repo (both the local project and the cloned GitHub repo) for a `CONTRIBUTING.md` or `pull_request_template.md` — neither exists anywhere. `decisions/test-double-strategy.md`'s text is exactly as you described: *"Adopted: any change to `Repository` or its three sub-interfaces must update the corresponding hand-written fake in the same PR — added as a stated review-checklist item... not left as an assumed discipline."* But "added as a stated review-checklist item" is aspirational language with no actual checklist artifact behind it — there is no PR template, no CONTRIBUTING doc, nothing a reviewer would see at review time other than this one design doc, which (per the whole shape of this project) is not something a reviewer re-reads on every PR. **This is a real, confirmed gap**, not a "probably fine" — recommend it gets logged as a finding, not waved through, since LT-42's own acceptance criterion is explicitly checking for exactly this.
+
+**Part 2 — the no-cache-reuse assertion. Not found by that name, and I don't think it can exist in that form given the actual architecture — recommend rewording the criterion rather than searching further for it.** I read `internal/connector`'s handler code directly: `NewIdentityHandler` takes the vendor token from the **caller-presented request header** (`r.Header.Get(vendorAccessTokenHeader)`) and passes it straight into `deps.Vendor.FetchIdentity` — it never calls `/auth` (or `Vendor.Authenticate`) internally at all. `Deps` has no cache field (`Vendor`, `Limiter`, `IdentityLimiter`, `AuditLog` only). So "a second `/identity` call re-fetches via `/auth`" describes a mechanism this codebase doesn't have — there's no internal `/auth` call from `/identity` to re-trigger, because the caller (`api-service`) is the one that calls `/auth` and hands the token over each time.
+
+What *does* exist and does prove the no-cache property, just under different names:
+- `TestStubVendorClient_DistinctTokensPerAuthenticateCall` (`stubvendorclient_test.go`) — two `Authenticate` calls with identical credentials return distinct tokens, so nothing is being memoized on the vendor-client side either.
+- `TestHTTPVendorClient_FetchIdentity_FreshAuthorizationHeaderPerRequest` (`httpvendorclient_test.go`) — confirms outbound headers aren't inherited across pooled-connection reuse (this is attack-tree leaf 1's control, already covered under LT-41).
+- The structural absence of any cache field in `Deps` is itself the strongest evidence — there's nothing to reuse.
+
+Recommend rewording the acceptance criterion from "confirm a second `/identity` call re-fetches via `/auth`" to something like "confirm no token-caching field/map exists anywhere in `internal/connector`, and that `/identity`'s token comes solely from the per-request header, never from stored state" — same guarantee, worded to match what's actually built rather than a caller-driven-refetch model this design doesn't use.</div></div>
+<div class="msg human"><span class="when">Sep 13, 9:32 AM PDT</span><span class="who">Lead</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Claims check: LT-33 refinement"&gt;
+Next pull: LT-33 (api-service calls the connector — the story that makes Q2 and Q3 one system) — 03-engineering-delivery/refinement/LT-33.md. This is a 02-authored story (S13 in their backlog) whose implementation is 03's code. Please verify: the F3/connector-security.md quotes I've restated, the "genuinely greenfield" claim (I grepped internal/api and cmd/api-service and found only the ScopeConnectorIdentityLookup constant, no actual client code), and my claim that ux-notes.md:27 already satisfies the UX-coordination criterion without needing new coordination — re-read that line yourself to confirm.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:32 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-33.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-33.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-33 refinement — wire `api-service`'s client credential to call the connector, and the vendor-token pass-through
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03). **Source:** `02-ai-security-architecture/backlog.md` S13 (LT-33) — a 02-authored story whose implementation is 03's code, refined here since it's engineering work, same pattern as LT-51.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist; engineering counterpart Renata Cole.
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: this is the only story that makes Q2 and Q3 one system — everything up to now proves `api-service`'s own REST surface (Q2) and `idp-connector`'s own inbound contract (Q3) work in isolation, but nothing yet has `api-service` actually call the connector as part of a real flow. It has a real security surface (a client credential `api-service` itself must hold and use correctly), which is why 02 authored the story even though 03 writes the code.
+10	
+11	**Checked before drafting: this is genuinely greenfield.** `grep`'d `internal/api` and `cmd/api-service` for any existing connector-calling code — only the `ScopeConnectorIdentityLookup` constant exists (used by the connector's own inbound-audience check, already built and tested in LT-41). No outbound client, no onboarding-flow handler, nothing in `api-service` mints or uses a `connector:identity-lookup` token today.
+12	
+13	## What this story actually is
+14	
+15	Two related gaps `connector-security.md` and `handoff-04-secrets.md` already resolved at the design level; this story is the implementation:
+16	
+17	1. **`api-service` needs its own client credential** (row 10 of `handoff-04-secrets.md`) to authenticate to the connector's inbound auth in the first place — the same `POST /auth/token` mechanism LT-51 built, but `api-service` is itself a *client* of that endpoint here, not the resource server.
+18	2. **The vendor-token pass-through** (`connector-security.md` F3): our own `/auth` returns the vendor's `access_token` to the authenticated internal caller (`api-service`, on the onboarding flow's behalf); `api-service` holds it only for the span between that call and the following `/identity` call, then presents it as a request header (`X-Vendor-Access-Token`, confirmed by name in LT-41's implementation) — never in the body, never persisted, never logged.
+19	
+20	## Acceptance criteria (from `handoff-04-secrets.md`/`connector-security.md`, restated for implementation)
+21	
+22	- [ ] `api-service` obtains a `connector:identity-lookup`-scoped token from `/auth/token` using its own client credential (`CONNECTOR_CLIENT_ID`/`CONNECTOR_CLIENT_SECRET`, per `PLANNING.md`'s config surface — already named there, never implemented) before calling `idp-connector`'s `/auth` or `/identity`.
+23	- [ ] The onboarding flow's vendor-auth step (whatever handler mediates the two-screen flow `ux-notes.md` describes) receives the vendor `access_token` from our `/auth` response and holds it **only** for the span between that call and the following `/identity` call — enforcement site: the handler/service layer that mediates this, not the connector (which stays stateless, per LT-41). No storage, no cache, scoped to the narrowest function possible — same discipline `connector-security.md`'s attack-tree leaf 4 already requires on the connector's own side, applied symmetrically here since `api-service` now holds the same class of secret for the same short window.
+24	- [ ] `/identity` is called with the vendor token as a request header (`X-Vendor-Access-Token`, matching LT-41's already-built expectation), never a body field.
+25	- [ ] `api-service`'s own `connector:identity-lookup` token (distinct from the vendor token) is obtained fresh per onboarding flow, not cached/reused across unrelated flows — matching the no-refresh-token design already standing for every other client credential in this project (`api-auth-design.md`).
+26	- [ ] Never logs, in any environment or error path: the vendor password, the vendor `access_token`, `api-service`'s own `CONNECTOR_CLIENT_SECRET`, or any full `Authorization`/`X-Vendor-Access-Token` header value — per `handoff-04-secrets.md`'s never-log list, same standard already enforced on the connector's own side (LT-41).
+27	- [ ] `01-product-industry-research-design/ux-notes.md`'s two-screen flow description and this mechanism agree on what the frontend/onboarding-mediating layer actually holds between screens — checked directly: `ux-notes.md:27` already states the token is "held only by this onboarding flow, only for the span between the two calls, and is never persisted past this signup step" (added per Marcus's exact sentence during the earlier consistency-pass fix) — this criterion is **already satisfied by the existing doc**, no coordination needed unless the actual implementation ends up diverging from that description.
+28	
+29	## Non-goals
+30	
+31	- No change to `idp-connector`'s own inbound handlers — already built and tested (LT-41); this story only calls them correctly from the other side.
+32	- No change to the token-issuance mechanism itself — `/auth/token` already exists (LT-51); `api-service` is a new *caller* of it, not a change to how it works.
+33	- No real vendor UI/frontend — the "onboarding flow" here is `api-service`'s own handler/service-layer mediation, not a client-facing UI (out of scope for this backend-focused assignment, per `01-product-industry-research-design`'s track boundary).
+34	- No new client-provisioning UI — `api-service`'s own connector-calling credential is provisioned the same out-of-band way as every other credential in this project (QA clients, signing key, DB credentials).
+35	
+36	## PO review script
+37	
+38	1. Confirm `api-service` genuinely obtains a fresh `connector:identity-lookup` token per onboarding flow (not a package-level cached client) — read the code directly.
+39	2. Confirm the vendor token's variable scope doesn't escape the mediating handler function — same check applied to the connector's own code in LT-41.
+40	3. Confirm `/identity` is called with the header, not the body — a test asserting the outbound request shape.
+41	4. Confirm no log call anywhere references the vendor token, vendor password, or `CONNECTOR_CLIENT_SECRET` — log-call review against the never-log list.
+42	5. Once deployed: this is testable end-to-end only via the actual onboarding flow, which isn't a public-URL-exposed endpoint on its own (no assignment question asks for one) — acceptance is code-review plus a unit/integration test exercising the mediating handler against a fake connector client, not a live-URL check.
+43	
+44	## Research team review
+45	
+46	**Desmond Okafor — claims check:** [pending]
+47	
+48	**Tobias Lindqvist — objection:** [pending]
+49	
+50	**Naomi Voss — ruling:** [pending]
+51	</pre></div></details><details><summary><span class="tn">Bash</span> grep -n -B3 -A 20 "^## S13" /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/backlog</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -B3 -A 20 \"^## S13\" /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/backlog.md\necho \"---F3---\"\ngrep -n -B2 -A 15 \"F3\\b\" /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/connector-security.md | head -60"
+}</pre><div class="lbl">result</div><pre>278-
+279----
+280-
+281:## S13 — Wire `api-service`'s client credential to call the connector, and the vendor-token header pass-through (LT-33)
+282-
+283-**Status: open** (from `../decisions/cross-track-consistency.md` F3 and F15).
+284-
+285-**Description:** Two related gaps the pass found: (1) nothing said what our own `/auth` returns to its caller or how `/identity` obtains vendor authority, given the assignment's fixed `/identity` body has no credential field (F3) — resolved in `connector-security.md` §1: `/auth` returns the vendor token to the authenticated internal caller, which presents it as a request header (not body field) on the subsequent `/identity` call; the connector itself still never caches it. (2) `api-service` needs its own client credential to authenticate to the connector's now-required inbound auth (`connector-security.md` §5) in the first place, and no inventory row covered it — added as row 10 in `handoff-04-secrets.md` (F15). This story is the implementation work both design fixes require.
+286-
+287-**Acceptance criteria:**
+288-- [ ] `api-service` obtains and presents a `connector:identity-lookup`-scoped token (via its own client credential, row 10 of `handoff-04-secrets.md`) when calling `idp-connector`'s `/auth` and `/identity`.
+289-- [ ] The onboarding flow's vendor-auth step receives the vendor `access_token` from our `/auth` response and holds it only for the span between that call and the following `/identity` call — enforcement site: the handler/service layer that mediates the onboarding flow, not the connector itself (which remains stateless per S3).
+290-- [ ] `/identity` accepts the vendor token as a request header, not a body field, and fails closed with a generic error if it is missing or rejected by the vendor.
+291-- [ ] `01-product-industry-research-design/ux-notes.md`'s two-screen flow and this mechanism agree on what the frontend/onboarding-flow layer actually holds between screens (coordinate directly with Naomi if the UX description needs a one-sentence update to match).
+292-
+293-**Depends on:** `connector-security.md` (this track); `handoff-04-secrets.md` row 10 (this track); 03's connector-client implementation.
+294-
+295-**Model/effort:** sonnet, high.
+296-
+297-**Type:** Story
+298-
+299-**Labels:** `track-02`, `security-graded`, `from-consistency-pass`, `no-code-yet`
+---F3---
+17-
+18-- **Never logged.** The `/auth` request body contains a vendor password; the response contains a bearer token. A naive "log the request and response for debugging" habit puts both in the same log line — this is called out explicitly because it's the single most common way a connector like this leaks a credential in practice, not a hypothetical.
+19:- **No persistent or cached token, by default — updated for F3's caller-holds-the-token model (seam re-run regression fix).** The S3 ruling's no-cache posture stands, but its original wording assumed the connector itself calls `/auth` immediately before every `/identity` call, chaining the two internally. That's superseded by F3: our own `/auth` and `/identity` are genuinely separate calls from our caller's perspective (matching the assignment's fixed two-endpoint contract), and it is the **caller** (`api-service`, on the onboarding flow's behalf) that calls our `/auth`, receives the vendor token, and presents it as a header on the following `/identity` call. What the connector still never does: cache or persist the token, write it to any datastore, or hold it any longer than the single request currently being handled. The connector's `/identity` handler uses whatever token its caller presents for that one call and discards it when the call returns — the "no cache" discipline now describes the connector's own handling of a caller-presented token, not a connector-managed fetch-then-cache cycle. Caching is still an explicitly-justified exception requiring its own re-review if it's ever proposed for either side of this exchange; the exception conditions (immutable cache key, TTL, KMS fail-closed) from the S3 ruling are unchanged if that question is ever reopened.
+20-- **Fetch-use-zeroize boundary, restated for the caller-holds-the-token model:** on the `/identity` side, the presented token's scope runs from the point the handler reads it off the request header to the end of that single call, and no further — it is not cached, not passed to any other request, not logged. On the `/auth` side, the token returned to the caller is not retained by the connector after the response is sent. **Retry behavior is now the caller's responsibility, not the connector's**: if `api-service` retries a `/identity` call, whether it re-presents the same token or first calls `/auth` again is its own policy decision based on the token's likely freshness — the connector's only obligation is to treat each presented token as freshly supplied and reject it cleanly (fail closed, generic error) if the vendor rejects it, never silently retrying the vendor call with a stale token on the connector's own initiative. Go gives no guaranteed memory zeroing without unsafe/cgo, so a crash dump taken mid-call could still capture the token in the handler's stack; that residual is accepted given the window is one request, not a cache TTL. The token field is excluded from any generic request/response dump used in error handling — the same log-hygiene discipline below applies to panic traces and debug dumps, not just application logs.
+21-- **The outbound HTTP client to the vendor must construct a fresh, isolated `Authorization` header per request, never inherited from connection reuse.** Connection pooling/keep-alive is the normal default in any HTTP client library; a pooled client that reuses a request-context object or fails to reset the auth header per call can attach request A's vendor token to request B's outbound call — the same cross-tenant leak as a cache-key collision, with no cache required. This is a required implementation discipline, not an assumption left implicit.
+22-- **Scoped narrowly if the vendor supports it** — request only the scope needed for `/identity`, not a broad token, so a leaked token's blast radius is bounded by the vendor's own authorization model as well as ours.
+23:- **Returned once, to the authenticated internal caller only — never to end users, never persisted server-side (resolved by the cross-track consistency pass, F3).** Our own `/auth` returns the vendor `access_token` to whichever authenticated `connector:identity-lookup`-scoped caller invoked it (in this project's shape, `cmd/api-service` acting on an onboarding flow's behalf) — this is what the assignment's `/auth` contract actually requires ("retrieves an `access_token`"), and it is what `../01-product-industry-research-design/ux-notes.md`'s onboarding flow depends on to bridge its two user-facing steps. Because our own `/identity` request body is fixed by the assignment to `{"phone", "name"}` with no credential field, the vendor token travels as a request header on the subsequent `/identity` call (e.g. `X-Vendor-Access-Token`) — this doesn't violate the fixed JSON contract, which governs the body only, not headers. The connector itself still never caches or persists the token (S3's no-cache ruling stands unchanged): each `/identity` call's presented token is used once and discarded, exactly as if it had been freshly fetched, and it is the caller's responsibility — not the connector's — to hold the token for the short span between the two calls. If a caller presents no token, or an expired one, `/identity` fails closed with a generic error that does not distinguish "no token" from "bad token" from "vendor rejected it" (same user-enumeration discipline as §4's other failure-handling rules).
+24-
+25-### 2. How `/identity` calls are authenticated to the vendor
+26-
+27-- Standard bearer-token usage: the vendor `access_token`, presented by our caller as a request header on our own `/identity`, is forwarded as an `Authorization: Bearer` header to the vendor's identity endpoint (or whatever the vendor's own contract specifies — this connector adapts to the vendor, not the reverse).
+28:- **Token refresh/re-auth on expiry is the caller's responsibility, not the connector's (corrected for F3 — seam re-run regression fix).** The earlier text here said the connector handles this "transparently" so a caller "should not need to know or manage vendor token lifecycle" — that assumed the connector itself owned the fetch-then-use cycle. Under F3's model the caller holds the token between our `/auth` and `/identity` calls, so the caller necessarily manages when to re-authenticate: if our `/identity` rejects a token as expired, it fails closed with a generic error (per §1) and it is the caller's decision to call our `/auth` again, not a retry the connector performs on its own initiative.
+29-- **Vendor calls over TLS only**, certificate validation never disabled, including in local/dev environments (repeating the threat model's point because it's the most common place a "temporary" dev bypass ships to production unnoticed).
+30-- **Our own credentials to call the vendor's `/auth`** (this connector's client id/secret with ABC/XYZ, if the vendor requires connector-level registration in addition to the end-user's own username/password) are runtime-injected secrets, never in source or config committed to the repo — requirement set here, mechanism owned by `../04-infra-devops/CLAUDE.md`.
+31-
+32-### 3. What this service should and shouldn't log or persist
+33-
+34-| Data | Log it? | Persist it? |
+35-|---|---|---|
+36-| End-user's vendor username | No (identifier, but low sensitivity relative to password — still avoid in plaintext logs; use it only for correlation via a hash if audit trails need it) | Only if a legitimate business reason exists; not by default |
+37-| End-user's vendor password (`/auth` request body) | **Never, under any circumstance, including error paths and stack traces** | **Never** |
+38-| Vendor `access_token` | **Never** | Only as short-TTL encrypted cache per above; never in plaintext, never in application logs |
+39-| PII returned by `/identity` (name, phone, address fields) | Never the field values; log only the *fact* of a lookup (caller identity, timestamp, success/failure, which record was resolved by opaque id) | Retention/caching policy for this PII is `../05-data-ops/CLAUDE.md`'s call — this track's requirement is that whatever is persisted follows the same encryption-at-rest and access-control bar as `user_profile` data, no weaker because it arrived via a connector rather than direct input |
+40-| Vendor error responses | Log status/error-code only; do not log raw vendor response bodies by default, since a vendor error payload can itself echo back submitted PII or partial credentials | N/A |
+41-
+42-### 4. Failure handling as a security control, not just reliability
+43-
+--
+86-| 1 | Cache-key confusion → cross-tenant token/PII leak via request-derived cache key | Persistent cache (eliminated by default posture below) | M | H | **Eliminated by design:** no cache by default (Felix Adebayo, alternatives seat) — no persistent cache means no key to collide on. **Control, exception-path only:** if caching is ever re-opened, key must derive from immutable vendor-issued ids, never request-supplied `name`/`phone`. **Control (this run, Tomasz's rebuttal):** the connection-reuse variant of this leaf survives even with no cache — a pooled HTTP client that doesn't reset `Authorization` per call can attach one request's token to another. Closed with a required control: fresh, isolated auth header constructed per outbound request, never inherited from connection reuse. | 03 (client construction; cache-key derivation if exception ever opened) | **L** — storage variant eliminated; connection-reuse variant closed by an explicit, checkable implementation requirement | OWASP API8:2023; judgment (connection-reuse variant) |
+87-| 2 | Fail-open on KMS unavailability during a caching window | Persistent cache with KMS-backed encryption at rest (eliminated by default posture) | M | H | **Eliminated by design:** no cache by default removes the write-time KMS dependency from the hot path. **Control, exception-path only:** if caching is ever re-opened, KMS-unreachable fails closed to "no cache, fetch live," never to an unencrypted write. Tomasz conceded this leaf outright — no hole found. | 03/04 (KMS mechanism is 04's) | **L** | NIST SP 800-57 |
+88:| 3 | Vendor token replay — no proof-of-possession/session binding once decrypted for use | Token exfiltrated by any other means within its exposure window | M | H | **Accepted risk.** Bearer tokens under RFC 6750 are possession-equals-authorization by design; PoP/binding (DPoP, RFC 9449; mTLS-bound tokens, RFC 8705) needs vendor-side support this project cannot assume for a generic ABC/XYZ vendor the assignment never specifies. Acceptable *for this system* because the token is never cached or persisted on either side of the exchange — it exists only in the caller's possession for the brief span between our `/auth` and `/identity` calls, and only inside the connector's `/identity` handler for that single request, on the connector's side (**updated for F3's caller-holds-the-token model, seam re-run regression fix** — the original justification described the connector itself fetching and using the token in one function call; the exposure window is now bounded by the same no-cache/no-persist discipline applied across two parties instead of inside one function). Retrying `/identity` with a stale token is the caller's decision, not the connector's own retry-with-reuse — the connector treats each presented token as freshly supplied and never retries the vendor call on its own initiative with a token it already knows is invalid. | — (re-review trigger: a PoP-capable vendor surfacing in 01's research) | **M** — accepted, not eliminated; a real vendor-side constraint, not a design gap, but still "possession = authority" for the token's lifetime | RFC 6750 §5; RFC 9700 §2.5 |
+89-| 4 | Process-memory/crash-dump exposure of the plaintext token before encryption | Attacker has read access to a crash artifact or swap on the host | L | M | **Control:** token field excluded from any generic request/response dump used in error handling (panic traces, debug dumps — same discipline as application logs); token variable scoped to the narrowest function possible, never passed up the call stack beyond the vendor-call function. **Residual accepted:** Go gives no guaranteed memory zeroing without unsafe/cgo, so a crash dump taken mid-call could still capture it; acceptable given the window narrowed from a cache TTL to one function call (Felix's alternatives turn). Core-dump suppression at the runtime level is a 04 mechanism, requirement recorded, not resolved here. | 03 (code discipline) / 04 (runtime config) | **L** — narrowed from a standing cache exposure to a single function-call window | OWASP Logging Cheat Sheet |
+90-| 5 | Connector used as a credential-stuffing oracle against the vendor (rate-limit granularity unstated) | No per-identity/per-IP rate-limit granularity stated in the original design | M | M | **Control:** rate limit keyed per calling-API-client *and* per source IP, with a stricter threshold on vendor-auth *failure ratio* specifically (credential stuffing shows as a high failure ratio before high volume), paired with exponential backoff per identity attempted, not just per client — closes the granularity gap without adding a new requirement beyond what §4 already gestured at. | 03 (rate-limit logic) / 04 (shared rate-limit store or edge mechanism, if enforced at a gateway) | **L** | OWASP API4:2023; NIST SP 800-63B §5.2.2 |
+91-
+92-Rules of use followed: Tomasz ranked and handed over his top five before Helena answered (per `CASTING.md` §5 ⟨02⟩); Felix's alternatives turn sat between red and blue and eliminated leaves 1's storage variant and 2's substrate by design change rather than control; Helena answered every leaf with a control or a justified accepted risk; Tomasz's rebuttal turn on the top three surfaced one unaddressed variant (leaf 1's connection-reuse case) and one boundary needing explicit statement (leaf 3), both resolved without reopening the ruling; Marcus assigned Residual with the justification in each row. No Residual **H** — none of the five leaves cleared that bar after blue's response and the rebuttal-turn tightening, so no follow-up Story is required; leaf 3's **M** is the one residual worth Warren's attention as a genuine accepted risk, not a gap.
+93-
+94----
+95-Model: sonnet (Tomasz Wrede, red; Felix Adebayo, alternatives; Helena Marsh, blue) / sonnet (Marcus Ilori, lead, ruling and residual scoring). Turns consumed: 5 (red top-five, alternatives, blue, rebuttal, lead residual scoring) — matches the 4-turns-plus-lead budget in `PLAN.md` §3.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:32 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; git pull -q origin main 2&gt;&amp;1\ngrep -rn \"ScopeConnectorIdentityLookup\\|connector:identity-lookup\\|idp-connector\\b\" internal/api cmd/api-service 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>internal/api/auth.go:34:	// ScopeConnectorIdentityLookup is cmd/idp-connector's own inbound
+internal/api/auth.go:36:	// (idp-connector-service) and vocabulary entry from the three
+internal/api/auth.go:45:	ScopeConnectorIdentityLookup Scope = "connector:identity-lookup"
+internal/api/jwtmiddleware.go:130:		case ScopeReadOwn, ScopeReadAny, ScopeSearch, ScopeConnectorIdentityLookup:
+cmd/api-service/main.go:55:// AUTH_JWT_AUDIENCE is meaningless to cmd/idp-connector (which has its
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:32 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/ux-notes.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/ux-notes.md",
+  "offset": 20,
+  "limit": 15
+}</pre><div class="lbl">result</div><pre>20	
+21	**Screens:**
+22	
+23	- **Provider choice.** A short list of partner providers (ABC, XYZ, ...), each a single button — the user picks one, consistent with the connector being provider-agnostic on the backend.
+24	- **Partner credential entry.** Username/password fields, framed as "sign in to `&lt;provider&gt;`," not the service's own login form — visually distinct, to signal whose credential this is.
+25	- **Pre-filled review screen.** Name, phone, and address arrive already filled in from the `/identity` response; the user reviews and confirms rather than retyping. Fields are editable, not read-only — the provider is a starting point, not an irrevocable source of truth for this signup.
+26	
+27	**The one design rule this surface enforces:** the partner's password is never visible to, or stored by, this service past the token exchange — the review screen never displays a password field, partner or otherwise, and nothing on this screen persists the credential entered on the previous one. That is the UI-level expression of the connector's `/auth` → `/identity` two-step: a short-lived token stands in for the password everywhere past the first screen. That token is held only by this onboarding flow, only for the span between the two calls, and is never persisted past this signup step — the connector that issues it holds it no longer than that either (`../02-ai-security-architecture/connector-security.md` §1).
+28	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:32 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">## LT-33 claims check
+
+**F3/`connector-security.md` quotes — verified accurate.** I read §1 and the attack-tree table directly. LT-33.md's restatement matches closely: "returned once, to the authenticated internal caller only... never persisted server-side" (source: "Returned once, to the authenticated internal caller only — never to end users, never persisted server-side"); the header name `X-Vendor-Access-Token` as the example vehicle (source gives the same example: "e.g. `X-Vendor-Access-Token`"); "held only for the span between that call and the following `/identity` call" (source: same phrase, near-verbatim, in the F3 update paragraph). No misquote or overreach found.
+
+**"Genuinely greenfield" — independently re-verified, accurate.** I grepped `internal/api` and `cmd/api-service` on `origin/main` myself: the only hits are the `ScopeConnectorIdentityLookup` constant definition (`auth.go`) and its use in a scope-validation `switch` (`jwtmiddleware.go`) — both belong to the connector's own *inbound* audience check (already built in LT-41), not to any outbound-calling code. No HTTP client, no onboarding handler, no reference to `CONNECTOR_CLIENT_ID`/`CONNECTOR_CLIENT_SECRET` anywhere in either package. The claim holds exactly as stated.
+
+**`ux-notes.md:27` — re-read directly, quote confirmed exact.** The line reads: *"That token is held only by this onboarding flow, only for the span between the two calls, and is never persisted past this signup step — the connector that issues it holds it no longer than that either."* That's a word-for-word match to what LT-33.md quotes. The criterion is genuinely already satisfied by existing doc text, not something you're asserting without checking — no new coordination needed unless the eventual implementation diverges from this description, exactly as you framed it.
+
+**Net: no corrections needed.** All three things you asked me to re-verify check out against source.</div></div>
+<div class="msg human"><span class="when">Sep 13, 9:42 AM PDT</span><span class="who">Lead</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Claims check: LT-43 refinement (README)"&gt;
+Next pull: LT-43 (README — implemented vs stubbed, AI workflow, test strategy) — 03-engineering-delivery/refinement/LT-43.md. This is the submission's front door. Please verify: the "deliberately stubbed" list (vendor stub, StopgapAuthorizer, CockroachDB/SQLite CI-only, no write endpoint, in-process rate limiters, LT-33 in-progress) against actual code/backlog state — is anything missing from that list, or overstated? Also verify the model/effort claims against backlog.md's actual Model/effort lines.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:42 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-43.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-43.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-43 refinement — S10: README (implemented vs. stubbed, AI workflow, test strategy)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03). **Source:** `03-engineering-delivery/backlog.md` S10 (LT-43).
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist; engineering counterpart Renata Cole.
+6	
+7	## Why this one, why it matters more than most
+8	
+9	Per team-lead: this is the document LoginID reads first — the submission's front door — and it should be written by someone who watched the process, not generated at the end from a summary of a summary. Depends on S1–S9, all of which are now Done or in their final pass, so this is genuinely ready to write for real, not from a plan.
+10	
+11	## What "implemented vs. stubbed" actually is, checked directly rather than assumed
+12	
+13	**Real, live, deployed:**
+14	- Full DAO layer against real Postgres (LT-35/36/38 — all Done, verified live against the deployed database and in CI against real Postgres/CockroachDB service containers).
+15	- REST search/retrieve handlers (LT-39 — Done), auth middleware (LT-40), real token issuance (LT-51 — refined, in progress), all verified live at `https://loginid-takehome.uplifttech.org` with real minted tokens.
+16	- The connector's own inbound `/auth`/`/identity` contract (LT-41 — Done, verified in-cluster via port-forward with a real vendor stub backing it).
+17	- CI/CD (LT-47), containerization (LT-45), secrets delivery (LT-46), database provisioning (LT-52) — all Done, deployed, live.
+18	
+19	**Deliberately stubbed, and why — this is the section a cold reader needs, stated plainly, not left to infer:**
+20	- **The third-party vendor (ABC/XYZ) is an in-process `StubVendorClient`**, not a real HTTP integration — `idp-connector` falls back to it when `IDP_ABC_BASE_URL` is unset, logs this explicitly on startup, and this is `backlog.md`'s own stated non-goal for LT-41 ("no real vendor integration"). The assignment names the vendor generically; a real integration was never in scope.
+21	- **The `authorize()` object-level policy hook is a `StopgapAuthorizer`**, not the real caller-referral datastore `handoff-03-auth.md`'s F8 resolution describes — a stated seam, not a hidden gap, per LT-39/LT-40's own non-goals.
+22	- **CockroachDB and SQLite are exercised in CI only, never deployed live** — only Postgres runs in the actual cluster (LT-52's explicit scope limit). A reader should not expect to find CockroachDB running anywhere.
+23	- **No `POST /profiles` write endpoint exists or is planned** — Q2 is search/retrieve by the assignment's own text; a write path was ruled out as scope creep (team-lead + Priya's decision, recorded on LT-39). Review/demo data enters via a version-controlled, idempotent SQL file (`deploy/demo-data/001-review-profiles.sql`) applied as a documented runbook step, not through the API.
+24	- **Rate limiting, the touch counter, and the token-issuer's grant limiter are in-process, single-replica-only** — their own code comments state a shared store (Redis) is needed for a genuine multi-instance deployment; this project runs `api-service`/`api-service-issuer` at 1 replica with `Recreate` rollout strategy specifically so this simplification holds correctly, not silently degrading under a rolling update (a real live-tested bug this project found and fixed, not a hypothetical).
+25	- **`api-service` calling the connector (LT-33)** is in progress as of this writing — the piece that makes Q2 and Q3 one system, not yet merged.
+26	
+27	## Acceptance criteria (restated from `backlog.md` S10)
+28	
+29	- [ ] A cold reader can tell what runs vs. what's a stub without asking — same bar as every hand-off in this project. The "deliberately stubbed" list above is the actual content this criterion requires; the README section should be at least this specific, not a vaguer restatement.
+30	- [ ] Test-strategy section states: unit-heavy, integration deliberately stubbed (the assignment doesn't require full end-to-end); the same-PR fake-update rule from `decisions/test-double-strategy.md`, **now also a literal checklist line in `.github/pull_request_template.md`** (LT-42's fix — cite both, since the design doc alone was found insufficient during this project's own review).
+31	- [ ] AI tooling note names the actual model/effort tier per story, not just "Claude Code was used": `sonnet, high` for every implementation story in this track's backlog except the connector (`opus, high` — the one seat above sonnet, per `planning-approach.md`'s connector-token-lifecycle exception, because a subtle bug there directly contradicts this project's own threat model). Names the actual orchestration patterns run and what they produced: `decisions/go-layout-debate.md` (package/binary-split decision), `decisions/error-semantics.md` (rotating devil's-advocate, Oren's objections), `decisions/context-propagation.md` (deadline-budget ruling), `decisions/test-double-strategy.md` (hand-written-fakes ruling, Marisol's mitigation). This project is also an org-orchestration exercise across five tracks with hired sub-teams (`PLAN.md`, `CASTING.md`) — worth one sentence acknowledging that's the broader structure this track's own patterns sit inside, without re-explaining the whole org here (that's `../CLAUDE.md`'s job).
+32	- [ ] **Added — a real, live-tested finding worth naming, not just the design-time patterns:** this track's own PO review (a Product-track lead running live acceptance checks against the deployed system, not just code review) found and helped fix three real production-shaped bugs during this project — a CI coverage gap that silently skipped two of three backend test suites, a cross-replica rate-limiting bug reproduced by actually crossing the cap live, and a total connector-auth outage from a missing manifest env var. Naming this is itself evidence of the process the AI-workflow note should describe: verification against the live, deployed system, not only against a test suite or a design doc.
+33	
+34	## Non-goals
+35	
+36	- No re-explanation of the org-wide orchestration structure (leads, hires, `CASTING.md`) — that's the root `CLAUDE.md`'s and `LOG.md`'s job; this README covers track 03's own AI-workflow story specifically.
+37	- No new code, no new tests — this is a documentation story.
+38	- No speculative "future work" section beyond what's already named as a stated seam elsewhere (`StopgapAuthorizer`, the vendor stub, Redis for multi-instance) — don't invent a roadmap this project hasn't committed to.
+39	
+40	## PO review script
+41	
+42	1. Read the README's "implemented vs. stubbed" section cold, as an evaluator would: can every item in the "deliberately stubbed" list above be found stated plainly, with a reason, not just a bare "TODO"?
+43	2. Confirm the test-strategy section cites both `decisions/test-double-strategy.md` and the PR-template checklist line — not just the design doc alone (the exact gap LT-42 found).
+44	3. Confirm the AI-workflow note names actual model/effort tiers per story (spot-check against `backlog.md`'s own `Model/effort:` lines) and actual orchestration-pattern outcomes (spot-check against the cited `decisions/*.md` files), not generic claims.
+45	4. Confirm the three live-review findings (CI skip, rate-limit/replica bug, connector-auth outage) are named somewhere in the AI-workflow or test-strategy section, not omitted as inconvenient detail — a submission that only shows the clean end-state, with none of the process that found real bugs, undersells the actual work done.
+46	
+47	## Research team review
+48	
+49	**Desmond Okafor — claims check:** [pending]
+50	
+51	**Tobias Lindqvist — objection:** [pending]
+52	
+53	**Naomi Voss — ruling:** [pending]
+54	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:42 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; git fetch origin -q
+ls .github/pull_request_template.md 2</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; git fetch origin -q\nls .github/pull_request_template.md 2&gt;&amp;1\ncat .github/pull_request_template.md 2&gt;&amp;1\necho \"---backlog model/effort lines---\"\ngrep -n \"Model/effort:\" 03-engineering-delivery/backlog.md"
+}</pre><div class="lbl">result</div><pre>.github/pull_request_template.md
+## Summary
+
+## Who did the work
+&lt;!-- Lead, hires and seats, reviewers (including 02's independent reviewer where applicable), and models. --&gt;
+
+## Links
+&lt;!-- Refinement doc path, Jira key. --&gt;
+
+## Checklist
+- [ ] Any change to `dao.Repository` or its sub-interfaces updates the hand-written fake in this PR (decisions/test-double-strategy.md)
+- [ ] Any new env var read in config.go is set in every Deployment whose APP_MODE uses it (handoff-03-auth.md v9)
+- [ ] No secret or token in code, tests, or comments (gitleaks runs on this PR's commits)
+- [ ] `git diff origin/main` reviewed before requesting merge
+---backlog model/effort lines---
+20:**Model/effort:** sonnet, high.
+37:**Model/effort:** sonnet, high.
+55:**Model/effort:** sonnet, high.
+72:**Model/effort:** sonnet, high.
+90:**Model/effort:** sonnet, high.
+112:**Model/effort:** sonnet, high.
+132:**Model/effort:** sonnet, high.
+159:**Model/effort:** sonnet, high.
+177:**Model/effort:** opus, high — the only implementation seat at this tier, per `planning-approach.md`'s connector-token-lifecycle exception.
+194:**Model/effort:** sonnet, high.
+210:**Model/effort:** sonnet, high.
+229:**Model/effort:** sonnet, high.
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> grep -n "^## S\|Model/effort:" /Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"^## S\\|Model/effort:\" /Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.md"
+}</pre><div class="lbl">result</div><pre>9:## S1. Scaffolding: Go module, entrypoints, shared bootstrap, config loading (LT-34)
+20:**Model/effort:** sonnet, high.
+26:## S2. DAO interface, domain types, sentinels, factory (LT-35)
+37:**Model/effort:** sonnet, high.
+43:## S3. Postgres/CockroachDB DAO implementation (LT-36)
+55:**Model/effort:** sonnet, high.
+61:## S4. SQLite DAO implementation (LT-37)
+72:**Model/effort:** sonnet, high.
+78:## S5. Conformance suite (05's requirement, cross-backend) (LT-38)
+90:**Model/effort:** sonnet, high.
+96:## S6. REST handlers: search/retrieve user_profile (Q2) (LT-39)
+112:**Model/effort:** sonnet, high.
+118:## S7. Auth middleware (JWT validation) (LT-40)
+132:**Model/effort:** sonnet, high.
+138:## S7a. Token issuance: real `/auth/token` grant logic (LT-51)
+159:**Model/effort:** sonnet, high.
+165:## S8. Connector: /auth + /identity (Q3) (LT-41)
+177:**Model/effort:** opus, high — the only implementation seat at this tier, per `planning-approach.md`'s connector-token-lifecycle exception.
+183:## S9. Handler and connector unit tests (LT-42)
+194:**Model/effort:** sonnet, high.
+200:## S10. README: implemented vs. stubbed, AI workflow, test strategy (LT-43)
+210:**Model/effort:** sonnet, high.
+216:## S11. Retention sweep: DeleteExpired / DeleteProfile wiring (LT-44)
+229:**Model/effort:** sonnet, high.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; git pull -q origin main 2&gt;&amp;1\ngrep -n -B3 \"strategy:\" deploy/api-service.yaml deploy/manifests.yaml 2&gt;/dev/null\necho \"---replicas---\"\ngrep -n \"replicas:\" deploy/api-service.yaml deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>deploy/manifests.yaml-77-# security regression, not a cosmetic one. This POC issuer has no HA
+deploy/manifests.yaml-78-# requirement that would justify accepting that.
+deploy/manifests.yaml-79-#
+deploy/manifests.yaml:80:# strategy: Recreate, not the RollingUpdate default — same reasoning as
+--
+deploy/manifests.yaml-90-  namespace: loginid-takehome
+deploy/manifests.yaml-91-spec:
+deploy/manifests.yaml-92-  replicas: 1
+deploy/manifests.yaml:93:  strategy: {type: Recreate}
+deploy/api-service.yaml-13-# for this take-home, so replicas stay at 1 rather than shipping a
+deploy/api-service.yaml-14-# rate limiter that silently doesn't limit at the stated rate.
+deploy/api-service.yaml-15-#
+deploy/api-service.yaml:16:# strategy: Recreate, not the RollingUpdate default — per Tobias's (01)
+--
+deploy/api-service.yaml-30-  namespace: loginid-takehome
+deploy/api-service.yaml-31-spec:
+deploy/api-service.yaml-32-  replicas: 1
+deploy/api-service.yaml:33:  strategy: {type: Recreate}
+---replicas---
+deploy/manifests.yaml:72:# replicas: 1, not 2 — per Helena's (02) LT-51 review: GrantLimiter
+deploy/manifests.yaml:92:  replicas: 1
+deploy/manifests.yaml:257:  replicas: 1
+deploy/manifests.yaml:427:  replicas: 1
+deploy/api-service.yaml:6:# replicas: 1, not 2 — per Naomi's (01) live review: RateLimiter,
+deploy/api-service.yaml:25:# assume exactly one pod, same trade already accepted for replicas: 1.
+deploy/api-service.yaml:32:  replicas: 1
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> grep -n -i "connector.auth.*outage\|outage.*connector\|missing.*env var\|CONNECTOR_JWT_AUDIENCE" /Us</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -i \"connector.auth.*outage\\|outage.*connector\\|missing.*env var\\|CONNECTOR_JWT_AUDIENCE\" /Users/warrenthompson/Source/LoginID/LOG.md 2&gt;/dev/null | head -10\ncd /Users/warrenthompson/Source/LoginID &amp;&amp; gh pr list --repo wtvamp/loginid-takehome --state all --limit 60 --json number,title 2&gt;&amp;1 | python3 -c \"\nimport json,sys\nd=json.load(sys.stdin)\nfor p in d:\n    if 'outage' in p['title'].lower() or 'connector' in p['title'].lower() or 'env var' in p['title'].lower() or 'audience' in p['title'].lower():\n        print(p['number'], p['title'])\n\""
+}</pre><div class="lbl">result</div><pre>53 LT-41: idp-connector startup validation + manifest-vs-config systemic test
+48 LT-41: idp-connector missing AUTH_JWKS_URL / AUTH_JWT_ISSUER
+42 fix: fail api-service startup loudly on missing AUTH_JWT_ISSUER/AUDIENCE
+40 LT-41: idp-connector /auth + /identity (Q3, stubbed vendor)
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; gh pr view 48 --repo wtvamp/loginid-takehome --json title</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; gh pr view 48 --repo wtvamp/loginid-takehome --json title,body,state,mergedAt 2&gt;&amp;1 | python3 -m json.tool | head -40"
+}</pre><div class="lbl">result</div><pre>{
+    "body": "## Summary\n- idp-connector's Deployment env was only `HTTP_ADDR` and `CONNECTOR_JWT_AUDIENCE` \u2014 `AUTH_JWKS_URL` and `AUTH_JWT_ISSUER` were never set, so `NewConnectorRouter`'s JWKS cache and JWT middleware (built from `cfg.AuthJWKSURL`/`cfg.AuthJWTIssuer`, same as `NewVerifierRouter`) had nothing. Every `/auth`/`/identity` call 401'd; connector log showed `JWKS fetch failed (host=, class=network_error): ... unsupported protocol scheme \"\"`.\n- Fix: add both env vars to `idp-connector`'s Deployment in `deploy/manifests.yaml`, using the same literal values `api-service.yaml` already uses (including the explicit `:443` from PR #43 \u2014 the issuer Service's only exposed port).\n- No NetworkPolicy change: `api-service-issuer-default-deny` already admits ingress from `idp-connector`.\n\n## Config-surface audit (requested before opening this PR, so this is the last instance of this bug class)\n\nEvery env var `internal/config.Config` exposes, cross-referenced against what each Deployment's mode actually reads (`internal/app/verifier_router.go`, `internal/app/issuer_router.go`, `internal/app/connector_router.go`, `cmd/*/main.go`), diffed against each Deployment's manifest env:\n\n| Config field | Env var | Read by | api-service (verifier) | api-service-issuer (issuer) | idp-connector |\n|---|---|---|---|---|---|\n| AppMode | `APP_MODE` | `cmd/api-service/main.go` mode switch | set: `verifier` | set: `issuer` | not read by this binary \u2014 OK unset |\n| HTTPAddr | `HTTP_ADDR` | both `main.go`s | set | set | set |\n| JWTSigningKeyPath | `JWT_SIGNING_KEY_FILE` | issuer mode only (`config.Load`, `main.go`) | not read in verifier mode \u2014 OK unset | set | not read \u2014 OK unset |\n| DBDriver | `DB_DRIVER` | verifier mode only | set: `postgres` | not read \u2014 OK unset | not read \u2014 OK unset |\n| DBDSN | `DB_DSN_FILE` | verifier mode only | set | not read \u2014 OK unset | not read \u2014 OK unset |\n| IssuerDBDSN | `ISSUER_DB_DSN_FILE` | issuer mode only | not read \u2014 OK unset | set | not read \u2014 OK unset |\n| AuthJWTIssuer | `AUTH_JWT_ISSUER` | verifier (middleware) + issuer (token stamping) + **connector (middleware)** | set | set | **was missing \u2014 fixed here** |\n| AuthJWTAudience | `AUTH_JWT_AUDIENCE` | verifier mode only (`validateAuthConfig` requires it there; issuer mode never reads it \u2014 mints `aud` per-client from `oauth_client.audience` instead) | set | set but unused in issuer mode \u2014 harmless surplus, not a bug, left as-is rather than churning an unrelated manifest line in this PR | not read \u2014 OK unset |\n| AuthJWKSURL | `AUTH_JWKS_URL` | verifier (`NewJWKSCache`) + **connector (`NewJWKSCache`)** | set | not read \u2014 OK unset | **was missing \u2014 fixed here** |\n| AuthzQASub / AuthzQAAllowedProfileID | `AUTHZ_QA_SUB` / `AUTHZ_QA_ALLOWED_PROFILE_ID` | verifier mode only (StopgapAuthorizer) | set | not read \u2014 OK unset | not read \u2014 OK unset |\n| ConnectorJWTAudience | `CONNECTOR_JWT_AUDIENCE` | connector only | not read \u2014 OK unset | not read \u2014 OK unset | set |\n| ConnectorClientID / ConnectorClientSecret | `CONNECTOR_CLIENT_ID` / `CONNECTOR_CLIENT_SECRET` | not read anywhere in current code (dead config surface \u2014 no caller reads these fields at all) | n/a | n/a | n/a |\n| IDPABCBaseURL | `IDP_ABC_BASE_URL` | connector only, optional (stub vendor if unset) | not read \u2014 OK unset | not read \u2014 OK unset | unset \u2014 stub vendor in use, correct for this environment |\n| IDPABCClientID / IDPABCClientSecret | `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET` | not read anywhere in current code (dead config surface) | n/a | n/a | n/a |\n\nOnly two real gaps existed, both on idp-connector, both fixed in this PR. `AUTH_JWT_AUDIENCE` on `api-service-issuer` is unused-but-harmless (not touched, to keep this PR to the actual bug). `ConnectorClientID/Secret` and `IDPABCClientID/Secret` are declared in `config.Config` but read by no code path yet \u2014 not a manifest gap, a placeholder config surface for a real-vendor integration that doesn't exist in this take-home (LT-41's own stated non-goal).\n\n## Test plan\n- [x] `kubectl apply --dry-run=server -f deploy/manifests.yaml` \u2014 clean, `idp-connector` Deployment diff applies\n- [x] Confirmed via the audit table above that api-service and api-service-issuer already had every env var their own mode reads \u2014 this really is the last instance of the class, not just the next one found\n- [ ] Naomi resumes the live LT-41 review post-deploy\n\nRenata is adding a startup guard to the connector binary + a manifest-vs-config test in parallel (does not block this PR).\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)\n\nhttps://claude.ai/code/session_01CnkuYV6xXmzt8kmeiHjPCG",
+    "mergedAt": "2026-09-13T14:33:22Z",
+    "state": "MERGED",
+    "title": "LT-41: idp-connector missing AUTH_JWKS_URL / AUTH_JWT_ISSUER"
+}
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; gh pr list --repo wtvamp/loginid-takehome --state all --s</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; gh pr list --repo wtvamp/loginid-takehome --state all --search \"LT-44\" --json number,title,state,mergedAt 2&gt;&amp;1\necho \"---\"\ngh pr list --repo wtvamp/loginid-takehome --state all --search \"LT-49 OR retention OR DeleteExpired\" --json number,title,state,mergedAt 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>[]
+---
+[{"mergedAt":"2026-09-13T03:32:32Z","number":6,"state":"MERGED","title":"LT-36: Postgres/CockroachDB DAO implementation"},{"mergedAt":"2026-09-13T03:08:16Z","number":10,"state":"MERGED","title":"Contract A3: SQLite FK enforcement site, and pin the tested CockroachDB version"},{"mergedAt":"2026-09-13T03:48:50Z","number":8,"state":"MERGED","title":"LT-37: SQLite DAO implementation"},{"mergedAt":"2026-09-13T04:20:27Z","number":16,"state":"MERGED","title":"LT-38: cross-backend behavioral conformance suite"},{"mergedAt":"2026-09-13T12:51:50Z","number":34,"state":"MERGED","title":"LT-51: OAuth2 client-credentials grant with a real Postgres-backed client store"}]
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; git pull -q origin main 2&gt;&amp;1\ngrep -rln \"DeleteExpired\\|DeleteProfile\\|retention.sweep\\|RetentionClass\" cmd internal 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>internal/app/verifier_router_test.go
+internal/dao/retention.go
+internal/dao/conformance_test.go
+internal/dao/repository.go
+internal/dao/validate_id.go
+internal/dao/sqlite/composite.go
+internal/dao/sqlite/sqlite.go
+internal/dao/postgres/integration_test.go
+internal/dao/postgres/composite.go
+internal/dao/sqlite/integration_test.go
+internal/dao/conformance/helpers_test.go
+internal/dao/conformance/conformance_test.go
+internal/api/fakes_test.go
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:43 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; grep -n \"CronJob\\|retention\" deploy/*.yaml 2&gt;/dev/null\necho \"---cmd---\"\nls cmd/\ngrep -rn \"DeleteExpired(\" cmd/ internal/app/ 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>---cmd---
+api-service
+idp-connector
+internal/app/verifier_router_test.go:35:func (f *fakeRepo) DeleteExpired(ctx context.Context, class dao.RetentionClass, olderThan time.Time, maxRows int) (dao.SweepResult, error) {
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:44 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> grep -n -i "LT-44\|retention sweep" /Users/warrenthompson/Source/LoginID/LOG.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -i \"LT-44\\|retention sweep\" /Users/warrenthompson/Source/LoginID/LOG.md"
+}</pre><div class="lbl">result</div><pre>69:**Pass fixes — 01, 03, 04, 05 closed; 02 outstanding.** 04 (Theo): compose rewritten to file-based `secrets:` so no literal secret values remain in `local-dev-loop.md`; observability now uses 05's real retention classes; stale token-cache references removed; the deletion story (LT-20, re-parented from 05 to 04) written with real acceptance criteria — enforcement site is the log-sink retention policy; F12/F13 held for Marcus's topology ruling. 01 (Naomi): connector interface made internal-to-adapter so the vendor token never crosses the adapter boundary; F9 phone search settled with 05 (exact after E.164 normalization, partial match stays name-only, B-tree index as enforcement site — `decisions/f9-phone-search-ruling.md`); the three decision footers added; F3 held for Marcus's sentence. 05 (Priya): `migration-approach.md` layout fixed — `shared/` is seed data only, all DDL per engine — and the stale S1 item closed with no change needed in 04; the DAO contract gained `DeleteExpired` and `DeleteProfile` (both writing `deletion_log` in-transaction); `deletion_log` retention row added with basis "unknown — legal" and the trap named (PII-free by construction, so no storage-limitation clock forces a window — "keep forever" becomes the default rather than a decision); cross-reference check: 29 references, 0 broken. 03 (Renata): 401 vs 403 semantics fixed; the real contradiction in `context-propagation.md` fixed (detach happens in the handler, not the DAO, preserving 05's cancellation guarantee); driver-error sanitization to code + constraint name stated as the enforcement site (F50); connector config vars added to the service boundaries; conformance suite named as a deliverable; new story S11 owns the retention sweep job nobody had claimed. **F21 addendum reviewed like the original contract:** Oren's first pass found four more real defects (nil-ambiguous `OldestSurvivingAt`, `RetentionClass` zero value, caller-supplied `reason`, unbounded transactions), Priya accepted all four and found a fifth interaction herself — batching and the oldest-surviving-row alert were each correct and together produced an alert that fires on every run; the metric is now meaningful only when `Drained` is true, and Theo gated the alert rule to match. Two principles recorded: *the reason a log row exists is a fact about which method was called — the method asserts it, the caller does not* (free-string reasons make audit codes caller-assertable); and the seam problem in four lines — *two individually correct fixes can be jointly wrong, and no single-document review can see it*.
+77:**Third pass — planning declared internally consistent (2026-09-12).** Seams 1/4, 3, 5, 9 all AGREE, no new regression: the caller-holds-token model is stated identically in `connector-security.md` §1/§2/attack-tree row 3, `api-connector-design-rationale.md:40,72`, `ux-notes.md:27`, and `handoff-04-secrets.md` rows 6/7; the issuer is one design across `handoff-03-auth.md:20`, `PLANNING.md`'s `APP_MODE`, and 04's issuer Deployment + Service + reachability paragraph; the DAO preamble is a banner; `multi-db-strategy.md:225` names `api-service` as the identity resolver; the audit-stream row and the deliberately excluded `deletion_log` table are drawn the same way by 05 and 04. Seam 13 found five stale restatements, all cosmetic, none load-bearing (03's layout artifacts, two composite-method summaries, a v2→v3 hand-off citation, one retention-class name) — routed to Renata and Theo; no further pass. **Backlog complete in Jira:** 50 issues `LT-1`…`LT-50` under five Epics — 01 `LT-6`…`LT-13` (all Done), 05 `LT-14`…`LT-19` + `LT-50` (Done), 02 `LT-21`…`LT-33` (S1–S10 Done; S11 post-implementation review, S12 issuer split-Deployment, S13 connector credential wiring open), 03 `LT-34`…`LT-44` (all open, gated on the code go), 04 `LT-45`…`LT-49` + `LT-20` (open, design complete); 55+ `Blocks` links including every cross-track hand-off; two ambiguous references ruled by team-lead (`LT-34` blocks `LT-32`; `LT-42` blocks `LT-47`). Consistency-pass tally across three passes: 52 findings, 4 regressions from fixes, 5 cosmetic restatements — every one traceable to a file:line and an owner, none silently dropped.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:44 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Confirmed — LT-44 is a real, planned story (S11, "new story S11 owns the retention sweep job nobody had claimed") that genuinely has no PR and no code path calling `DeleteExpired`/`DeleteProfile` outside test fakes. This is a real omission from LT-43.md's list.
+
+## LT-43 claims check
+
+**Model/effort claims — verified exactly against `backlog.md`.** I grepped every `Model/effort:` line: 11 stories are `sonnet, high`, exactly one (S8/LT-41, the connector) is `opus, high` with the connector-token-lifecycle-exception citation matching `planning-approach.md`'s language. The claim "sonnet, high for every implementation story... except the connector" is precisely accurate.
+
+**PR template fix — verified live.** `.github/pull_request_template.md` now exists and its checklist includes the exact fake-update line LT-42 found missing. LT-43.md's "now also a literal checklist line" claim checks out.
+
+**`Recreate` strategy — verified live, and now actually applied (was still open the last time I checked this).** Both `deploy/api-service.yaml` and `deploy/manifests.yaml`'s issuer Deployment now carry `strategy: {type: Recreate}` alongside `replicas: 1`. Tobias's earlier objection (replica-count alone doesn't close the cross-pod rate-limit gap during a rolling deploy) has since been merged as a real fix — LT-43.md's claim is accurate as of current `main`, not stale.
+
+**"Connector-auth outage from a missing manifest env var" — verified as a real, merged incident, not an invented detail.** PR #48 confirms it precisely: `idp-connector`'s Deployment was missing `AUTH_JWKS_URL`/`AUTH_JWT_ISSUER`, so every `/auth`/`/identity` call 401'd, logged as "JWKS fetch failed... unsupported protocol scheme." Merged fix included a full config-surface audit table. This is a legitimate, worth-naming finding for the README.
+
+**Everything else in the "deliberately stubbed" list checks out** against code I inspected directly in earlier passes (StubVendorClient, StopgapAuthorizer, CockroachDB/SQLite CI-only, no write endpoint, in-process limiters, LT-33 open).
+
+**One real omission from the list — LT-44 (retention sweep) is missing entirely.** I checked: `LOG.md` confirms S11/LT-44 ("new story S11 owns the retention sweep job nobody had claimed") is a real, tracked story — but there's no PR for it, and I grepped the whole codebase: `DeleteExpired`/`DeleteProfile` exist only on the DAO interface and in test fakes satisfying that interface. Nothing in `cmd/` calls either method, and there's no `CronJob` manifest anywhere in `deploy/`. This is the same class of gap as "no `POST /profiles` write endpoint" or "LT-33 in progress" — a planned, backlogged piece of Q1's own governance requirement (`pii-governance.md`'s retention policy) that has no live wiring at all. It belongs in the "deliberately stubbed" list for the same reason the others do: a cold reader checking whether retention/deletion actually runs would otherwise have to discover its absence themselves.
+
+**Recommend adding:** *"The retention sweep (LT-44) — `DeleteExpired`/`DeleteProfile` exist on the DAO composite and are tested there, but nothing schedules or calls them; no cron/job wires the sweep to run against the live database. `pii-governance.md`'s retention policy is designed and enforced at the schema/DAO level, not yet operationally running."*</div></div>
+<div class="msg human"><span class="when">Sep 13, 9:46 AM PDT</span><span class="who">Lead</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Claims check: LT-44 refinement (retention sweep)"&gt;
+Next pull: LT-44 (retention sweep wiring, following your LT-43 catch) — 03-engineering-delivery/refinement/LT-44.md. Please verify: the three retention-class windows/clocks against pii-governance.md directly, the metrics/label requirements against observability.md directly, and re-confirm the DAO-level tests I'm citing as already-covering some criteria (DeleteExpired/Drained/OldestSurvivingAt tests) actually exist as I claim from your earlier LT-42 sweep — I'm relying on that prior work rather than re-verifying from scratch here.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:46 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-44 refinement — S11: retention sweep, `DeleteExpired`/`DeleteProfile` wiring
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03, sweep-invocation code), Theo Bergman (04, `CronJob` manifest + metrics sink); design inputs: Priya Nandakumar (05, retention windows/clocks/classes), Marcus Ilori (02, seat on subject-deletion audit trail if any).
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist.
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: without this, the README (LT-43, correctly deferred to write last) would have to list PII retention as stubbed — at a company whose own product framing is PII minimization, that's a real, visible gap in the submission, not a cosmetic one. Desmond's LT-43 finding made the case concretely: `DeleteExpired`/`DeleteProfile` exist and are tested on the DAO composite, but nothing schedules or calls either method — a designed-but-not-operational control. This is roughly a half-day story (a `CronJob` calling a `--sweep` mode of the existing `api-service` image, bounded by the already-built `maxRows`, audited) that turns a stub line into a delivered one.
+10	
+11	## What this story actually is
+12	
+13	Not new DAO methods — `DeleteExpired`/`DeleteProfile` already exist on the composite (05's `multi-db-strategy.md` §3c) and are already tested (LT-38's conformance suite: `TestConformance_DeleteExpired_*`, `TestConformance_OldestSurvivingAt_*`, `TestConformance_Drained_*`, `TestConformance_DeleteWritesExactlyOneDeletionLogRow`, `TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing` — all confirmed present during LT-42's full completeness sweep). This story is the **caller**: a scheduled invocation that loops per `RetentionClass` until drained, plus a subject-deletion request path, plus the health metric that tells 04 whether it's actually running.
+14	
+15	**Mechanism (team-lead's recommendation, adopted):** a `CronJob` in `04-infra-devops`'s manifests invoking `cmd/api-service`'s existing image in a new `--sweep` mode (or a distinct small entrypoint, `03`'s call) — not a new binary, not a new image build, reusing what's already deployed.
+16	
+17	## The three retention classes and windows this sweep must implement (from `pii-governance.md`, cited so this story doesn't re-derive them)
+18	
+19	| `RetentionClass` | Clock | Window | Why this clock specifically |
+20	|---|---|---|---|
+21	| `direct` | `updated_at` | 24 months | Proposed POC default, engineering basis only — explicitly **not** a legal ruling (`pii-governance.md`'s own "unknown, needs product/legal ruling" status). This story implements the number as configured, doesn't treat it as settled policy. |
+22	| `idp_cache` | `updated_at` | 30 days | A cache, not a record — re-hydration costs one `/identity` call, so the window trades staleness against re-fetch cost. |
+23	| `idp_cache_orphan` | `created_at`, **deliberately not `updated_at`** | 7 days | Using `updated_at` would let an orphan's own read/re-hydration path reset its expiry indefinitely — the entire reason this class exists as `created_at`-clocked, not a stylistic choice. |
+24	
+25	**These are stated as "Proposed" in `pii-governance.md`, not "Ruled," except `user_credential`'s no-independent-window rule.** This story implements the configured numbers; it is not this story's job to decide whether 24 months/30 days/7 days are the right numbers — that's Priya's/legal's call, already flagged as open in the source document.
+26	
+27	## Acceptance criteria (restated from `backlog.md` S11)
+28	
+29	- [ ] Implements 05's addendum without re-deriving the transaction-boundary or batching reasoning (each `DeleteExpired` call is already one transaction per batch, per the DAO's own implementation).
+30	- [ ] Loops `DeleteExpired` per `RetentionClass` until `Drained` is true, one class at a time, never a mixed/shared predicate — enforcement site: the sweep invocation loop's own structure.
+31	- [ ] `DeleteExpired` is never called with a request-scoped context — the sweep's own job/scheduler context governs it. Enforcement site: the sweep invocation's context construction (the `CronJob`'s own pod lifecycle, not an inbound HTTP request), plus a test asserting an already-cancelled context returns before deleting anything (the DAO layer already has this test per LT-38; this story's own test confirms the *caller* doesn't accidentally pass a request-scoped one).
+32	- [ ] `SweepResult.OldestSurvivingAt` is published to 04's observability **only from a `Drained == true` result** — a non-drained batch reports progress, not health, per `observability.md`'s explicit warning that getting this wrong "means the alert fires on every sweep and gets muted, which is worse than not having it." Enforcement site: the metrics-emission code path, gated on `Drained`.
+33	- [ ] Metrics emitted per class per run: `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class="direct"|"idp_cache"|"idp_cache_orphan"}` — matching `observability.md`'s exact label values (not the earlier-corrected, invented `vendor_token_cache`/`idp_identity_cache` names that document itself flagged and fixed).
+34	- [ ] `DeleteProfile` is the only path used for a subject-deletion request; ordinary application deletes still go through `Profiles().Delete` (no log row) — this distinction is preserved, not collapsed for convenience.
+35	- [ ] The `Drained`/`OldestSurvivingAt` coupling gets a one-line doc comment at the field declaration (Oren's note) — already present in the DAO's own code per LT-42's completeness sweep; this story doesn't need to add it again, just not remove or contradict it.
+36	- [ ] **The `CronJob` runs against `api-service`'s existing image** (a `--sweep` mode or distinct entrypoint), not a new image build — matching team-lead's stated "half-day story" framing; a new image/Dockerfile would be disproportionate scope for what this needs.
+37	- [ ] **Bounded by the existing `maxRows` per call** — the sweep doesn't invent a new batching parameter; it uses the DAO's own already-validated `1..10_000` bound.
+38	- [ ] **Audited** — every deletion this sweep performs writes exactly one `deletion_log` row via the DAO's own transaction (already guaranteed by the DAO layer per LT-38's test); this story's job is only to confirm it doesn't bypass that path.
+39	
+40	## Non-goals
+41	
+42	- No new DAO methods, no schema changes — `DeleteExpired`/`DeleteProfile` and `deletion_log` already exist and are tested.
+43	- No change to the retention windows themselves (24 months/30 days/7 days) — those are Priya's/legal's numbers, implemented as configured, not re-litigated here.
+44	- No new container image — reuses `api-service`'s existing image in a new invocation mode.
+45	- No subject-deletion-request *API endpoint* — `backlog.md`'s S11 wires the DAO-level `DeleteProfile` path; whether/how an external caller triggers a subject-deletion request (a support-tool button, an API route) is a separate, unscoped question not raised by this story's own criteria.
+46	
+47	## PO review script
+48	
+49	1. Confirm the `CronJob` manifest invokes `api-service`'s existing image, not a new one.
+50	2. Confirm the sweep loop calls `DeleteExpired` per class until `Drained`, never a mixed predicate — read the invocation code directly.
+51	3. Confirm the sweep's context is the job's own, not request-scoped — read the code, confirm the cancelled-context test exists at this layer too (not just the DAO's own, already-covered test).
+52	4. Confirm metrics are emitted with the correct label values (`direct`/`idp_cache`/`idp_cache_orphan`), only from `Drained == true` results.
+53	5. Confirm the alert rule (`oldest_surviving_row_age_seconds{class="X"} &gt; retention_window + sweep_interval`) is actually configured in 04's monitoring, not just theoretically possible from the emitted metric.
+54	6. Once deployed: confirm the `CronJob` actually runs on schedule (check its last-run status via `kubectl get cronjob`/`kubectl get jobs`) and that at least one run reports real `rows_examined`/`rows_deleted` numbers, not zero-across-the-board from day one (which would be consistent with either a genuinely empty table or a broken sweep — the seeded demo profiles, if old enough, are one way to get a non-trivial signal; otherwise this criterion is "ran without erroring," not "deleted something").
+55	
+56	## Research team review
+57	
+58	**Desmond Okafor — claims check:** [pending]
+59	
+60	**Tobias Lindqvist — objection:** [pending]
+61	
+62	**Naomi Voss — ruling:** [pending]
+63	</pre></div></details><details><summary><span class="tn">Bash</span> grep -n -i "retention window\|clock\|direct\|idp_cache\|olderthan\|window" /Users/warrenthompson/Sou</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -i \"retention window\\|clock\\|direct\\|idp_cache\\|olderthan\\|window\" /Users/warrenthompson/Source/LoginID/05-data-ops/pii-governance.md | head -40"
+}</pre><div class="lbl">result</div><pre>11:`user_profile` rows are not retained indefinitely by default. Two clocks apply, distinguished by the `source` column:
+13:- **`source = 'direct'`** — profile created through this system's own registration flow. Retention window is a product/legal decision this track doesn't own outright, but the schema supports enforcing whatever window is chosen: `created_at`/`updated_at` plus a scheduled deletion job keyed on those columns.
+14:- **`source = 'idp_cache'`** — profile hydrated from a third-party IDP connector's `/identity` response. This data is subject to the **same retention obligation as directly-collected PII** — caching it does not reset or relax that obligation. If anything it adds a vendor-processor relationship on top: this system is now downstream custodian of another party's collected PII, which should be documented as a data-flow (third-party collection → this system → disposal) rather than left implicit.
+16:Tagging cache rows distinctly by `source` is what makes a targeted deletion request or a bulk retention sweep possible without touching directly-collected profiles by accident.
+26:## Retention windows (S5)
+28:**Every number below is a proposed POC default pending a product/legal ruling.** One asymmetry belongs stated plainly rather than buried: GDPR Art. 5(1)(e) storage limitation is a **principle** — data kept "no longer than is necessary" — demanding a window someone justifies. It is not a number anyone can look up. So every basis below is either an engineering rationale or the honest word *unknown*. There is no third kind, and a citation implying a regulation supplies a specific duration would be a false statement in a client-facing document.
+30:| Data class | Clock column | Proposed window | Basis | Disposal | What cascades | Ratifier | Status |
+32:| `user_profile`, `source='direct'` | `updated_at` | **24 months** since last update | *unknown — needs product/legal ruling.* Engineering basis only: long enough that a dormant account surviving a slow re-engagement cycle is not destroyed, short enough to be a defensible answer to "why do you still hold this." No regulation supplies this number | Hard delete | Cascade FK destroys all `user_credential` rows — the account stops existing | unknown — no named legal owner on this POC | Proposed |
+33:| `user_profile`, `source='idp_cache'` | `updated_at` | **30 days** since last hydration | Engineering: **a cache is not a record.** Re-hydration costs one `/identity` call, so deleting too early costs a vendor round-trip. Vendor data also goes stale — a 14-month-old cached address is a correctness problem before it is a privacy one. We are downstream custodian of another party's collected PII with no independent relationship to the subject, which argues for the shortest window that still functions | Hard delete | Cascade FK; a cached profile should not normally have credentials — if it does, it is no longer merely a cache and product must say which clock wins | unknown | Proposed |
+34:| `user_profile`, `source='idp_cache'`, **no referencing `user_credential`** (orphaned cache) | **`created_at`**, deliberately not `updated_at` | **7 days** since creation | Engineering: lookup residue, not an account — someone called `/identity`, we cached the answer, nothing was ever built on it. **The clock is `created_at` because `updated_at` is touched by the read and re-hydration path: an orphan re-read on any schedule would keep resetting its own expiry and never die.** Closing that loop is the entire reason this row exists | Hard delete | Nothing — by definition it has no children | unknown | Proposed |
+35:| **Audit-log stream** (the emitted log entries evidencing deletions, as read by 04's sink) | the entry's own timestamp | **Proposed, pending ruling — see basis** | **unknown — needs a legal ruling.** The audit stream evidences that a deletion happened, which is useful for exactly as long as someone may ask. That period is a question about limitation windows and regulator expectations, not an engineering one, and no engineering rationale substitutes for it | Expiry at the sink | Nothing | unknown — needs product/legal ruling | **Proposed** |
+36:| `user_credential` | — | **No independent window** | Wholly governed by its profile's window via the cascade FK. A credential cannot outlive its profile; a credential row with no profile cannot exist. A second clock could only ever disagree with the first, with no resolution rule | n/a | n/a | **Ruled** |
+42:1. **Nothing forces a window on it.** The table is PII-free by construction (`multi-db-strategy.md` §6.11), so it is *not* subject to the storage-limitation clock every other row here answers to. "Keep it forever" is therefore the path of least resistance rather than a decision anyone made — which is precisely why it needs one.
+43:2. **No method sweeps it.** `DeleteExpired` takes a `RetentionClass`, and there is no class for it. If a window is ruled, implementing it is a **contract change** — either a fourth class or a separate method — not a configuration value someone can set. Flagging that now so the cost is visible at the time of the ruling rather than discovered after it.
+45:Owner of the ruling: unknown, same as the windows above. Owner of the implementation once ruled: 05 (contract) then 03 (code), by the same route as F21.
+50:2. **The reverse does not hold.** Deleting a credential leaves the profile standing. **A user who removes their last login method still has PII in this database, running on the `direct` clock.** If product wants "removing your last credential deletes the account," that is a policy decision, not a schema one — and it is currently *not* what the schema does.
+52:### The cache window is "since last use", not "since first seen"
+54:Re-hydration moves `updated_at`, so an actively-used cache row can live indefinitely. That is correct, and it must be written down, because it means the 30-day window measures **time since last use**. It is also exactly why the orphan row is keyed on `created_at`: the two rules are one rule seen from two sides — a row that is still being used should survive, and a row that is only being *re-read by the sweep's own neighbours* should not be able to refresh itself into immortality.
+60:| **Bulk retention sweep** (scheduled) | `source` = the class, plus that class's clock older than that class's window; orphan class additionally requires no referencing credential. **One class per pass — never a mixed-class sweep**, because a single predicate spanning two clocks is how the wrong window gets applied to the wrong rows | Many rows | Cascade delete, implicit and unmentioned in the predicate — the sweep selects profiles and destroys credentials as a side effect. Stated because it is invisible at the point of use | **Hard delete** | One row in a separate `deletion_log`: profile UUID, `source`, `deleted_at`, reason `retention_sweep`, job run id. **No name, phone or address** | Schedule it; run it per class; emit the metrics below | **Nothing errors.** No exception, no alert, no symptom — rows accumulate and the policy is fiction nobody can see is fiction |
+62:| **IDP re-hydration overwrite** | Existing `idp_cache` profile matched on the lookup key, fresh `/identity` response | One row | **None** — the profile id is stable across re-hydration, so credentials survive | Upsert in place; old field values are **gone, not versioned** | None, and none wanted | Nothing — request-path behaviour, not a job | n/a — but see the clock-reset note above |
+68:**Why the `deletion_log` holds no PII.** Otherwise the log is just a second copy of the problem with no clock on it. The retained UUID identifies a row that no longer exists and is not linkable to a person once the profile is gone.
+76:- **`DeleteExpired(ctx, class, olderThan, maxRows) (SweepResult, error)`** — one retention class per call, using that class's own clock column, cascading to credentials and writing a `deletion_log` row in the same transaction. **Batched: `maxRows` is required (1..10 000) and each batch is its own transaction**, so an interrupted sweep leaves fewer rows deleted rather than a half-written batch. The caller loops until `SweepResult.Drained` is true. It must not be called with a request-scoped context — a sweep cancelled because an inbound request went away is a retention policy silently dependent on request lifetimes.
+87:The third is the actual health check. **04 should alert when the age of the oldest surviving row exceeds that class's window plus one sweep interval** — that is the condition that detects a job which has silently stopped, which rows-deleted counts cannot.
+93:**A subject-deletion request currently reaches `user_profile` and, by cascade, `user_credential`. It does not reach derived data** — application logs, metrics, connector traces, or anything else that may have incidentally captured a name, phone or address in transit. That data has no `source` column, no retention clock, and in most cases no primary key to select on.
+99:- `02-ai-security-architecture` should build credential hashing (algorithm, cost factor, salt handling) on top of the `secret`/`hash_algo`/`hash_cost` columns already reserved in the schema — flagged directly to Marcus once this schema landed.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:46 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> grep -n -i "rows_examined\|rows_deleted\|oldest_surviving\|vendor_token_cache\|idp_identity_cache\|l</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -i \"rows_examined\\|rows_deleted\\|oldest_surviving\\|vendor_token_cache\\|idp_identity_cache\\|label\\|alert.*fires on every sweep\\|muted\" /Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md"
+}</pre><div class="lbl">result</div><pre>15:Standard RED metrics (rate, errors, duration) per endpoint, via Prometheus client library, scraped by whatever the lab cluster already runs (not stood up new for this take-home). Labels: method, route, status class — never a label with cardinality tied to user data (no `sub` or phone number as a metric label; that turns a metrics backend into an accidental PII store with no access control at all, which is a worse leak than a log line since metrics systems are typically more widely readable).
+37:Mechanism: the sweep job (whatever invokes it — a CronJob against the lab cluster, per 05's mechanism-agnostic requirement) emits these as Prometheus metrics with a `class` label matching 05's actual retention classes — `source="direct"`, `source="idp_cache"`, and `idp_cache_orphan` for an orphaned `idp_cache` row (`../05-data-ops/pii-governance.md`), never a label carrying the PII itself, same discipline as the RED-metrics rule above. (An earlier draft of this section invented `vendor_token_cache`/`idp_identity_cache` as class names — those don't correspond to anything 05 tracks and described a connector token cache the S3 ruling never adopted; corrected here.) The alert rule is `oldest_surviving_row_age_seconds{class="X"} &gt; (retention_window_seconds + sweep_interval_seconds)`, evaluated per class.
+39:**Batched sweeps: only a drained result feeds the metric.** 05's `DeleteExpired` is batched (a bounded `maxRows` per call, `SweepResult.Drained` marking the last batch of a sweep) — `OldestSurvivingAt` is meaningful only on a `Drained == true` result, since mid-sweep the oldest deletable row is still present by construction and would read as stale on every batch but the last. The sweep job emits `oldest_surviving_row_age_seconds` only from drained results, never from an intermediate batch; the alert rule above already only ever sees what's published, so this is a constraint on what the job emits, not an extra filter the alert needs to apply. Getting this wrong means the alert fires on every sweep and gets muted, which is worse than not having it.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:47 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; grep -rn \"func TestConformance_DeleteExpired\\|func TestConformance_OldestSurvivingAt\\|func TestConformance_Drained\\|func TestConformance_DeleteWritesExactlyOneDeletionLogRow\\|func TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing\" internal/dao/conformance/*.go internal/dao/*.go 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>internal/dao/conformance/conformance_test.go:501:func TestConformance_DeleteExpired_InvalidClass(t *testing.T) {
+internal/dao/conformance/conformance_test.go:510:func TestConformance_DeleteExpired_MaxRowsBounds(t *testing.T) {
+internal/dao/conformance/conformance_test.go:522:func TestConformance_OldestSurvivingAt_NonNilWhenNothingOldEnough(t *testing.T) {
+internal/dao/conformance/conformance_test.go:541:func TestConformance_OldestSurvivingAt_NilWhenClassEmpty(t *testing.T) {
+internal/dao/conformance/conformance_test.go:553:func TestConformance_Drained_TrueOnFinalBatch(t *testing.T) {
+internal/dao/conformance/conformance_test.go:565:func TestConformance_DeleteWritesExactlyOneDeletionLogRow(t *testing.T) {
+internal/dao/conformance/conformance_test.go:601:func TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing(t *testing.T) {
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:47 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; grep -n -B2 \"OldestSurvivingAt\\|Drained\" internal/dao/retention.go"
+}</pre><div class="lbl">result</div><pre>13-
+14-// SweepResult matches multi-db-strategy.md §3c exactly (post-F21-addendum
+15:// batching revision). OldestSurvivingAt is nil only when the class has zero
+16-// rows remaining after this call — never for "nothing was old enough to
+17-// touch" (05's ruling on Oren's F21 review finding #1). It is meaningful
+18:// only when Drained is true: mid-sweep, deletable rows still exist by
+--
+23-	RowsExamined      int
+24-	RowsDeleted       int
+25:	OldestSurvivingAt *time.Time
+26:	Drained           bool
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:47 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Confirmed — that doc comment exists exactly as claimed.
+
+## LT-44 claims check
+
+**Retention class/window/clock table — verified word-for-word against `pii-governance.md` directly.**
+- `direct`: `updated_at`, 24 months, status "Proposed," engineering-basis-only — matches the source table exactly, including the "unknown — needs product/legal ruling" framing.
+- `idp_cache`: `updated_at`, 30 days — matches exactly, including the "a cache is not a record" rationale.
+- `idp_cache_orphan`: `created_at`, deliberately not `updated_at`, 7 days — matches exactly, and the reasoning given ("using `updated_at` would let an orphan's own read/re-hydration path reset its expiry indefinitely") is a near-verbatim restatement of the source's own sentence on this point.
+
+**Metrics/label requirements — verified word-for-word against `observability.md` directly.** The three metric names, the `class` label values (`direct`/`idp_cache`/`idp_cache_orphan`), the explicit callout of the corrected invented names (`vendor_token_cache`/`idp_identity_cache`), the `Drained`-gating requirement, and the exact consequence quoted ("the alert fires on every sweep and gets muted, which is worse than not having it") are all accurate, direct citations — nothing embellished or misattributed.
+
+**DAO-level test claims — independently re-checked just now, not assumed from memory (my LT-42 pass didn't actually cover `internal/dao/conformance` by name, so this was worth re-verifying rather than rubber-stamping).** I grepped `internal/dao/conformance/conformance_test.go` directly and found every test cited:
+- `TestConformance_DeleteExpired_InvalidClass`, `TestConformance_DeleteExpired_MaxRowsBounds`
+- `TestConformance_OldestSurvivingAt_NonNilWhenNothingOldEnough`, `TestConformance_OldestSurvivingAt_NilWhenClassEmpty`
+- `TestConformance_Drained_TrueOnFinalBatch`
+- `TestConformance_DeleteWritesExactlyOneDeletionLogRow`
+- `TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing`
+
+All present, all named essentially as cited (some are split across more specific sub-test names rather than one test per pattern, but every named guarantee has a real, existing test backing it). I also independently confirmed the `Drained`/`OldestSurvivingAt` doc comment in `internal/dao/retention.go` exists exactly as described.
+
+**Net: no corrections needed.** Every citation traces cleanly to source, and the one thing you asked me to re-verify rather than take on faith (the DAO test claims) checks out — worth flagging that I hadn't actually confirmed those specific test names in my LT-42 pass, so this was a real independent check, not a rubber stamp.</div></div>
+<div class="msg human"><span class="when">Sep 13, 9:54 AM PDT</span><span class="who">Lead</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Claims check: LT-46 refinement (Vault re-scope)"&gt;
+New refinement: LT-46's fifth criterion has been re-scoped by Warren from etcd encryption to Vault-delivered secrets — 04-infra-devops/refinement/LT-46.md. I enumerated the six application secrets by reading the deployed manifests directly (api-service-jwt-signing-key, postgres-superuser, db-migrator-credential, db-runtime-credential, issuer-db-migrator-credential, issuer-db-runtime-credential). Please verify this count/list against the actual current manifests yourself (things may have moved since I last pulled), and check whether I've missed any Secret reference anywhere in deploy/.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:54 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; git fetch origin -q
+cd /private/tmp/claude-501/-Users-war</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; git fetch origin -q\ncd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; git pull -q origin main 2&gt;&amp;1\ngrep -rn \"secretName:\\|kind: Secret\" deploy/*.yaml"
+}</pre><div class="lbl">result</div><pre>deploy/api-service.yaml:81:          secret: {secretName: db-runtime-credential}
+deploy/manifests.yaml:121:          secret: {secretName: issuer-db-runtime-credential}
+deploy/manifests.yaml:123:          secret: {secretName: api-service-jwt-signing-key}
+deploy/manifests.yaml:245:  secretName: postgres-server-tls
+deploy/manifests.yaml:314:          secret: {secretName: postgres-server-tls, defaultMode: 0600}
+deploy/manifests.yaml:514:      secretName: loginid-takehome-tls
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:55 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; grep -rn -i \"secret\" deploy/*.yaml | grep -iv \"^.*#\" | grep -i \"name:\\|secretName\\|secretKeyRef\\|secretRef\" "
+}</pre><div class="lbl">result</div><pre>deploy/api-service.yaml:51:            - {name: DB_DSN_FILE, value: /secrets/db/dsn}
+deploy/api-service.yaml:76:            - {name: db-runtime-credential, mountPath: /secrets/db, readOnly: true}
+deploy/api-service.yaml:81:          secret: {secretName: db-runtime-credential}
+deploy/manifests.yaml:110:            - {name: JWT_SIGNING_KEY_FILE, value: /secrets/jwt/signing-key}
+deploy/manifests.yaml:111:            - {name: ISSUER_DB_DSN_FILE, value: /secrets/issuer-db/dsn}
+deploy/manifests.yaml:115:            - {name: jwt-signing-key, mountPath: /secrets/jwt, readOnly: true}
+deploy/manifests.yaml:116:            - {name: issuer-db-runtime-credential, mountPath: /secrets/issuer-db, readOnly: true}
+deploy/manifests.yaml:121:          secret: {secretName: issuer-db-runtime-credential}
+deploy/manifests.yaml:123:          secret: {secretName: api-service-jwt-signing-key}
+deploy/manifests.yaml:245:  secretName: postgres-server-tls
+deploy/manifests.yaml:293:              valueFrom: {secretKeyRef: {name: postgres-superuser, key: password}}
+deploy/manifests.yaml:295:              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: password}}
+deploy/manifests.yaml:297:              valueFrom: {secretKeyRef: {name: db-runtime-credential, key: password}}
+deploy/manifests.yaml:299:              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: password}}
+deploy/manifests.yaml:301:              valueFrom: {secretKeyRef: {name: issuer-db-runtime-credential, key: password}}
+deploy/manifests.yaml:314:          secret: {secretName: postgres-server-tls, defaultMode: 0600}
+deploy/manifests.yaml:409:              valueFrom: {secretKeyRef: {name: db-migrator-credential, key: dsn}}
+deploy/manifests.yaml:411:              valueFrom: {secretKeyRef: {name: issuer-db-migrator-credential, key: dsn}}
+deploy/manifests.yaml:514:      secretName: loginid-takehome-tls
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:55 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-01-product-industry-research-design/9f72a7fe-5fe0-4320-96cc-449f87d8107b/scratchpad/main-check &amp;&amp; sed -n '220,250p' deploy/manifests.yaml\necho \"---ingress---\"\nsed -n '505,520p' deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>      ALTER DEFAULT PRIVILEGES FOR ROLE issuer_migrator IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO issuer_runtime;
+    EOSQL
+---
+# Self-signed Issuer + Certificate for Postgres's server TLS, per
+# Marcus's (02) ruling on threat-model.md Assumption 9: PII crosses this
+# connection, and this track already requires TLS for the same PII one
+# hop earlier (client-facing), so plaintext one hop later on a shared
+# cluster with unverified network isolation would be inconsistent.
+# letsencrypt-prod (used by the public Ingress) can't issue for an
+# internal-only DNS name — self-signed is sufficient here because the
+# client uses sslmode=require, not verify-full (NetworkPolicy already
+# restricts *who* can reach the DB Service; TLS covers *what's on the
+# wire*, not identity verification, per Marcus's own scoping of what this
+# hop needs).
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata: {name: postgres-selfsigned, namespace: loginid-takehome}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: {name: postgres-server-tls, namespace: loginid-takehome}
+spec:
+  secretName: postgres-server-tls
+  issuerRef: {name: postgres-selfsigned, kind: Issuer}
+  dnsNames:
+    - postgres.loginid-takehome.svc.cluster.local
+    - postgres.loginid-takehome.svc
+    - postgres
+---ingress---
+kind: Ingress
+metadata:
+  name: loginid-takehome
+  namespace: loginid-takehome
+  annotations: {cert-manager.io/cluster-issuer: letsencrypt-prod}
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [loginid-takehome.uplifttech.org]
+      secretName: loginid-takehome-tls
+  rules:
+    - host: loginid-takehome.uplifttech.org
+      http:
+        paths:
+          - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
+          - {path: /auth/token, pathType: Exact, backend: {service: {name: api-service-issuer, port: {number: 443}}}}
+Shell cwd was reset to /Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:55 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Confirmed — both are cert-manager-generated TLS `Secret`s (a self-signed `Issuer`/`Certificate` for Postgres, and the public Ingress's `letsencrypt-prod` certificate), not out-of-band-provisioned application credentials.
+
+## LT-46 (Vault re-scope) claims check
+
+**All six named secrets verified present, with every reference location.** I grepped `deploy/*.yaml` broadly (both `secret: {secretName: ...}` volume mounts and `secretKeyRef` env references, since the two forms are easy to under-count if you only grep one pattern):
+
+| Secret | Where referenced |
+|---|---|
+| `api-service-jwt-signing-key` | `manifests.yaml`, volume mount on `api-service-issuer` |
+| `postgres-superuser` | `manifests.yaml`, `secretKeyRef` (Postgres init container) |
+| `db-migrator-credential` | `manifests.yaml`, `secretKeyRef` (init container + migration `Job`) |
+| `db-runtime-credential` | `api-service.yaml` volume mount + `manifests.yaml` `secretKeyRef` |
+| `issuer-db-migrator-credential` | `manifests.yaml`, `secretKeyRef` (init container + migration `Job`) |
+| `issuer-db-runtime-credential` | `manifests.yaml`, volume mount + `secretKeyRef` |
+
+Your count and list are accurate and complete for this class of secret.
+
+**Two Secret references exist in `deploy/` that aren't in your list — but they're a different class, worth naming rather than silently adding to your count.**
+- `postgres-server-tls` — a `cert-manager.io/v1` `Certificate` (self-signed `Issuer`) for Postgres's internal TLS.
+- `loginid-takehome-tls` — the public Ingress's TLS secret, issued via the `letsencrypt-prod` `ClusterIssuer` annotation.
+
+Both `Secret` objects are created and rotated automatically by cert-manager, not provisioned out-of-band by a human the way your six are (per the JWT-signing-key/DB-credential pattern this project has used throughout). They don't fit "delivered via Vault" in the same sense — there's no static credential value for Vault to inject; cert-manager mints and rotates the cert content itself. Recommend explicitly noting in LT-46's scope that these two are excluded on purpose ("cert-manager-managed, not a Vault delivery target") rather than leaving a reader to wonder whether they were missed — same standard you've been holding everyone else to.</div></div>
+<div class="nav" style="margin:24px 0"><a href="9f72a7fe-p1.html">← prev</a>  <a href="../index.html">Back to index</a></div>
+</div>

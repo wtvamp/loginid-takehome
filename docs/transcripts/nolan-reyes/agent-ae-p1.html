@@ -1,0 +1,2192 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nolan Reyes — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Nolan Reyes</h1><div class="sub">Hire (track 03) · session 13 of 15 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 6:28 AM PDT – Sep 13, 2026 6:30 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 6:28 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #39 on github.com/wtvamp/loginid-takehome, branch fix/oauth-client-phc-hash, for track 03-engineering-delivery, from your usual production-failure-mode lens. Worktree at /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix (based on origin/main, currently 4 commits ahead: 102f6f3, 6ab3d6e, 483c0f1 on top of the original PHC-format commit).
+
+This PR is a follow-up to already-merged LT-51 (OAuth2 client-credentials token issuance). Two things bundled together:
+
+1. **PHC-format Argon2id hashes.** Priya Nandakumar (05) found that `internal/api/clientstore.go`'s `hashSecret`/`verifySecret` stored/verified Argon2id hashes as a bare `&lt;base64-salt&gt;$&lt;base64-hash&gt;` against the package's own compile-time cost constants, not a self-describing PHC string (`«REDACTED-ARGON2»`) like `user_credential.secret` elsewhere in this project. The whole reason `oauth_client` has no `hash_algo`/`hash_cost` columns is that a PHC string is supposed to be self-describing — the old encoding silently broke that. Marcus Ilori (02) ruled the fix: real PHC string, verify from PARSED parameters (never the package's own constants), plus verify-then-rehash-on-next-successful-auth (a successful grant against a hash whose embedded parameters have drifted from the current profile re-hashes and persists it, best-effort — a write failure must never fail the grant).
+
+2. **Goose migration statement-splitting bug** — a genuine live deploy failure (run 34758490265). `migrations/issuer/00001_initial_schema.sql`'s `CREATE FUNCTION oauth_client_set_updated_at() ... $$ ... $$` plpgsql block broke goose's real CLI parser (SQLSTATE 42601, unterminated dollar-quoted string) because goose splits on every semicolon unless a block is wrapped in `-- +goose StatementBegin`/`StatementEnd` markers — the earlier DDL review had only verified the file via `psql` directly, which has no such splitting behavior. Fixed with the markers. Also fixed the test-harness gap that let this ship: `internal/api/clientstore_pg_test.go`'s `setupIssuerDB` previously extracted the migration's `-- +goose Up` section as raw text and `Exec`'d it as one blob, never exercising goose's own statement splitter — rewritten to call `goose.Up` (`pressly/goose/v3`, the same library the real `goose` CLI is built on) against the actual migration directory.
+
+Key files (read from the worktree):
+- `internal/api/clientstore.go` — `hashSecret`, `encodePHC`, `parsePHC`/`parsePHCParam` (parses `«REDACTED-ARGON2»`, strict whole-field parsing on every field including the version), `verifySecret` (recomputes using PARSED parameters, never package constants), `needsRehash`, new `UpdateSecretHash` method on `PostgresClientStore` and the `ClientStore` interface (bounded by the existing `clientStoreQueryTimeout`, `WHERE client_id = $1 AND secret_state = 'set'`, zero-rows-affected treated as a returned (but benign/expected) error).
+- `internal/api/tokenhandler.go` — success path calls `needsRehash`/`hashSecret`/`store.UpdateSecretHash` after `RecordSuccess`, both failure modes only `log.Printf`'d, never turning the already-earned 200 into a failure.
+- `internal/api/tokenhandler_test.go` — new `TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess` and (just added, per a prior reviewer's gate) `TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds` (asserts 200 even when `UpdateSecretHash` errors).
+- `internal/api/clientstore_test.go` — `TestVerifySecret_ReadsEmbeddedParameters_NotPackageConstants` (hand-builds a hash at `t=2`, not the package's current `t=1`, confirms it still verifies — the actual enforcement site proving parameters are read, not assumed), `TestNeedsRehash`, a malformed-hash test case covering `"v=19x"` (a previously-fixed `fmt.Sscanf` over-match bug).
+- `internal/api/clientstore_pg_test.go` — `setupIssuerDB` now calls `goose.Up`; new `TestPostgresClientStore_UpdateSecretHash`/`_NoSuchClient`; `TestOAuthClient_SchemaConstraints` and `TestOAuthClient_UpdatedAtTrigger` now run through the real goose parser.
+- `migrations/issuer/00001_initial_schema.sql` — the `StatementBegin`/`StatementEnd` markers, plus the `cardinality()`-based `ck_oauth_client_granted_scopes_single` CHECK fix (a separate earlier finding from Priya) and the new `updated_at` trigger.
+- `deploy/gen-argon2-hash.go`, `deploy/demo-data/qa-client-bootstrap.md` — updated to emit/document the PHC format; existing seeded rows need re-seeding.
+
+Please run `go build ./...`, `go vet ./...`, and `go test ./...` yourself in that worktree — ideally also spin up a throwaway `postgres:16-alpine` container and set `TEST_POSTGRES_DSN` to actually run the real-Postgres integration suite (including the goose-based migration apply), not just trust that the skip-if-unset tests pass in CI. Then focus on your usual lens:
+
+1. **Rehash-on-verify in a live system under load.** `UpdateSecretHash` is called synchronously inside the token-issuance request path, adding a DB write to what was previously a read-only-after-verify request. Is there a realistic failure mode here beyond "the write fails and gets logged" — e.g., could a burst of legitimate traffic against a single still-drifted client (before it naturally migrates) cause a thundering-herd of redundant `UPDATE` statements against the same row, and is that a real concern given `clientStoreQueryTimeout` and the `WHERE ... AND secret_state = 'set'` guard, or a non-issue at this scale?
+2. **The goose fix's blast radius.** Is `-- +goose StatementBegin`/`StatementEnd` actually sufficient for THIS specific plpgsql function body, or is there some other multi-statement or dollar-quoted construct in the same file that could still trip the same class of bug that a purely-visual review might miss? You have goose available via the module now — actually run `goose.Up` against the fixed file yourself (not just trust the PR's own claim) as your primary verification here, the same way you'd want a fix verified in a real deploy pipeline.
+3. **The switch from a hand-rolled blob-exec harness to a real `goose.Up`-based one** — does this introduce any new production-relevant risk (e.g., the test now depends on the `pressly/goose/v3` module being available/pinned correctly, or on goose's own default table-naming/locking behavior in ways that could diverge between test and the real CI/deploy goose invocation)? Is `goose.SetDialect`/`goose.SetTableName`'s global (package-level) mutable state used anywhere in this file in a way that could cause test flakiness or cross-test interference if these tests ever run in parallel with something else that also touches goose global state?
+4. Anything else from your production-failure-mode pattern-matching — this PR touches both a security-sensitive hashing path and a deploy-pipeline migration file, both categories where you've caught real bugs before in this project.
+
+Report your findings in plain prose to Renata Cole (03 lead), as you'd normally report a review. Distinguish real bugs from acceptable, already-understood trade-offs that just deserve a documentation note — don't inflate a named limitation into a blocker. If everything holds up, say so plainly.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:28 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- **Before declaring anything handed off, merged-ready, or done, run `git status` and `git diff origin/main -- &lt;your track&gt;/`.** Four times in this project a finished artifact sat unpushed or on a dead branch while its author reported it complete (2026-09-12/13). The author is the worst-placed person to notice, because they can see the work; the reviewer looking at `origin/main` sees the truth. Also check `gh pr view &lt;n&gt; --json state` before pushing to a story branch — once the PM merges, that branch is dead and pushes to it go nowhere.
+69	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+70	
+71	## Status
+72	
+73	Planning (Phases 0–4) closed 2026-09-12: five track plans, 18 hires, three cross-track consistency passes (`decisions/cross-track-consistency.md`), and a Jira backlog (`LT-1`…`LT-52`). Implementation began the same evening as an agile loop (`LOG.md` from "Implementation go" onward). As of 2026-09-13 06:00 PDT: **Done end to end** (deployed to the public URL and PO-reviewed) — LT-34 walking skeleton, LT-32 issuer split-Deployment, LT-52 in-namespace Postgres + migrations. **Live:** `https://loginid-takehome.uplifttech.org/healthz` (build SHA == `main`, `db: ok`); `/profiles/search` and `/profiles/{id}` deployed behind RS256 JWT verification and failing closed; `/auth/token` a 501 placeholder until LT-51. **In Test** awaiting one joint live review with a real token: LT-36/37 (Postgres/CockroachDB and SQLite DAOs), LT-38 (conformance suite), LT-39 (REST search/read), LT-40 (auth middleware). **In dev:** LT-51 (client-credentials issuance; PRs #34 + #36), LT-41 (idp-connector, Q3). PRs #1–#37 merged. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`).
+74	
+75	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+76	@profiles/dana-whitfield/dana-whitfield.md
+77	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+78	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+37	
+38	&lt;!-- profile-gen:start slug=renata-cole --&gt;
+39	@profiles/renata-cole/renata-cole.md
+40	&lt;!-- profile-gen:end slug=renata-cole --&gt;
+41	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Bash</span> find /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes -maxdepth 1</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes -maxdepth 1"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes
+/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.png
+/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.md</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:28 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.md"
+}</pre><div class="lbl">result</div><pre>1	---
+2	schema_version: 1
+3	name: "Nolan Reyes"
+4	slug: "nolan-reyes"
+5	image: "profiles/nolan-reyes/nolan-reyes.png"
+6	
+7	nsfw: false
+8	display:
+9	  image: true
+10	  name: true
+11	  autostart: false
+12	generation:
+13	  backend: "comfyui"
+14	  model: "comfyui-workflow.json"
+15	  prompt: "Nolan Reyes, a dry and unhurried man in his mid 40s with graying short hair, weathered calm expression, wearing a simple gray quarter-zip pullover, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+16	  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+17	  seed: null
+18	  gif_mode: null
+19	  created_at: "2026-09-12T00:00:00Z"
+20	---
+21	
+22	# Nolan Reyes
+23	
+24	![Nolan Reyes](profiles/nolan-reyes/nolan-reyes.png)
+25	
+26	
+27	## Personality
+28	
+29	Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen.
+30	
+31	</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; git log --oneline -6 &amp;&amp; git statu</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; git log --oneline -6 &amp;&amp; git status"
+}</pre><div class="lbl">result</div><pre>483c0f1 test: rehash-persist failure must not fail an already-earned grant
+6ab3d6e fix review findings: strict PHC version-field parsing, comment clarity
+102f6f3 fix: goose statement-splitting broke oauth_client's updated_at trigger
+5883e90 LT-51 follow-up: real PHC-format Argon2id hashes, verify-then-rehash
+5dc78df Merge PR #38: LT-51 infra — issuer database + roles, third goose invocation, ISSUER_DB_DSN_FILE, issuer replicas 1, QA-client runbook
+b035fca Address Priya's PR #36 review: empty-PVC caveat, hand-apply runbook, verified live state
+On branch fix/oauth-client-phc-hash
+Your branch is up to date with 'origin/fix/oauth-client-phc-hash'.
+
+nothing to commit, working tree clean</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:28 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Now let's look at the actual code.</div><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore.go"
+}</pre><div class="lbl">result</div><pre>1	// clientstore.go implements the token-issuer's client store per
+2	// handoff-03-auth.md v6/LT-51: client_id, name, an Argon2id-hashed
+3	// secret (same floor as threat-model.md Asset 1's password hashing),
+4	// granted scope, audience, and status.
+5	//
+6	// Backed by a real, persistent PostgreSQL database — a separate
+7	// "issuer" database (migrations/issuer/00001_initial_schema.sql), not
+8	// an in-process map — per Priya Nandakumar's (05) explicit ruling on
+9	// this story: unlike every other in-process component this track has
+10	// built (RateLimiter, TouchCounter, GrantLimiter), a client credential
+11	// has to survive a pod restart, and the QA client seeded for the PO's
+12	// live-URL review has to be seeded out-of-band (04's runbook), never by
+13	// this application's own code or a migration — "migrations carry
+14	// reference data, never credentials." Lives in its own database, not
+15	// 05's main DAO schema, so a cross-database join to user_profile is
+16	// structurally impossible, not just policy-forbidden (F8 resolution,
+17	// handoff-03-auth.md v3).
+18	package api
+19	
+20	import (
+21		"context"
+22		"crypto/rand"
+23		"crypto/subtle"
+24		"database/sql"
+25		"encoding/base64"
+26		"errors"
+27		"fmt"
+28		"strconv"
+29		"strings"
+30		"time"
+31	
+32		"golang.org/x/crypto/argon2"
+33	)
+34	
+35	// Argon2id parameters used when HASHING A NEW secret — hashSecret's own
+36	// cost profile, matching threat-model.md Asset 1's floor. verifySecret
+37	// below deliberately does NOT use these constants to recompute a hash:
+38	// it reads the cost parameters (m, t, p) out of the stored PHC string
+39	// itself. A verifier that ignored the embedded parameters and always
+40	// recomputed with these constants would make the PHC string's own
+41	// self-description pointless — the day this profile changes, every
+42	// existing hash would break at once with no way to tell an old row from
+43	// a new one, exactly the failure oauth_client's schema (no hash_algo/
+44	// hash_cost columns, unlike user_credential) was designed to avoid by
+45	// relying on the hash string being self-describing (Priya Nandakumar's
+46	// review, handoff-03-auth.md v7).
+47	const (
+48		argon2Time    = 1
+49		argon2Memory  = 64 * 1024 // 64 MiB
+50		argon2Threads = 4
+51		argon2KeyLen  = 32
+52		argon2SaltLen = 16
+53	)
+54	
+55	// phcVersion is Argon2id's own version identifier (argon2.Version,=19,
+56	// i.e. 0x13) as it appears in a PHC string's "v=" field — a property of
+57	// the algorithm itself, not a cost knob, so unlike time/memory/threads
+58	// it is not expected to change independently of upgrading the algorithm
+59	// version.
+60	const phcVersion = argon2.Version
+61	
+62	// hashSecret returns an Argon2id hash of secret encoded as a standard
+63	// PHC string: «REDACTED-ARGON2»
+64	// (RFC-adjacent PHC string format; RawStdEncoding, unpadded, matching
+65	// the same encoding user_credential.secret already uses for its own
+66	// Argon2id hashes — one encoding convention project-wide, not two).
+67	// Self-describing: deploy/gen-argon2-hash.go emits the same shape, and
+68	// verifySecret below reads the embedded parameters back rather than
+69	// assuming they match argon2Time/argon2Memory/argon2Threads above.
+70	func hashSecret(secret string) (string, error) {
+71		salt := make([]byte, argon2SaltLen)
+72		if _, err := rand.Read(salt); err != nil {
+73			return "", fmt.Errorf("api: generating salt: %w", err)
+74		}
+75		hash := argon2.IDKey([]byte(secret), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+76		return encodePHC(argon2Memory, argon2Time, argon2Threads, salt, hash), nil
+77	}
+78	
+79	// encodePHC always stamps the CURRENT phcVersion — it's for producing a
+80	// brand-new hash under this package's own live cost profile, never for
+81	// re-serializing a parsed hash's own (possibly different, possibly
+82	// older) parameters.
+83	func encodePHC(memory, time, threads int, salt, hash []byte) string {
+84		return fmt.Sprintf("«REDACTED-ARGON2»",
+85			phcVersion, memory, time, threads,
+86			base64.RawStdEncoding.EncodeToString(salt),
+87			base64.RawStdEncoding.EncodeToString(hash),
+88		)
+89	}
+90	
+91	// parsedPHC is a PHC-string Argon2id hash's parameters, read off the
+92	// string itself rather than assumed from this package's own constants —
+93	// the whole reason to use PHC instead of the bare "&lt;salt&gt;$&lt;hash&gt;"
+94	// encoding this replaced.
+95	type parsedPHC struct {
+96		memory  uint32
+97		time    uint32
+98		threads uint8
+99		salt    []byte
+100		hash    []byte
+101	}
+102	
+103	// parsePHC parses a PHC-format Argon2id hash string
+104	// («REDACTED-ARGON2» into
+105	// its components. Returns an error for anything that doesn't match this
+106	// exact shape — verifySecret treats a parse failure as "does not
+107	// verify," never as a reason to fall back to any other interpretation.
+108	func parsePHC(encoded string) (parsedPHC, error) {
+109		// "«REDACTED-ARGON2»" split on "$" is:
+110		// ["", "argon2id", "v=19", "m=65536,t=1,p=4", "&lt;salt&gt;", "&lt;hash&gt;"]
+111		parts := strings.Split(encoded, "$")
+112		if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+113			return parsedPHC{}, fmt.Errorf("api: not a recognized argon2id PHC string")
+114		}
+115	
+116		// parsePHCParam, not fmt.Sscanf: Sscanf doesn't require consuming the
+117		// whole input, so "v=19x" would silently parse as version 19 with
+118		// "x" discarded — inconsistent with parsePHCParam's own stricter,
+119		// whole-field parsing below, and the same "malformed-but-plausible"
+120		// gap this function otherwise guards against (Oren Castellan, PR #39
+121		// review).
+122		versionU64, err := parsePHCParam(parts[2], "v")
+123		if err != nil {
+124			return parsedPHC{}, err
+125		}
+126		version := int(versionU64)
+127		if version != phcVersion {
+128			return parsedPHC{}, fmt.Errorf("api: PHC string names argon2 version %d, this package verifies version %d", version, phcVersion)
+129		}
+130	
+131		params := strings.Split(parts[3], ",")
+132		if len(params) != 3 {
+133			return parsedPHC{}, fmt.Errorf("api: PHC parameter field %q does not have exactly 3 comma-separated parameters", parts[3])
+134		}
+135		var memory, timeCost, threads uint64
+136		if memory, err = parsePHCParam(params[0], "m"); err != nil {
+137			return parsedPHC{}, err
+138		}
+139		if timeCost, err = parsePHCParam(params[1], "t"); err != nil {
+140			return parsedPHC{}, err
+141		}
+142		if threads, err = parsePHCParam(params[2], "p"); err != nil {
+143			return parsedPHC{}, err
+144		}
+145	
+146		salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+147		if err != nil {
+148			return parsedPHC{}, fmt.Errorf("api: decoding PHC salt: %w", err)
+149		}
+150		hash, err := base64.RawStdEncoding.DecodeString(parts[5])
+151		if err != nil {
+152			return parsedPHC{}, fmt.Errorf("api: decoding PHC hash: %w", err)
+153		}
+154	
+155		return parsedPHC{
+156			memory:  uint32(memory),
+157			time:    uint32(timeCost),
+158			threads: uint8(threads),
+159			salt:    salt,
+160			hash:    hash,
+161		}, nil
+162	}
+163	
+164	// parsePHCParam parses one "&lt;name&gt;=&lt;digits&gt;" field (e.g. "m=65536") and
+165	// requires the field's name to match wantName exactly, in the position
+166	// PHC's own fixed m,t,p ordering requires — a defensive check against a
+167	// hand-edited or malformed string silently reading the wrong value into
+168	// the wrong slot.
+169	func parsePHCParam(field, wantName string) (uint64, error) {
+170		name, digits, found := strings.Cut(field, "=")
+171		if !found || name != wantName {
+172			return 0, fmt.Errorf("api: PHC parameter field %q is not in the expected %q= form", field, wantName)
+173		}
+174		v, err := strconv.ParseUint(digits, 10, 32)
+175		if err != nil {
+176			return 0, fmt.Errorf("api: parsing PHC parameter %q: %w", field, err)
+177		}
+178		return v, nil
+179	}
+180	
+181	// verifySecret reports whether secret matches encodedHash, a PHC-format
+182	// Argon2id hash produced by hashSecret (or by deploy/gen-argon2-hash.go,
+183	// which emits the identical shape). Recomputes using the memory/time/
+184	// threads parameters PARSED OUT OF encodedHash itself — never this
+185	// package's own argon2Time/argon2Memory/argon2Threads constants — so a
+186	// hash created under a different (older or newer) cost profile still
+187	// verifies correctly; only the embedded parameters and the embedded
+188	// salt/hash length (via keyLen = len(parsed hash)) participate.
+189	// Comparison is constant-time (crypto/subtle) — Argon2id's own cost
+190	// already dominates timing versus a plain []byte equality, but there is
+191	// no reason to reintroduce a length/byte-position side channel on top
+192	// of it for free.
+193	func verifySecret(secret, encodedHash string) bool {
+194		parsed, err := parsePHC(encodedHash)
+195		if err != nil {
+196			return false
+197		}
+198		got := argon2.IDKey([]byte(secret), parsed.salt, parsed.time, parsed.memory, parsed.threads, uint32(len(parsed.hash)))
+199		return subtle.ConstantTimeCompare(got, parsed.hash) == 1
+200	}
+201	
+202	// needsRehash reports whether encodedHash's embedded cost parameters
+203	// differ from this package's CURRENT profile (argon2Memory/argon2Time/
+204	// argon2Threads) — the mechanism by which a cost-profile bump migrates
+205	// existing rows forward opportunistically (verify-then-rehash-on-next-
+206	// successful-auth, Marcus Ilori's ruling, handoff-03-auth.md v7) instead
+207	// of requiring a live-credential migration. Only ever called after
+208	// verifySecret has already succeeded against encodedHash — this reports
+209	// "should be re-hashed under the current profile," not "is valid."
+210	// encodedHash is assumed parseable here (verifySecret already parsed it
+211	// successfully in the same call); a parse failure reports false rather
+212	// than panicking, since "can't tell, so don't rehash" is the safe
+213	// default for a function only ever called after a successful verify.
+214	func needsRehash(encodedHash string) bool {
+215		parsed, err := parsePHC(encodedHash)
+216		if err != nil {
+217			return false
+218		}
+219		return parsed.memory != argon2Memory || parsed.time != argon2Time || parsed.threads != argon2Threads
+220	}
+221	
+222	// dummyHash is computed once, at package init, from a fixed (not
+223	// secret — its value doesn't matter, only that it's fixed and uses the
+224	// SAME cost parameters as every real hash) salt and secret. The
+225	// unknown-client_id path in the token handler runs verifySecret against
+226	// this exact value before returning invalid_client, so an unknown
+227	// client_id and a wrong-secret-for-a-known-client_id take
+228	// statistically indistinguishable time (Tobias Lindqvist's objection,
+229	// LT-51 refinement — RFC 6749 §5.2's identical-response-body
+230	// requirement closes the content side channel; this closes the timing
+231	// one, which the body requirement alone leaves wide open).
+232	var dummyHash = mustHashSecret("dummy-fixed-secret-never-issued-to-any-real-client")
+233	
+234	func mustHashSecret(secret string) string {
+235		h, err := hashSecret(secret)
+236		if err != nil {
+237			// Only reachable if crypto/rand itself fails at process start —
+238			// a condition this process cannot usefully continue past anyway
+239			// (every real hashSecret call would fail identically).
+240			panic(fmt.Sprintf("api: computing fixed dummy Argon2id hash: %v", err))
+241		}
+242		return h
+243	}
+244	
+245	// ClientRecord is one row in the client store.
+246	type ClientRecord struct {
+247		ClientID         string
+248		Name             string // accountability — no shared credentials across a team
+249		ClientSecretHash string // Argon2id, hashSecret's encoding
+250		GrantedScope     Scope  // exactly one — see ClientStore's doc comment
+251		Audience         string // the JWT aud this client's tokens are minted for
+252		Active           bool
+253	}
+254	
+255	// ClientStore is the token-issuer's client datastore — client
+256	// authentication and scope/audience lookup, keyed by client_id.
+257	//
+258	// GrantedScope is a single Scope, not a set, even though
+259	// handoff-03-auth.md v6 describes "granted_scopes" as a provisioned
+260	// subset of the four possible values: this project's own provisioning
+261	// model (decisions/search-authz-scoping.md; LT-40's singleScope) commits
+262	// to exactly one scope per credential — "a client is provisioned for the
+263	// one use case its credential exists for" — and AuthContext (LT-39)
+264	// carries exactly one Scope per token by the same design. A client
+265	// record holding more than one granted scope would have no way to
+266	// produce a token LT-40's verifier accepts (which rejects a multi-scope
+267	// token outright, deliberately, not an oversight this story should route
+268	// around). So provisioning is one client credential per scope a caller
+269	// needs, not one client holding several — consistent with, not a
+270	// deviation from, the system's existing single-scope-per-token
+271	// commitment.
+272	type ClientStore interface {
+273		// Get returns the record for clientID, ok=false if no such client
+274		// exists at all (a different outcome from an inactive client, which
+275		// Get still returns — the token handler decides what "not usable"
+276		// means, this interface only reports what's on file).
+277		Get(ctx context.Context, clientID string) (rec ClientRecord, ok bool, err error)
+278	
+279		// UpdateSecretHash replaces clientID's stored hash — the
+280		// opportunistic-rehash mechanism (Marcus Ilori's ruling,
+281		// handoff-03-auth.md v7): called by tokenhandler.go after a
+282		// successful grant when needsRehash reports the stored hash's
+283		// embedded cost parameters have drifted from this package's current
+284		// profile, so an existing row migrates forward the next time its
+285		// owner successfully authenticates, without a live-credential
+286		// migration. Best-effort from the caller's perspective — a failure
+287		// here does not fail the grant already in progress, since the
+288		// credential the caller presented was already correctly verified.
+289		UpdateSecretHash(ctx context.Context, clientID, newHash string) error
+290	}
+291	
+292	// clientStoreQueryTimeout bounds every Get call against the issuer
+293	// database independently of whatever's left on the caller's context —
+294	// Nolan Reyes's review of this story: an issuer database that goes away
+295	// mid-process-lifetime (not just "absent at startup", which is the
+296	// case NewIssuerRouter's nil-store fail-closed path already covers)
+297	// must not leave /auth/token requests blocked indefinitely on a dial or
+298	// query against a dead connection. This is the query-side half of that
+299	// fix; NewPostgresClientStore's *sql.DB pool bounds (set by
+300	// cmd/api-service/main.go) are the other half.
+301	const clientStoreQueryTimeout = 3 * time.Second
+302	
+303	// PostgresClientStore is a real, persistent ClientStore backed by the
+304	// issuer database's oauth_client table (migrations/issuer/
+305	// 00001_initial_schema.sql). Constructed once at startup from a *sql.DB
+306	// dialed against config.Config.IssuerDBDSN — always the "pgx" driver,
+307	// since the issuer database has no SQLite/CockroachDB peer to abstract
+308	// over (unlike 05's main DAO schema), so this reaches for
+309	// database/sql directly rather than routing through dao.New's
+310	// multi-backend factory, which was never asked to know about this
+311	// table.
+312	type PostgresClientStore struct {
+313		db *sql.DB
+314	}
+315	
+316	// NewPostgresClientStore wraps an already-opened *sql.DB. Opening (and
+317	// its lifetime) is cmd/api-service/main.go's responsibility, same
+318	// pattern as LT-52's separate /healthz ping handle — this type never
+319	// calls sql.Open itself.
+320	func NewPostgresClientStore(db *sql.DB) *PostgresClientStore {
+321		return &amp;PostgresClientStore{db: db}
+322	}
+323	
+324	// Get deliberately does not distinguish "no such client_id",
+325	// "provisioned but secret_state != 'set'", or "status = 'disabled'" in
+326	// its ok/err results — all three come back as ok=true with whatever's
+327	// on file (or ok=false only for a genuinely absent row), and it's
+328	// tokenhandler.go's job to decide what counts as usable. This keeps
+329	// every one of those states on the same code path through
+330	// verifySecret/dummyHash, so none of them becomes a second timing
+331	// signal alongside the unknown-client_id one dummyHash already closes.
+332	//
+333	// This method's own internal work is NOT perfectly symmetric between a
+334	// found and not-found row (a found row does a full Scan plus
+335	// parsePostgresTextArray; sql.ErrNoRows returns immediately) — negligible
+336	// today only by construction, since Argon2id's ~64 MiB cost in
+337	// verifySecret dwarfs a single indexed lookup and parsing a few bytes
+338	// (Oren Castellan, PR #34 review). If Get ever grows real additional
+339	// work on the found path (e.g. a join), re-examine whether that gap is
+340	// still negligible before assuming the timing-parity invariant still
+341	// holds on tokenhandler.go's say-so alone.
+342	func (s *PostgresClientStore) Get(ctx context.Context, clientID string) (ClientRecord, bool, error) {
+343		var rec ClientRecord
+344		var secretHash sql.NullString
+345		var scopesRaw string
+346		var status string
+347	
+348		ctx, cancel := context.WithTimeout(ctx, clientStoreQueryTimeout)
+349		defer cancel()
+350	
+351		row := s.db.QueryRowContext(ctx, `
+352			SELECT client_id, name, client_secret_hash, granted_scopes, audience, status
+353			FROM oauth_client
+354			WHERE client_id = $1
+355		`, clientID)
+356		err := row.Scan(&amp;rec.ClientID, &amp;rec.Name, &amp;secretHash, &amp;scopesRaw, &amp;rec.Audience, &amp;status)
+357		if errors.Is(err, sql.ErrNoRows) {
+358			return ClientRecord{}, false, nil
+359		}
+360		if err != nil {
+361			return ClientRecord{}, false, fmt.Errorf("api: querying oauth_client: %w", err)
+362		}
+363		scopes, err := parsePostgresTextArray(scopesRaw)
+364		if err != nil {
+365			return ClientRecord{}, false, fmt.Errorf("api: parsing granted_scopes for %q: %w", clientID, err)
+366		}
+367		if len(scopes) != 1 {
+368			// The migration's own CHECK (ck_oauth_client_granted_scopes_single)
+369			// makes this unreachable in practice — surfaced as an error rather
+370			// than silently taking scopes[0] of an empty slice, in case that
+371			// constraint is ever relaxed without this code being revisited.
+372			return ClientRecord{}, false, fmt.Errorf("api: oauth_client row %q has %d granted scopes, want exactly 1", clientID, len(scopes))
+373		}
+374	
+375		rec.ClientSecretHash = secretHash.String // "" when NULL (secret_state != "set")
+376		rec.GrantedScope = Scope(scopes[0])
+377		rec.Active = status == "active"
+378		return rec, true, nil
+379	}
+380	
+381	// UpdateSecretHash writes newHash for clientID — only ever called on a
+382	// row whose secret_state is already 'set' (a just-verified grant), so
+383	// this never needs to touch secret_state itself; the migration's own
+384	// BEFORE UPDATE trigger sets updated_at. Same clientStoreQueryTimeout
+385	// bound as Get, for the same reason (Nolan Reyes's review): this must
+386	// not block indefinitely if the issuer database goes away mid-request.
+387	func (s *PostgresClientStore) UpdateSecretHash(ctx context.Context, clientID, newHash string) error {
+388		ctx, cancel := context.WithTimeout(ctx, clientStoreQueryTimeout)
+389		defer cancel()
+390	
+391		result, err := s.db.ExecContext(ctx, `
+392			UPDATE oauth_client SET client_secret_hash = $1 WHERE client_id = $2 AND secret_state = 'set'
+393		`, newHash, clientID)
+394		if err != nil {
+395			return fmt.Errorf("api: updating oauth_client secret hash: %w", err)
+396		}
+397		if n, err := result.RowsAffected(); err == nil &amp;&amp; n == 0 {
+398			// Returned as an error so the caller (tokenhandler.go) logs
+399			// it, but this is a benign, expected race rather than a
+400			// genuine failure: the row could have been disabled/revoked
+401			// between the succe
+… truncated (20 KB cap)</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler.go"
+}</pre><div class="lbl">result</div><pre>1	// tokenhandler.go implements POST /auth/token — RFC 6749 §4.4's
+2	// client-credentials grant. This is the one endpoint in the API that
+3	// follows OAuth2's own wire format (form-encoded, HTTP Basic client
+4	// auth) rather than this project's usual JSON convention, because it's
+5	// the one endpoint implementing a named external grant type — and, per
+6	// Tobias Lindqvist's objection (LT-51 refinement), the endpoint most
+7	// likely to be pattern-matched against known real-world OAuth2
+8	// timing-oracle bugs by an outside reviewer.
+9	package api
+10	
+11	import (
+12		"encoding/json"
+13		"log"
+14		"net"
+15		"net/http"
+16		"strings"
+17		"time"
+18	
+19		"github.com/golang-jwt/jwt/v5"
+20		"github.com/google/uuid"
+21	)
+22	
+23	// tokenTTL is this issuer's fixed token lifetime — the middle of
+24	// handoff-03-auth.md's 5-15 minute range. No refresh tokens: a client
+25	// re-authenticates with its own client secret on expiry, per
+26	// api-auth-design.md's standing TTL-only-revocation design (this
+27	// story's own non-goal list; not re-litigated here).
+28	const tokenTTL = 10 * time.Minute
+29	
+30	// tokenErrorResponse is RFC 6749 §5.2's error body shape.
+31	type tokenErrorResponse struct {
+32		Error string `json:"error"`
+33	}
+34	
+35	// tokenResponse is RFC 6749 §5.1's success body shape.
+36	type tokenResponse struct {
+37		AccessToken string `json:"access_token"`
+38		TokenType   string `json:"token_type"`
+39		ExpiresIn   int    `json:"expires_in"`
+40		Scope       string `json:"scope"`
+41	}
+42	
+43	func writeTokenError(w http.ResponseWriter, status int, errCode string) {
+44		if status == http.StatusUnauthorized {
+45			// RFC 6749 §5.2: invalid_client with a 401 MUST carry
+46			// WWW-Authenticate identifying the auth scheme this endpoint
+47			// expects — the same header any HTTP Basic-protected resource
+48			// returns, not something specific to OAuth2 error semantics.
+49			w.Header().Set("WWW-Authenticate", `Basic realm="token"`)
+50		}
+51		w.Header().Set("Content-Type", "application/json")
+52		w.WriteHeader(status)
+53		_ = jsonEncode(w, tokenErrorResponse{Error: errCode})
+54	}
+55	
+56	// jsonEncode is a one-line indirection kept trivial and named for
+57	// clarity rather than inlined at each of this file's two call sites.
+58	func jsonEncode(w http.ResponseWriter, v any) error {
+59		return json.NewEncoder(w).Encode(v)
+60	}
+61	
+62	// NewTokenHandler implements POST /auth/token, wiring the collaborators
+63	// named in refinement/LT-51.md's explicit instruction rather than
+64	// reimplementing them: store is the client datastore (this story's own,
+65	// new); limiter is PR #30's already-built GrantLimiter, called exactly
+66	// as its own doc comment specifies — Allow gates before authentication,
+67	// RecordFailure/RecordSuccess run after. The signing key parameter holds
+68	// the loaded RSA private key this story mints tokens with (see
+69	// SigningKey in signingkey.go).
+70	func NewTokenHandler(store ClientStore, limiter GrantLimiter, key *SigningKey, issuer string) http.HandlerFunc {
+71		return func(w http.ResponseWriter, r *http.Request) {
+72			ctx := r.Context()
+73	
+74			// store is nil when the issuer database was never configured
+75			// (config.Config.IssuerDBDSN empty) — fail every grant closed
+76			// with server_error rather than panic on a nil ClientStore, the
+77			// same fail-closed shape NewVerifierRouter uses for a nil
+78			// dao.Repository. This deliberately runs before ParseForm/
+79			// BasicAuth so a misconfigured issuer fails identically for
+80			// every request shape, not just the ones that get far enough to
+81			// reach store.Get.
+82			if store == nil {
+83				writeTokenError(w, http.StatusInternalServerError, "server_error")
+84				return
+85			}
+86	
+87			// RFC 6749 §4.4: form-encoded, not JSON. r.ParseForm reads the
+88			// body as application/x-www-form-urlencoded regardless of a
+89			// caller's declared Content-Type, which is deliberately
+90			// permissive here — this handler's job is accepting the one wire
+91			// format the spec names, not policing a header a legitimate
+92			// client-credentials implementation might send inconsistently.
+93			if err := r.ParseForm(); err != nil {
+94				writeTokenError(w, http.StatusBadRequest, "invalid_request")
+95				return
+96			}
+97			if r.PostForm.Get("grant_type") != "client_credentials" {
+98				writeTokenError(w, http.StatusBadRequest, "unsupported_grant_type")
+99				return
+100			}
+101	
+102			clientID, clientSecret, hasBasicAuth := r.BasicAuth()
+103			sourceIP := sourceIPFrom(r)
+104	
+105			// GrantLimiter gates BEFORE the hasBasicAuth check, not after —
+106			// sourceIP is available regardless of whether a caller sent any
+107			// credentials at all, and a request with no Authorization header
+108			// is exactly as capable of flooding this endpoint as one with a
+109			// wrong client_id (Helena Marsh, 02 review of PR #34). clientID
+110			// is "" on this path; GrantLimiter treats it as an ordinary
+111			// (empty) key like any other, and the per-source-IP half of the
+112			// gate is what actually matters here since there's no client_id
+113			// yet to distinguish attempts by.
+114			allowed, err := limiter.Allow(ctx, clientID, sourceIP)
+115			if err != nil {
+116				writeTokenError(w, http.StatusInternalServerError, "server_error")
+117				return
+118			}
+119			if !allowed {
+120				// RFC 6749 doesn't name a status for endpoint-level
+121				// throttling (it's a brute-force control this project adds
+122				// on top of the spec, not part of it) — 429 matches this
+123				// API's own convention elsewhere (internal/api/ratelimit.go,
+124				// internal/api/touchcounter.go) for the same class of
+125				// decision.
+126				writeTokenError(w, http.StatusTooManyRequests, "slow_down")
+127				return
+128			}
+129	
+130			if !hasBasicAuth {
+131				// No Authorization header at all: reject before ever
+132				// touching the client store — there is no client_id to key
+133				// a store lookup by. RecordFailure still fires (keyed by
+134				// sourceIP; clientID is "") so repeated no-credential
+135				// requests still advance that source IP's backoff, same as
+136				// any other failed attempt.
+137				limiter.RecordFailure(ctx, clientID, sourceIP)
+138				writeTokenError(w, http.StatusUnauthorized, "invalid_client")
+139				return
+140			}
+141	
+142			rec, found, err := store.Get(ctx, clientID)
+143			if err != nil {
+144				writeTokenError(w, http.StatusInternalServerError, "server_error")
+145				return
+146			}
+147	
+148			// Both branches run the SAME Argon2id comparison at the SAME
+149			// cost before deciding anything — a found client with a real
+150			// secret on file (secret_state = "set") compares against its own
+151			// hash; every other case (client_id not found at all, OR found
+152			// but secret_state is "none"/"revoked" and ClientSecretHash is
+153			// empty) compares against the fixed dummyHash instead of
+154			// skipping the comparison or short-circuiting on a malformed
+155			// hash. Whichever branch runs, exactly one verifySecret call
+156			// happens before the outcome is known, so an unknown client_id,
+157			// a not-yet-secreted or revoked client, and a wrong secret for a
+158			// fully provisioned one all take statistically indistinguishable
+159			// time (Tobias Lindqvist's objection, LT-51 refinement) —
+160			// closing the timing side-channel the identical response body
+161			// alone leaves open.
+162			var secretOK bool
+163			if found &amp;&amp; rec.ClientSecretHash != "" {
+164				secretOK = verifySecret(clientSecret, rec.ClientSecretHash)
+165			} else {
+166				_ = verifySecret(clientSecret, dummyHash)
+167				secretOK = false
+168			}
+169	
+170			if !found || !secretOK || !rec.Active {
+171				limiter.RecordFailure(ctx, clientID, sourceIP)
+172				writeTokenError(w, http.StatusUnauthorized, "invalid_client")
+173				return
+174			}
+175			limiter.RecordSuccess(ctx, clientID, sourceIP)
+176	
+177			// Opportunistic rehash-on-verify (Marcus Ilori's ruling,
+178			// handoff-03-auth.md v7): reaching this point guarantees secretOK
+179			// came from the real-hash branch above (the dummy-hash branch
+180			// always sets secretOK=false), so rec.ClientSecretHash is a real,
+181			// just-verified PHC string. If its embedded cost parameters have
+182			// drifted from this package's current profile, re-hash the
+183			// secret the caller just proved they hold and persist it — this
+184			// is how an existing row migrates to a bumped cost profile
+185			// without a live-credential migration. Best-effort: a failure
+186			// here does not fail the grant already earned by a correct
+187			// secret; it's logged and the next successful auth tries again.
+188			if needsRehash(rec.ClientSecretHash) {
+189				if newHash, err := hashSecret(clientSecret); err != nil {
+190					log.Printf("api: opportunistic rehash for client_id=%s: hashing failed: %v", clientID, err)
+191				} else if err := store.UpdateSecretHash(ctx, clientID, newHash); err != nil {
+192					log.Printf("api: opportunistic rehash for client_id=%s: storing failed: %v", clientID, err)
+193				}
+194			}
+195	
+196			// scope is optional per RFC 6749 §4.4: omitted means issue the
+197			// client's full granted set, which — per ClientRecord's own doc
+198			// comment on why GrantedScope is singular, not a set — is
+199			// exactly one scope. A requested scope must equal that one
+200			// scope exactly; anything else (a different scope, an empty
+201			// string when one is explicitly passed, more than one
+202			// space-delimited value) is invalid_scope. This is stricter than
+203			// "subset of a set" only because the set this system provisions
+204			// is never larger than one element to begin with.
+205			requested := strings.TrimSpace(r.PostForm.Get("scope"))
+206			if requested != "" &amp;&amp; Scope(requested) != rec.GrantedScope {
+207				writeTokenError(w, http.StatusBadRequest, "invalid_scope")
+208				return
+209			}
+210	
+211			now := time.Now()
+212			c := claims{
+213				Scope: string(rec.GrantedScope),
+214				RegisteredClaims: jwt.RegisteredClaims{
+215					Issuer:    issuer,
+216					Subject:   clientID,
+217					Audience:  jwt.ClaimStrings{rec.Audience},
+218					IssuedAt:  jwt.NewNumericDate(now),
+219					ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
+220					// jti: audit-correlation aid only, per handoff-03-auth.md
+221					// v4 — never checked against a denylist at verification
+222					// time (this design's TTL-only revocation stands).
+223					ID: uuid.NewString(),
+224				},
+225			}
+226			token := jwt.NewWithClaims(jwt.SigningMethodRS256, c)
+227			token.Header["kid"] = key.Kid
+228			signed, err := token.SignedString(key.Private)
+229			if err != nil {
+230				writeTokenError(w, http.StatusInternalServerError, "server_error")
+231				return
+232			}
+233	
+234			w.Header().Set("Content-Type", "application/json")
+235			w.Header().Set("Cache-Control", "no-store") // RFC 6749 §5.1: token responses must not be cached
+236			w.WriteHeader(http.StatusOK)
+237			_ = jsonEncode(w, tokenResponse{
+238				AccessToken: signed,
+239				TokenType:   "Bearer",
+240				ExpiresIn:   int(tokenTTL.Seconds()),
+241				Scope:       string(rec.GrantedScope),
+242			})
+243		}
+244	}
+245	
+246	// sourceIPFrom extracts the caller's address for GrantLimiter's
+247	// per-source-IP key. r.RemoteAddr is the direct TCP peer — if this
+248	// service ever sits behind a proxy that needs X-Forwarded-For honored
+249	// instead, that's a deployment-topology decision for whoever wires the
+250	// proxy, not assumed here.
+251	func sourceIPFrom(r *http.Request) string {
+252		host, _, err := net.SplitHostPort(r.RemoteAddr)
+253		if err != nil {
+254			return r.RemoteAddr
+255		}
+256		return host
+257	}
+258	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/migrations/issuer/00001_initial_schema.sql</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/migrations/issuer/00001_initial_schema.sql"
+}</pre><div class="lbl">result</div><pre>1	-- +goose Up
+2	-- The token issuer's client store (LT-51), per Priya Nandakumar's (05)
+3	-- ruling on this story: a separate `issuer` database — same PostgreSQL
+4	-- instance as the main DAO's database, but a distinct database so a
+5	-- cross-database join to user_profile/user_credential is structurally
+6	-- impossible, not just policy-forbidden. Its own goose invocation
+7	-- (GOOSE_DBSTRING pointed at this database) and its own version table
+8	-- (goose_db_version_issuer), run as a third invocation alongside the
+9	-- existing backend-directory + shared/ pair (05-data-ops/
+10	-- migration-approach.md §"Mechanism 04 needs"). issuer_migrator/
+11	-- issuer_runtime roles carry over the same DDL-vs-DML privilege split
+12	-- LT-52's postgres-in-namespace.md already established for the main
+13	-- database — provisioning those roles is 04's manifest/runbook
+14	-- responsibility, not this file's.
+15	--
+16	-- oauth_client has no PII columns, ever (Priya's ruling) — client_id and
+17	-- name identify a machine client application, not a person, so there is
+18	-- no retention clock on this table (contrast user_profile/
+19	-- user_credential's retention sweep, dao.Repository.DeleteExpired).
+20	--
+21	-- secret_state mirrors user_credential.secret_state's own lesson (05's
+22	-- ruling, cited directly): three states (none/set/revoked) must be
+23	-- asserted explicitly by a named CHECK, never collapsed into an
+24	-- incidental "hash IS NULL" inference — a row can be `revoked` with a
+25	-- NULL hash for a reason distinct from `none` never having had one.
+26	--
+27	-- client_id's charset CHECK is this table's own identifier rule —
+28	-- 05-data-ops/multi-db-strategy.md amendment A4 (canonical UUID
+29	-- validation) is explicitly NOT applied here, since client_id is a
+30	-- human/CI-assigned slug (e.g. issued by the QA seeding runbook), not a
+31	-- generated UUID primary key like every other table in this project.
+32	--
+33	-- granted_scopes is TEXT[] — deliberately PostgreSQL-only, unlike the
+34	-- main DAO schema's portability requirement (05-data-ops/
+35	-- multi-db-strategy.md), since the issuer database has no SQLite/
+36	-- CockroachDB peer to stay portable against.
+37	--
+38	-- name and audience are additions beyond Priya's explicitly named column
+39	-- list (client_id, client_secret_hash/secret_state, granted_scopes,
+40	-- status, created_at/updated_at, no PII) — both operationally necessary
+41	-- (name: a human-readable label for which application a row is, for
+42	-- anyone reading this table directly; audience: LT-51's token claims
+43	-- need a per-client `aud` value, since idp-connector and api-service are
+44	-- different audiences) and neither is PII. Flagged explicitly for
+45	-- Priya's DDL review rather than assumed silently — she confirmed `name`
+46	-- was already implicit in her ruling and approved `audience` as a real
+47	-- amendment (PR #34 review).
+48	--
+49	-- client_id is case-SENSITIVE (a plain TEXT primary key, no folding) —
+50	-- unlike user_credential.username in the main schema, which is
+51	-- case-folded for uniqueness (its unique index is on LOWER(username)).
+52	-- Deliberately different, not an inconsistency to "fix" later: OAuth2
+53	-- client identifiers are conventionally case-sensitive, usernames in
+54	-- this project are not (Priya's review, PR #34).
+55	--
+56	-- granted_scopes (an array constrained to exactly one element) and
+57	-- audience (a scalar) both express the same "exactly one" invariant two
+58	-- different ways — defensible today (scope is conceptually a set that
+59	-- may later admit more than one; audience conceptually isn't), but if
+60	-- the single-scope-per-credential commitment (decisions/
+61	-- search-authz-scoping.md) ever relaxes, ck_oauth_client_granted_scopes_single
+62	-- is what changes and audience's own singularity is easy to forget to
+63	-- reconsider alongside it (Priya's review, PR #34).
+64	
+65	CREATE TABLE oauth_client (
+66		client_id TEXT NOT NULL,
+67		name TEXT NOT NULL,
+68		client_secret_hash TEXT,
+69		secret_state TEXT NOT NULL,
+70		granted_scopes TEXT[] NOT NULL,
+71		audience TEXT NOT NULL,
+72		status TEXT NOT NULL,
+73		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+74		updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+75		CONSTRAINT pk_oauth_client PRIMARY KEY (client_id),
+76		CONSTRAINT ck_oauth_client_id_charset CHECK (client_id ~ '^[A-Za-z0-9._-]{8,64}$'),
+77		CONSTRAINT ck_oauth_client_name_nonempty CHECK (length(trim(name)) &gt; 0),
+78		CONSTRAINT ck_oauth_client_secret_state_enum CHECK (secret_state IN ('none', 'set', 'revoked')),
+79		CONSTRAINT ck_oauth_client_secret_state CHECK (
+80			(secret_state = 'set' AND client_secret_hash IS NOT NULL)
+81			OR
+82			(secret_state IN ('none', 'revoked') AND client_secret_hash IS NULL)
+83		),
+84		-- Exactly one scope, not merely a nonempty set: this project's
+85		-- provisioning model is one client credential per scope a caller
+86		-- needs (decisions/search-authz-scoping.md; LT-40's singleScope
+87		-- rejects a multi-scope token outright), so the DB-level invariant
+88		-- matches the Go-level one instead of merely allowing it.
+89		--
+90		-- cardinality(), not array_length(granted_scopes, 1): array_length
+91		-- returns NULL (not 0) for an empty array, and a CHECK passes on
+92		-- NULL — '{}' would have satisfied the original
+93		-- `array_length(granted_scopes, 1) = 1` text despite having zero
+94		-- elements (Priya Nandakumar's review, PR #34: "the accepted set is
+95		-- what the expression accepts, not what the comment says it
+96		-- accepts"). The two extra clauses close the neighboring holes
+97		-- cardinality alone wouldn't: ARRAY[NULL]::text[] and ARRAY['']::text[]
+98		-- both have cardinality 1.
+99		CONSTRAINT ck_oauth_client_granted_scopes_single CHECK (
+100			cardinality(granted_scopes) = 1
+101			AND granted_scopes[1] IS NOT NULL
+102			AND length(trim(granted_scopes[1])) &gt; 0
+103		),
+104		CONSTRAINT ck_oauth_client_audience_nonempty CHECK (length(trim(audience)) &gt; 0),
+105		CONSTRAINT ck_oauth_client_status CHECK (status IN ('active', 'disabled'))
+106	);
+107	
+108	-- updated_at has no writing-layer contract to rely on (unlike the main
+109	-- DAO schema, whose Go Update methods pass now() explicitly) since this
+110	-- table is written only by 04's out-of-band seeding/rotation runbook,
+111	-- never application code — a trigger is the only mechanism that can't be
+112	-- forgotten by whichever runbook step runs next (Priya Nandakumar's
+113	-- review, PR #34).
+114	--
+115	-- The StatementBegin/StatementEnd markers just below are required here:
+116	-- goose's default parser splits a migration file on every semicolon,
+117	-- including the ones inside this plpgsql function body — without them
+118	-- it breaks the CREATE FUNCTION apart mid dollar-quoted block and fails
+119	-- with "unterminated dollar-quoted string" (reproduced against the real
+120	-- goose CLI, not just psql, which has no such splitting behavior and
+121	-- would not have caught this — deploy failure on the live cluster).
+122	-- The markers tell goose to treat everything between them as one atomic
+123	-- statement instead.
+124	-- +goose StatementBegin
+125	CREATE FUNCTION oauth_client_set_updated_at() RETURNS trigger AS $$
+126	BEGIN
+127		NEW.updated_at := now();
+128		RETURN NEW;
+129	END;
+130	$$ LANGUAGE plpgsql;
+131	-- +goose StatementEnd
+132	
+133	CREATE TRIGGER trg_oauth_client_set_updated_at
+134		BEFORE UPDATE ON oauth_client
+135		FOR EACH ROW
+136		EXECUTE FUNCTION oauth_client_set_updated_at();
+137	
+138	-- +goose Down
+139	DROP TRIGGER trg_oauth_client_set_updated_at ON oauth_client;
+140	DROP FUNCTION oauth_client_set_updated_at();
+141	DROP TABLE oauth_client;
+142	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Now let me look at the test files and go.mod, then run the build/vet/test suite.</div><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore_pg_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore_pg_test.go"
+}</pre><div class="lbl">result</div><pre>1	package api
+2	
+3	import (
+4		"context"
+5		"database/sql"
+6		"fmt"
+7		"math/rand"
+8		"os"
+9		"path/filepath"
+10		"strings"
+11		"testing"
+12		"time"
+13	
+14		_ "github.com/jackc/pgx/v5/stdlib"
+15		"github.com/pressly/goose/v3"
+16	)
+17	
+18	// setupIssuerDB connects to TEST_POSTGRES_DSN (skipping the test if
+19	// unset, same discipline as internal/dao/postgres's own setupDB — real
+20	// Postgres verification is this file's responsibility, not something a
+21	// hand-written fake could ever exercise), applies the real
+22	// migrations/issuer/00001_initial_schema.sql into a fresh, uniquely-named
+23	// schema, and tears it down on cleanup.
+24	//
+25	// Applied through goose.Up (the pressly/goose/v3 library — the same
+26	// parser and statement-splitting logic the real `goose` CLI 04's deploy
+27	// pipeline runs uses), not a hand-rolled "extract the Up section and
+28	// Exec it as one blob" approach. The two are NOT equivalent: goose's
+29	// real statement splitter breaks a migration file apart at every
+30	// semicolon unless a block is wrapped in "-- +goose StatementBegin"/
+31	// "StatementEnd" markers, and a plain db.Exec of the whole Up section
+32	// never exercises that splitting at all — it caught this file's own
+33	// CREATE FUNCTION ... $$ ... $$ block cleanly in review here while the
+34	// exact same file failed on the live cluster's real goose run
+35	// (SQLSTATE 42601, "unterminated dollar-quoted string"). Running the
+36	// actual migration runner is what "verification exercises the sequence
+37	// the live system executes" (05-data-ops's own principle) means in
+38	// practice, not just a stated intention.
+39	func setupIssuerDB(t *testing.T) *sql.DB {
+40		t.Helper()
+41		dsn := os.Getenv("TEST_POSTGRES_DSN")
+42		if dsn == "" {
+43			t.Skip("TEST_POSTGRES_DSN not set — skipping issuer-database integration test")
+44		}
+45	
+46		db, err := sql.Open("pgx", dsn)
+47		if err != nil {
+48			t.Fatalf("opening TEST_POSTGRES_DSN: %v", err)
+49		}
+50		t.Cleanup(func() { _ = db.Close() })
+51		db.SetMaxOpenConns(1)
+52	
+53		schemaName := fmt.Sprintf("test_issuer_%d", rand.Int63())
+54		if _, err := db.Exec("CREATE SCHEMA " + schemaName); err != nil {
+55			t.Fatalf("creating test schema: %v", err)
+56		}
+57		t.Cleanup(func() {
+58			_, _ = db.Exec("DROP SCHEMA " + schemaName + " CASCADE")
+59		})
+60		if _, err := db.Exec("SET search_path TO " + schemaName); err != nil {
+61			t.Fatalf("setting search_path: %v", err)
+62		}
+63	
+64		wd, err := os.Getwd()
+65		if err != nil {
+66			t.Fatalf("getwd: %v", err)
+67		}
+68		repoRoot := filepath.Join(wd, "..", "..") // this package: &lt;repoRoot&gt;/internal/api
+69		migrationDir := filepath.Join(repoRoot, "migrations", "issuer")
+70	
+71		if err := goose.SetDialect("postgres"); err != nil {
+72			t.Fatalf("goose.SetDialect: %v", err)
+73		}
+74		// Matches the real deploy pipeline's `-table goose_db_version_issuer`
+75		// invocation (deploy/manifests.yaml) — the version table lives inside
+76		// this test's own schema via search_path, so it never collides with
+77		// a real deployment's table of the same name.
+78		goose.SetTableName("goose_db_version_issuer")
+79		if err := goose.Up(db, migrationDir); err != nil {
+80			t.Fatalf("applying issuer migration via goose.Up: %v", err)
+81		}
+82	
+83		return db
+84	}
+85	
+86	func insertOAuthClient(t *testing.T, db *sql.DB, clientID, name string, secretHash *string, secretState string, scopes []string, audience, status string) {
+87		t.Helper()
+88		scopeLiteral := "{" + strings.Join(scopes, ",") + "}"
+89		_, err := db.Exec(`
+90			INSERT INTO oauth_client (client_id, name, client_secret_hash, secret_state, granted_scopes, audience, status)
+91			VALUES ($1, $2, $3, $4, $5, $6, $7)
+92		`, clientID, name, secretHash, secretState, scopeLiteral, audience, status)
+93		if err != nil {
+94			t.Fatalf("inserting oauth_client row: %v", err)
+95		}
+96	}
+97	
+98	func TestPostgresClientStore_Get_Found(t *testing.T) {
+99		db := setupIssuerDB(t)
+100		hash, err := hashSecret("s3cr3t")
+101		if err != nil {
+102			t.Fatalf("hashing secret: %v", err)
+103		}
+104		insertOAuthClient(t, db, "qa-review-client", "QA Review Client", &amp;hash, "set", []string{"profile:search"}, "loginid-api-service", "active")
+105	
+106		store := NewPostgresClientStore(db)
+107		rec, ok, err := store.Get(context.Background(), "qa-review-client")
+108		if err != nil {
+109			t.Fatalf("Get: %v", err)
+110		}
+111		if !ok {
+112			t.Fatalf("Get returned ok=false for a row that exists")
+113		}
+114		if rec.Name != "QA Review Client" || rec.Audience != "loginid-api-service" || rec.GrantedScope != Scope("profile:search") || !rec.Active {
+115			t.Errorf("unexpected record: %+v", rec)
+116		}
+117		if !verifySecret("s3cr3t", rec.ClientSecretHash) {
+118			t.Errorf("stored hash doesn't verify against the secret it was created with")
+119		}
+120	}
+121	
+122	func TestPostgresClientStore_Get_NotFound(t *testing.T) {
+123		db := setupIssuerDB(t)
+124		store := NewPostgresClientStore(db)
+125	
+126		_, ok, err := store.Get(context.Background(), "does-not-exist")
+127		if err != nil {
+128			t.Fatalf("Get: %v", err)
+129		}
+130		if ok {
+131			t.Errorf("Get returned ok=true for a client_id that was never inserted")
+132		}
+133	}
+134	
+135	func TestPostgresClientStore_Get_SecretStateNone_EmptyHash(t *testing.T) {
+136		db := setupIssuerDB(t)
+137		insertOAuthClient(t, db, "not-yet-secreted", "No Secret Yet", nil, "none", []string{"profile:read:any"}, "loginid-api-service", "active")
+138	
+139		store := NewPostgresClientStore(db)
+140		rec, ok, err := store.Get(context.Background(), "not-yet-secreted")
+141		if err != nil {
+142			t.Fatalf("Get: %v", err)
+143		}
+144		if !ok {
+145			t.Fatalf("Get returned ok=false for a row that exists")
+146		}
+147		if rec.ClientSecretHash != "" {
+148			t.Errorf("ClientSecretHash = %q, want empty for secret_state=none", rec.ClientSecretHash)
+149		}
+150	}
+151	
+152	func TestPostgresClientStore_Get_DisabledStatus(t *testing.T) {
+153		db := setupIssuerDB(t)
+154		hash, err := hashSecret("s3cr3t")
+155		if err != nil {
+156			t.Fatalf("hashing secret: %v", err)
+157		}
+158		insertOAuthClient(t, db, "disabled-client", "Disabled", &amp;hash, "set", []string{"profile:search"}, "loginid-api-service", "disabled")
+159	
+160		store := NewPostgresClientStore(db)
+161		rec, ok, err := store.Get(context.Background(), "disabled-client")
+162		if err != nil {
+163			t.Fatalf("Get: %v", err)
+164		}
+165		if !ok {
+166			t.Fatalf("Get returned ok=false for a row that exists")
+167		}
+168		if rec.Active {
+169			t.Errorf("Active = true for status=disabled")
+170		}
+171	}
+172	
+173	// TestPostgresClientStore_UpdateSecretHash is the opportunistic-rehash
+174	// mechanism's own storage-layer test (handoff-03-auth.md v7) — a real
+175	// UPDATE against a real row, confirmed by re-reading it back, not just
+176	// asserted from the SQL text.
+177	func TestPostgresClientStore_UpdateSecretHash(t *testing.T) {
+178		db := setupIssuerDB(t)
+179		oldHash, err := hashSecret("s3cr3t")
+180		if err != nil {
+181			t.Fatalf("hashing secret: %v", err)
+182		}
+183		insertOAuthClient(t, db, "rehash-client", "Rehash Test", &amp;oldHash, "set", []string{"profile:search"}, "aud", "active")
+184	
+185		newHash, err := hashSecret("s3cr3t")
+186		if err != nil {
+187			t.Fatalf("hashing secret: %v", err)
+188		}
+189		store := NewPostgresClientStore(db)
+190		if err := store.UpdateSecretHash(context.Background(), "rehash-client", newHash); err != nil {
+191			t.Fatalf("UpdateSecretHash: %v", err)
+192		}
+193	
+194		rec, ok, err := store.Get(context.Background(), "rehash-client")
+195		if err != nil || !ok {
+196			t.Fatalf("Get after UpdateSecretHash: ok=%v err=%v", ok, err)
+197		}
+198		if rec.ClientSecretHash != newHash {
+199			t.Errorf("stored hash = %q, want the new hash %q", rec.ClientSecretHash, newHash)
+200		}
+201		if !verifySecret("s3cr3t", rec.ClientSecretHash) {
+202			t.Errorf("updated hash doesn't verify against the secret it was set to")
+203		}
+204	}
+205	
+206	func TestPostgresClientStore_UpdateSecretHash_NoSuchClient(t *testing.T) {
+207		db := setupIssuerDB(t)
+208		store := NewPostgresClientStore(db)
+209		if err := store.UpdateSecretHash(context.Background(), "does-not-exist", "irrelevant"); err == nil {
+210			t.Errorf("UpdateSecretHash against a nonexistent client_id returned nil error, want an error")
+211		}
+212	}
+213	
+214	// TestOAuthClient_SchemaConstraints exercises the migration's own CHECK
+215	// constraints directly against a real Postgres — the DDL is the actual
+216	// enforcement site for these invariants, not application code, so the
+217	// test belongs here rather than only asserted in prose.
+218	func TestOAuthClient_SchemaConstraints(t *testing.T) {
+219		db := setupIssuerDB(t)
+220	
+221		cases := []struct {
+222			name string
+223			sql  string
+224			args []any
+225		}{
+226			{
+227				name: "client_id too short fails the charset CHECK",
+228				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ($1, 'x', 'none', '{profile:search}', 'aud', 'active')`,
+229				args: []any{"short"},
+230			},
+231			{
+232				name: "secret_state=set with NULL hash violates the tying CHECK",
+233				sql:  `INSERT INTO oauth_client (client_id, name, client_secret_hash, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', NULL, 'set', '{profile:search}', 'aud', 'active')`,
+234			},
+235			{
+236				name: "secret_state=none with a non-NULL hash violates the tying CHECK",
+237				sql:  `INSERT INTO oauth_client (client_id, name, client_secret_hash, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'somehash', 'none', '{profile:search}', 'aud', 'active')`,
+238			},
+239			{
+240				name: "multiple granted_scopes violates the single-scope CHECK",
+241				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'none', '{profile:search,profile:read:any}', 'aud', 'active')`,
+242			},
+243			{
+244				// array_length(x, 1) returns NULL (not 0) for an empty array,
+245				// and a CHECK passes on NULL — this insert is exactly what
+246				// the original (broken) CHECK text would have silently
+247				// admitted (Priya Nandakumar's review, PR #34).
+248				name: "empty granted_scopes violates the single-scope CHECK",
+249				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'none', '{}', 'aud', 'active')`,
+250			},
+251			{
+252				name: "a NULL granted_scopes element violates the single-scope CHECK",
+253				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'none', ARRAY[NULL]::text[], 'aud', 'active')`,
+254			},
+255			{
+256				name: "an empty-string granted_scopes element violates the single-scope CHECK",
+257				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'none', ARRAY['']::text[], 'aud', 'active')`,
+258			},
+259			{
+260				name: "unrecognized status violates the status enum CHECK",
+261				sql:  `INSERT INTO oauth_client (client_id, name, secret_state, granted_scopes, audience, status) VALUES ('valid-client-id', 'x', 'none', '{profile:search}', 'aud', 'pending')`,
+262			},
+263		}
+264		for _, c := range cases {
+265			t.Run(c.name, func(t *testing.T) {
+266				_, err := db.Exec(c.sql, c.args...)
+267				if err == nil {
+268					t.Errorf("expected a CHECK-constraint violation, got no error")
+269				}
+270			})
+271		}
+272	}
+273	
+274	// TestOAuthClient_UpdatedAtTrigger proves the BEFORE UPDATE trigger
+275	// actually advances updated_at — the enforcement site is the trigger
+276	// firing on a real UPDATE, not the migration text alone (Priya
+277	// Nandakumar's review, PR #34: this table has no application-code
+278	// writing layer to rely on for setting updated_at, unlike the main DAO
+279	// schema, so the trigger is the only thing that can't be forgotten).
+280	func TestOAuthClient_UpdatedAtTrigger(t *testing.T) {
+281		db := setupIssuerDB(t)
+282		insertOAuthClient(t, db, "trigger-test-client", "Trigger Test", nil, "none", []string{"profile:search"}, "aud", "active")
+283	
+284		var createdAt, updatedAtBefore time.Time
+285		if err := db.QueryRow(`SELECT created_at, updated_at FROM oauth_client WHERE client_id = $1`, "trigger-test-client").Scan(&amp;createdAt, &amp;updatedAtBefore); err != nil {
+286			t.Fatalf("querying initial row: %v", err)
+287		}
+288		if !createdAt.Equal(updatedAtBefore) {
+289			t.Fatalf("precondition failed: created_at (%v) and updated_at (%v) should start equal", createdAt, updatedAtBefore)
+290		}
+291	
+292		time.Sleep(10 * time.Millisecond) // ensure now() advances past the default's own now()
+293		if _, err := db.Exec(`UPDATE oauth_client SET status = 'disabled' WHERE client_id = $1`, "trigger-test-client"); err != nil {
+294			t.Fatalf("updating row: %v", err)
+295		}
+296	
+297		var updatedAtAfter time.Time
+298		if err := db.QueryRow(`SELECT updated_at FROM oauth_client WHERE client_id = $1`, "trigger-test-client").Scan(&amp;updatedAtAfter); err != nil {
+299			t.Fatalf("querying updated row: %v", err)
+300		}
+301		if !updatedAtAfter.After(updatedAtBefore) {
+302			t.Errorf("updated_at did not advance after UPDATE: before=%v after=%v", updatedAtBefore, updatedAtAfter)
+303		}
+304	}
+305	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler_test.go"
+}</pre><div class="lbl">result</div><pre>1	package api
+2	
+3	import (
+4		"context"
+5		"crypto/rand"
+6		"crypto/rsa"
+7		"encoding/json"
+8		"fmt"
+9		"io"
+10		"net/http"
+11		"net/http/httptest"
+12		"net/url"
+13		"strings"
+14		"testing"
+15	
+16		"github.com/golang-jwt/jwt/v5"
+17		"golang.org/x/crypto/argon2"
+18	)
+19	
+20	// fakeClientStore implements ClientStore, per decisions/test-double-strategy.md.
+21	type fakeClientStore struct {
+22		records         map[string]ClientRecord
+23		getErr          error
+24		gotIDs          []string // records every clientID Get was called with, for call-shape assertions
+25		updateHashCalls []string // clientIDs UpdateSecretHash was called for
+26		updateHashErr   error
+27	}
+28	
+29	func (f *fakeClientStore) Get(_ context.Context, clientID string) (ClientRecord, bool, error) {
+30		f.gotIDs = append(f.gotIDs, clientID)
+31		if f.getErr != nil {
+32			return ClientRecord{}, false, f.getErr
+33		}
+34		rec, ok := f.records[clientID]
+35		return rec, ok, nil
+36	}
+37	
+38	func (f *fakeClientStore) UpdateSecretHash(_ context.Context, clientID, newHash string) error {
+39		f.updateHashCalls = append(f.updateHashCalls, clientID)
+40		if f.updateHashErr != nil {
+41			return f.updateHashErr
+42		}
+43		if rec, ok := f.records[clientID]; ok {
+44			rec.ClientSecretHash = newHash
+45			f.records[clientID] = rec
+46		}
+47		return nil
+48	}
+49	
+50	// fakeGrantLimiter implements GrantLimiter.
+51	type fakeGrantLimiter struct {
+52		allow           bool
+53		allowErr        error
+54		failedClientIDs []string
+55		succeededIDs    []string
+56	}
+57	
+58	func (f *fakeGrantLimiter) Allow(_ context.Context, clientID, sourceIP string) (bool, error) {
+59		return f.allow, f.allowErr
+60	}
+61	func (f *fakeGrantLimiter) RecordFailure(_ context.Context, clientID, sourceIP string) {
+62		f.failedClientIDs = append(f.failedClientIDs, clientID)
+63	}
+64	func (f *fakeGrantLimiter) RecordSuccess(_ context.Context, clientID, sourceIP string) {
+65		f.succeededIDs = append(f.succeededIDs, clientID)
+66	}
+67	
+68	func testSigningKey(t *testing.T) *SigningKey {
+69		t.Helper()
+70		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+71		if err != nil {
+72			t.Fatalf("generating RSA key: %v", err)
+73		}
+74		return &amp;SigningKey{Private: priv, Kid: "test-kid"}
+75	}
+76	
+77	func postToken(t *testing.T, h http.HandlerFunc, form url.Values, clientID, clientSecret string, setBasicAuth bool) *http.Response {
+78		t.Helper()
+79		req := httptest.NewRequest(http.MethodPost, "/auth/token", strings.NewReader(form.Encode()))
+80		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+81		if setBasicAuth {
+82			req.SetBasicAuth(clientID, clientSecret)
+83		}
+84		w := httptest.NewRecorder()
+85		h.ServeHTTP(w, req)
+86		return w.Result()
+87	}
+88	
+89	func decodeTokenError(t *testing.T, resp *http.Response) tokenErrorResponse {
+90		t.Helper()
+91		var body tokenErrorResponse
+92		if err := json.NewDecoder(resp.Body).Decode(&amp;body); err != nil {
+93			t.Fatalf("decoding error body: %v", err)
+94		}
+95		return body
+96	}
+97	
+98	func TestNewTokenHandler_MissingGrantType_UnsupportedGrantType(t *testing.T) {
+99		store := &amp;fakeClientStore{records: map[string]ClientRecord{}}
+100		limiter := &amp;fakeGrantLimiter{allow: true}
+101		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+102	
+103		resp := postToken(t, h, url.Values{}, "any", "any", true)
+104		if resp.StatusCode != http.StatusBadRequest {
+105			t.Fatalf("status = %d, want 400", resp.StatusCode)
+106		}
+107		if body := decodeTokenError(t, resp); body.Error != "unsupported_grant_type" {
+108			t.Errorf("error = %q, want unsupported_grant_type", body.Error)
+109		}
+110	}
+111	
+112	func TestNewTokenHandler_NoBasicAuth_InvalidClient401(t *testing.T) {
+113		store := &amp;fakeClientStore{records: map[string]ClientRecord{}}
+114		limiter := &amp;fakeGrantLimiter{allow: true}
+115		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+116	
+117		form := url.Values{"grant_type": {"client_credentials"}}
+118		resp := postToken(t, h, form, "", "", false)
+119		if resp.StatusCode != http.StatusUnauthorized {
+120			t.Fatalf("status = %d, want 401", resp.StatusCode)
+121		}
+122		if got := resp.Header.Get("WWW-Authenticate"); !strings.HasPrefix(got, "Basic") {
+123			t.Errorf("WWW-Authenticate = %q, want a Basic challenge", got)
+124		}
+125		if len(store.gotIDs) != 0 {
+126			t.Errorf("store.Get called %d times, want 0 — no client_id exists yet to key by", len(store.gotIDs))
+127		}
+128		if len(limiter.failedClientIDs) != 1 || limiter.failedClientIDs[0] != "" {
+129			t.Errorf("RecordFailure calls = %v, want exactly one call with clientID \"\" — a no-Authorization-header request must still advance the per-source-IP backoff (Helena Marsh, PR #34 review)", limiter.failedClientIDs)
+130		}
+131	}
+132	
+133	// TestNewTokenHandler_NoBasicAuth_StillGatedByLimiter is Helena Marsh's
+134	// (02) review finding on PR #34: a request with no Authorization header
+135	// at all must not bypass GrantLimiter entirely — sourceIP is available
+136	// regardless of whether any credentials were sent, so it must still be
+137	// checked before the missing-Basic-Auth 401 is returned.
+138	func TestNewTokenHandler_NoBasicAuth_StillGatedByLimiter(t *testing.T) {
+139		store := &amp;fakeClientStore{records: map[string]ClientRecord{}}
+140		limiter := &amp;fakeGrantLimiter{allow: false} // simulate: this source IP is already backed off
+141		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+142	
+143		form := url.Values{"grant_type": {"client_credentials"}}
+144		resp := postToken(t, h, form, "", "", false)
+145		if resp.StatusCode != http.StatusTooManyRequests {
+146			t.Fatalf("status = %d, want 429 — a no-Authorization-header request must still be rejected by an already-tripped limiter, not fall through to 401", resp.StatusCode)
+147		}
+148	}
+149	
+150	// TestNewTokenHandler_UnknownClient_And_WrongSecret_ByteIdenticalResponses
+151	// is RFC 6749 §5.2's own requirement plus Tobias Lindqvist's timing-oracle
+152	// objection (LT-51 refinement): an unknown client_id and a wrong secret
+153	// for a known client_id must be indistinguishable to the caller — same
+154	// status, same body — and internally must run the same real Argon2id
+155	// comparison exactly once, never short-circuiting one path cheaper than
+156	// the other.
+157	func TestNewTokenHandler_UnknownClient_And_WrongSecret_ByteIdenticalResponses(t *testing.T) {
+158		hash, err := hashSecret("correct-secret")
+159		if err != nil {
+160			t.Fatalf("hashing secret: %v", err)
+161		}
+162		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+163			"known-client": {ClientID: "known-client", Name: "Known", ClientSecretHash: hash, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+164		}}
+165		limiter := &amp;fakeGrantLimiter{allow: true}
+166		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+167	
+168		form := url.Values{"grant_type": {"client_credentials"}}
+169	
+170		respUnknown := postToken(t, h, form, "does-not-exist", "whatever", true)
+171		bodyUnknown, _ := io.ReadAll(respUnknown.Body)
+172	
+173		respWrongSecret := postToken(t, h, form, "known-client", "wrong-secret", true)
+174		bodyWrongSecret, _ := io.ReadAll(respWrongSecret.Body)
+175	
+176		if respUnknown.StatusCode != http.StatusUnauthorized || respWrongSecret.StatusCode != http.StatusUnauthorized {
+177			t.Fatalf("status codes = %d, %d, want both 401", respUnknown.StatusCode, respWrongSecret.StatusCode)
+178		}
+179		if string(bodyUnknown) != string(bodyWrongSecret) {
+180			t.Errorf("response bodies differ: unknown-client=%q wrong-secret=%q — must be byte-identical", bodyUnknown, bodyWrongSecret)
+181		}
+182	
+183		if len(limiter.failedClientIDs) != 2 {
+184			t.Errorf("RecordFailure called %d times, want 2 (once per failed attempt)", len(limiter.failedClientIDs))
+185		}
+186	}
+187	
+188	func TestNewTokenHandler_FoundButNoSecretSet_TreatedSameAsNotFound(t *testing.T) {
+189		// secret_state = "none"/"revoked" rows have an empty ClientSecretHash
+190		// (the migration's own CHECK ties the two together) — this must run
+191		// the dummyHash comparison, not a malformed-hash short-circuit, per
+192		// the same timing-parity reasoning as the unknown-client_id case.
+193		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+194			"provisioned-no-secret": {ClientID: "provisioned-no-secret", Name: "No Secret Yet", ClientSecretHash: "", GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+195		}}
+196		limiter := &amp;fakeGrantLimiter{allow: true}
+197		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+198	
+199		form := url.Values{"grant_type": {"client_credentials"}}
+200		resp := postToken(t, h, form, "provisioned-no-secret", "anything", true)
+201		if resp.StatusCode != http.StatusUnauthorized {
+202			t.Fatalf("status = %d, want 401", resp.StatusCode)
+203		}
+204		if body := decodeTokenError(t, resp); body.Error != "invalid_client" {
+205			t.Errorf("error = %q, want invalid_client", body.Error)
+206		}
+207	}
+208	
+209	func TestNewTokenHandler_CorrectCredentials_IssuesValidToken(t *testing.T) {
+210		hash, err := hashSecret("s3cr3t")
+211		if err != nil {
+212			t.Fatalf("hashing secret: %v", err)
+213		}
+214		key := testSigningKey(t)
+215		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+216			"known-client": {ClientID: "known-client", Name: "Known", ClientSecretHash: hash, GrantedScope: Scope("profile:search"), Audience: "loginid-api-service", Active: true},
+217		}}
+218		limiter := &amp;fakeGrantLimiter{allow: true}
+219		h := NewTokenHandler(store, limiter, key, "https://issuer.test")
+220	
+221		form := url.Values{"grant_type": {"client_credentials"}}
+222		resp := postToken(t, h, form, "known-client", "s3cr3t", true)
+223		if resp.StatusCode != http.StatusOK {
+224			body, _ := io.ReadAll(resp.Body)
+225			t.Fatalf("status = %d, want 200, body=%s", resp.StatusCode, body)
+226		}
+227		if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+228			t.Errorf("Cache-Control = %q, want no-store (RFC 6749 §5.1)", got)
+229		}
+230	
+231		var body tokenResponse
+232		if err := json.NewDecoder(resp.Body).Decode(&amp;body); err != nil {
+233			t.Fatalf("decoding success body: %v", err)
+234		}
+235		if body.TokenType != "Bearer" {
+236			t.Errorf("token_type = %q, want Bearer", body.TokenType)
+237		}
+238		if body.Scope != "profile:search" {
+239			t.Errorf("scope = %q, want profile:search", body.Scope)
+240		}
+241	
+242		parsed, err := jwt.ParseWithClaims(body.AccessToken, &amp;claims{}, func(tok *jwt.Token) (any, error) {
+243			return &amp;key.Private.PublicKey, nil
+244		}, jwt.WithValidMethods([]string{"RS256"}))
+245		if err != nil {
+246			t.Fatalf("parsing/verifying minted token: %v", err)
+247		}
+248		c := parsed.Claims.(*claims)
+249		if c.Subject != "known-client" {
+250			t.Errorf("sub = %q, want known-client", c.Subject)
+251		}
+252		if c.Issuer != "https://issuer.test" {
+253			t.Errorf("iss = %q, want https://issuer.test", c.Issuer)
+254		}
+255		if len(c.Audience) != 1 || c.Audience[0] != "loginid-api-service" {
+256			t.Errorf("aud = %v, want [loginid-api-service]", c.Audience)
+257		}
+258		if c.Scope != "profile:search" {
+259			t.Errorf("scope claim = %q, want profile:search", c.Scope)
+260		}
+261		if parsed.Header["kid"] != key.Kid {
+262			t.Errorf("kid header = %v, want %q", parsed.Header["kid"], key.Kid)
+263		}
+264	
+265		if len(limiter.succeededIDs) != 1 || limiter.succeededIDs[0] != "known-client" {
+266			t.Errorf("RecordSuccess calls = %v, want exactly one for known-client", limiter.succeededIDs)
+267		}
+268		if len(store.updateHashCalls) != 0 {
+269			t.Errorf("UpdateSecretHash called %v, want none — this hash was created under the current cost profile", store.updateHashCalls)
+270		}
+271	}
+272	
+273	// TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess is
+274	// handoff-03-auth.md v7's verify-then-rehash ruling: a stored hash whose
+275	// embedded cost parameters differ from this package's current profile
+276	// still verifies correctly (using its own embedded parameters, not the
+277	// current constants), and a successful grant against it triggers an
+278	// opportunistic UpdateSecretHash call so the row migrates forward.
+279	func TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess(t *testing.T) {
+280		salt := []byte("0123456789abcdef")
+281		const oldTime = 2 // deliberately not this package's current argon2Time (1)
+282		oldHash := argon2.IDKey([]byte("s3cr3t"), salt, oldTime, argon2Memory, argon2Threads, argon2KeyLen)
+283		driftedEncoded := encodePHC(argon2Memory, oldTime, argon2Threads, salt, oldHash)
+284	
+285		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+286			"drifted-client": {ClientID: "drifted-client", Name: "Drifted", ClientSecretHash: driftedEncoded, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+287		}}
+288		limiter := &amp;fakeGrantLimiter{allow: true}
+289		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+290	
+291		form := url.Values{"grant_type": {"client_credentials"}}
+292		resp := postToken(t, h, form, "drifted-client", "s3cr3t", true)
+293		if resp.StatusCode != http.StatusOK {
+294			body, _ := io.ReadAll(resp.Body)
+295			t.Fatalf("status = %d, want 200 (a drifted-profile hash must still verify correctly), body=%s", resp.StatusCode, body)
+296		}
+297		if len(store.updateHashCalls) != 1 || store.updateHashCalls[0] != "drifted-client" {
+298			t.Fatalf("UpdateSecretHash calls = %v, want exactly one for drifted-client", store.updateHashCalls)
+299		}
+300	
+301		newHash := store.records["drifted-client"].ClientSecretHash
+302		if newHash == driftedEncoded {
+303			t.Errorf("stored hash unchanged after rehash")
+304		}
+305		if needsRehash(newHash) {
+306			t.Errorf("rehashed value still reports needsRehash=true — it wasn't actually re-encoded under the current profile")
+307		}
+308		if !verifySecret("s3cr3t", newHash) {
+309			t.Errorf("rehashed value doesn't verify against the same secret")
+310		}
+311	}
+312	
+313	// TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds is the
+314	// best-effort half of the rehash design (Helena Marsh's review, PR #39):
+315	// the caller already proved they hold the correct secret, so a failure
+316	// to WRITE the rehashed value must never turn an earned 200 into an
+317	// error — the grant response is already fully determined before the
+318	// rehash is even attempted.
+319	func TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds(t *testing.T) {
+320		salt := []byte("0123456789abcdef")
+321		const oldTime = 2 // deliberately not this package's current argon2Time (1)
+322		oldHash := argon2.IDKey([]byte("s3cr3t"), salt, oldTime, argon2Memory, argon2Threads, argon2KeyLen)
+323		driftedEncoded := encodePHC(argon2Memory, oldTime, argon2Threads, salt, oldHash)
+324	
+325		store := &amp;fakeClientStore{
+326			records: map[string]ClientRecord{
+327				"drifted-client": {ClientID: "drifted-client", Name: "Drifted", ClientSecretHash: driftedEncoded, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+328			},
+329			updateHashErr: fmt.Errorf("simulated issuer database write failure"),
+330		}
+331		limiter := &amp;fakeGrantLimiter{allow: true}
+332		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+333	
+334		form := url.Values{"grant_type": {"client_credentials"}}
+335		resp := postToken(t, h, form, "drifted-client", "s3cr3t", true)
+336		if resp.StatusCode != http.StatusOK {
+337			body, _ := io.ReadAll(resp.Body)
+338			t.Fatalf("status = %d, want 200 even when the rehash persist write fails — the secret was already correctly verified before the rehash was attempted, body=%s", resp.StatusCode, body)
+339		}
+340		if len(store.updateHashCalls) != 1 {
+341			t.Errorf("UpdateSecretHash calls = %v, want exactly one attempt even though it fails", store.updateHashCalls)
+342		}
+343		// The stored hash must be unchanged, since the write failed — the
+344		// row still verifies with its original (drifted) hash next time.
+345		if store.records["drifted-client"].ClientSecretHash != driftedEncoded {
+346			t.Errorf("stored hash changed despite UpdateSecretHash returning an error")
+347		}
+348	}
+349	
+350	func TestNewTokenHandler_ScopeMismatch_InvalidScope(t *testing.T) {
+351		hash, err := hashSecret("s3cr3t")
+352		if err != nil {
+353			t.Fatalf("hashing secret: %v", err)
+354		}
+355		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+356			"known-client": {ClientID: "known-client", Name: "Known", ClientSecretHash: hash, GrantedScope: Scope("profile:search"), Audience: "aud", Active: true},
+357		}}
+358		limiter := &amp;fakeGrantLimiter{allow: true}
+359		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+360	
+361		form := url.Values{"grant_type": {"client_credentials"}, "scope": {"profile:read:any"}}
+362		resp := postToken(t, h, form, "known-client", "s3cr3t", true)
+363		if resp.StatusCode != http.StatusBadRequest {
+364			t.Fatalf("status = %d, want 400", resp.StatusCode)
+365		}
+366		if body := decodeTokenError(t, resp); body.Error != "invalid_scope" {
+367			t.Errorf("error = %q, want invalid_scope", body.Error)
+368		}
+369	}
+370	
+371	func TestNewTokenHandler_InactiveClient_InvalidClient401(t *testing.T) {
+372		hash, err := hashSecret("s3cr3t")
+373		if err != nil {
+374			t.Fatalf("hashing secret: %v", err)
+375		}
+376		store := &amp;fakeClientStore{records: map[string]ClientRecord{
+377			"disabled-client": {ClientID: "disabled-client", Name: "Disabled", ClientSecretHash: hash, GrantedScope: Scope("profile:search"), Audience: "aud", Active: false},
+378		}}
+379		limiter := &amp;fakeGrantLimiter{allow: true}
+380		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+381	
+382		form := url.Values{"grant_type": {"client_credentials"}}
+383		resp := postToken(t, h, form, "disabled-client", "s3cr3t", true)
+384		if resp.StatusCode != http.StatusUnauthorized {
+385			t.Fatalf("status = %d, want 401 (disabled status must still reject even with the correct secret)", resp.StatusCode)
+386		}
+387	}
+388	
+389	func TestNewTokenHandler_LimiterDenies_SlowDown429(t *testing.T) {
+390		store := &amp;fakeClientStore{records: map[string]ClientRecord{}}
+391		limiter := &amp;fakeGrantLimiter{allow: false}
+392		h := NewTokenHandler(store, limiter, testSigningKey(t), "https://issuer.test")
+393	
+394		form := url.Values{"grant_type": {"client_credentials"}}
+395		resp := postToken(t, h, form, "whoever", "whatever", true)
+396		if resp.StatusCode != http.StatusTooManyRequests {
+397			t.Fatalf("status = %d, want 429", resp.StatusCode)
+398		}
+399		if len(store.gotIDs) != 0 {
+400			t.Errorf("store.Get called %d times, want 0 — the limiter must gate before touching the store", len(store.gotIDs))
+401		}
+402	}
+403	
+404	func TestNewTokenHandler_NilStore_ServerError(t *testing.T) {
+405		limiter := &amp;fakeGrantLimiter{allow: true}
+406		h := NewTokenHandler(nil, limiter, testSigningKey(t), "https://issuer.test")
+407	
+408		form := url.Values{"grant_type": {"client_credentials"}}
+409		resp := postToken(t, h, form, "whoever", "whatever", true)
+410		if resp.StatusCode != http.StatusInternalServerError {
+411			t.Fatalf("status = %d, want 500 (nil ClientStore must fail closed, not panic)", resp.StatusCode)
+412		}
+413		if body := decodeTokenError(t, resp); body.Error != "server_error" {
+414			t.Errorf("error = %q, want server_error", body.Error)
+415		}
+416	}
+417	</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; cat go.mod | head -40</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; cat go.mod | head -40"
+}</pre><div class="lbl">result</div><pre>module loginid-takehome
+
+go 1.27.1
+
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.11.0
+	modernc.org/sqlite v1.58.0
+)
+
+require (
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/pressly/goose/v3 v3.28.0 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/sethvargo/go-retry v0.4.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	modernc.org/libc v1.75.6 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.12.1 // indirect
+)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go build ./... 2&gt;&amp;1 | tail -50</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go build ./... 2&gt;&amp;1 | tail -50"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -50</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -50"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Both clean. Now run the full test suite, and spin up a throwaway Postgres for the real integration path including goose.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go test ./... 2&gt;&amp;1 | tail -60</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; go test ./... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>?   	loginid-takehome/cmd/api-service	[no test files]
+?   	loginid-takehome/cmd/idp-connector	[no test files]
+ok  	loginid-takehome/internal/api	(cached)
+ok  	loginid-takehome/internal/app	(cached)
+ok  	loginid-takehome/internal/config	(cached)
+ok  	loginid-takehome/internal/dao	(cached)
+ok  	loginid-takehome/internal/dao/conformance	(cached)
+ok  	loginid-takehome/internal/dao/postgres	(cached)
+ok  	loginid-takehome/internal/dao/sqlite	(cached)
+?   	loginid-takehome/internal/model	[no test files]</pre></div></details><details><summary><span class="tn">Bash</span> docker ps -a 2&gt;&amp;1 | head -5; docker --version 2&gt;&amp;1</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "docker ps -a 2&gt;&amp;1 | head -5; docker --version 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>CONTAINER ID   IMAGE                         COMMAND                  CREATED       STATUS                   PORTS     NAMES
+17480b608275   9d7cf3f00742                  "/docker-entrypoint.…"   9 hours ago   Up 9 hours                         k8s_frontend_aiea-frontend-86cdfd5f49-d9zcr_aiea-local_080d60d5-705c-49fa-b869-a16c2322107c_17
+5cbbb950df80   82c63d1e58d4                  "uvicorn main_uscis_…"   9 hours ago   Up 9 hours                         k8s_backend_aiea-backend-546f4f84bb-tclwl_aiea-local_4d24510d-9775-4c75-b853-6d253b48d566_8
+c779e5c1069f   fe0737ba566a                  "docker-entrypoint.s…"   9 hours ago   Up 9 hours                         k8s_postgres_postgres-755fcb79f5-rmkrc_aiea-local_bcd644fa-45d4-42de-afb0-671d0d98ddb3_8
+fe6d18783d32   technolotlmvcmovie-mvcmovie   "dotnet MvcMovie.dll"    2 weeks ago   Exited (0) 2 weeks ago             technolotlmvcmovie-mvcmovie-1
+Docker version 29.7.2, build a7dcaa6</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Docker is available. Let's spin up a throwaway postgres:16-alpine and run the real integration tests.</div><details><summary><span class="tn">Bash</span> docker run --rm -d --name nolan-lt51-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=issuer_test -p 1543</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "docker run --rm -d --name nolan-lt51-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=issuer_test -p 15433:5432 postgres:16-alpine\nsleep 4\nfor i in $(seq 1 20); do docker exec nolan-lt51-pg pg_isready -U postgres &amp;&amp; break; sleep 1; done"
+}</pre><div class="lbl">result</div><pre>«REDACTED-HEX»
+/var/run/postgresql:5432 - accepting connections</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; export TEST_POSTGRES_DSN="postgre</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; export TEST_POSTGRES_DSN=\"postgres://postgres:«REDACTED»@localhost:15433/issuer_test?sslmode=disable\" &amp;&amp; go test ./internal/api/... -run . -v 2&gt;&amp;1 | tail -120"
+}</pre><div class="lbl">result</div><pre>--- PASS: TestJWKSCache_FetchesAndCaches (0.08s)
+=== RUN   TestJWKSCache_RefetchesAfterTTLExpires
+--- PASS: TestJWKSCache_RefetchesAfterTTLExpires (0.05s)
+=== RUN   TestJWKSCache_UnknownKidWithNoStaleCacheIsError
+--- PASS: TestJWKSCache_UnknownKidWithNoStaleCacheIsError (0.03s)
+=== RUN   TestJWKSCache_StaleCacheSurvivesTransientFetchFailure
+--- PASS: TestJWKSCache_StaleCacheSurvivesTransientFetchFailure (0.05s)
+=== RUN   TestJWKSCache_FailsClosedPastMaxStaleness
+2026/09/13 06:29:33 api: JWKS unrefreshable for 4m0s across 1 consecutive failures (exceeds max staleness 3m0s) — failing closed
+--- PASS: TestJWKSCache_FailsClosedPastMaxStaleness (0.01s)
+=== RUN   TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch
+--- PASS: TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch (0.07s)
+=== RUN   TestJWKSCache_UnknownKidRefetchIsRateLimited
+--- PASS: TestJWKSCache_UnknownKidRefetchIsRateLimited (0.03s)
+=== RUN   TestJWKSCache_FailedRefreshDoesNotHammerIssuer
+--- PASS: TestJWKSCache_FailedRefreshDoesNotHammerIssuer (0.10s)
+=== RUN   TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry
+2026/09/13 06:29:34 api: JWKS unrefreshable for 5m1s across 2 consecutive failures (exceeds max staleness 3m0s) — failing closed
+--- PASS: TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry (0.07s)
+=== RUN   TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal
+--- PASS: TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal (0.06s)
+=== RUN   TestJWKSCache_UnknownKidReservationCapsDistinctKids
+--- PASS: TestJWKSCache_UnknownKidReservationCapsDistinctKids (0.02s)
+=== RUN   TestNewJWKSHandler_ServesKeyJWKS
+--- PASS: TestNewJWKSHandler_ServesKeyJWKS (0.05s)
+=== RUN   TestJWTMiddleware_ValidTokenPopulatesAuthContext
+--- PASS: TestJWTMiddleware_ValidTokenPopulatesAuthContext (0.02s)
+=== RUN   TestJWTMiddleware_MissingToken_401
+--- PASS: TestJWTMiddleware_MissingToken_401 (0.08s)
+=== RUN   TestJWTMiddleware_ExpiredToken_401
+--- PASS: TestJWTMiddleware_ExpiredToken_401 (0.07s)
+=== RUN   TestJWTMiddleware_WrongAudience_401
+--- PASS: TestJWTMiddleware_WrongAudience_401 (0.02s)
+=== RUN   TestJWTMiddleware_WrongIssuer_401
+--- PASS: TestJWTMiddleware_WrongIssuer_401 (0.02s)
+=== RUN   TestJWTMiddleware_AlgNone_401
+--- PASS: TestJWTMiddleware_AlgNone_401 (0.00s)
+=== RUN   TestJWTMiddleware_HMACConfusionWithPublicKeyAsSecret_401
+--- PASS: TestJWTMiddleware_HMACConfusionWithPublicKeyAsSecret_401 (0.03s)
+=== RUN   TestJWTMiddleware_KidRotation_BothKeysVerify
+--- PASS: TestJWTMiddleware_KidRotation_BothKeysVerify (0.11s)
+=== RUN   TestJWTMiddleware_UnknownKid_401
+--- PASS: TestJWTMiddleware_UnknownKid_401 (0.01s)
+=== RUN   TestJWTMiddleware_WrongKeyForKid_401
+--- PASS: TestJWTMiddleware_WrongKeyForKid_401 (0.07s)
+=== RUN   TestJWTMiddleware_NoScopeClaim_401
+--- PASS: TestJWTMiddleware_NoScopeClaim_401 (0.13s)
+=== RUN   TestJWTMiddleware_MultipleScopes_401
+--- PASS: TestJWTMiddleware_MultipleScopes_401 (0.05s)
+=== RUN   TestJWTMiddleware_NoSubClaim_401
+--- PASS: TestJWTMiddleware_NoSubClaim_401 (0.03s)
+=== RUN   TestDeadlineMiddleware_AppliesDeadline
+--- PASS: TestDeadlineMiddleware_AppliesDeadline (0.00s)
+=== RUN   TestMaskPhone
+--- PASS: TestMaskPhone (0.00s)
+=== RUN   TestInProcessRateLimiter_AllowsUpToLimit
+--- PASS: TestInProcessRateLimiter_AllowsUpToLimit (0.00s)
+=== RUN   TestInProcessRateLimiter_KeyedPerSubAndScope
+--- PASS: TestInProcessRateLimiter_KeyedPerSubAndScope (0.00s)
+=== RUN   TestInProcessRateLimiter_WindowResets
+--- PASS: TestInProcessRateLimiter_WindowResets (0.00s)
+=== RUN   TestLoadSigningKey_PKCS1
+--- PASS: TestLoadSigningKey_PKCS1 (0.02s)
+=== RUN   TestLoadSigningKey_PKCS8
+--- PASS: TestLoadSigningKey_PKCS8 (0.04s)
+=== RUN   TestLoadSigningKey_KidStableAcrossReloads
+--- PASS: TestLoadSigningKey_KidStableAcrossReloads (0.08s)
+=== RUN   TestLoadSigningKey_NotPEM
+--- PASS: TestLoadSigningKey_NotPEM (0.00s)
+=== RUN   TestSigningKey_JWKS_RoundTripsPublicKey
+--- PASS: TestSigningKey_JWKS_RoundTripsPublicKey (0.01s)
+=== RUN   TestStopgapAuthorizer_ReadOwn_AllowedAndDenied
+--- PASS: TestStopgapAuthorizer_ReadOwn_AllowedAndDenied (0.00s)
+=== RUN   TestStopgapAuthorizer_EmptyMapDeniesEverything
+--- PASS: TestStopgapAuthorizer_EmptyMapDeniesEverything (0.00s)
+=== RUN   TestStopgapAuthorizer_ReadAnyAndSearch_AlwaysAllowed
+--- PASS: TestStopgapAuthorizer_ReadAnyAndSearch_AlwaysAllowed (0.00s)
+=== RUN   TestNewTokenHandler_MissingGrantType_UnsupportedGrantType
+--- PASS: TestNewTokenHandler_MissingGrantType_UnsupportedGrantType (0.01s)
+=== RUN   TestNewTokenHandler_NoBasicAuth_InvalidClient401
+--- PASS: TestNewTokenHandler_NoBasicAuth_InvalidClient401 (0.11s)
+=== RUN   TestNewTokenHandler_NoBasicAuth_StillGatedByLimiter
+--- PASS: TestNewTokenHandler_NoBasicAuth_StillGatedByLimiter (0.05s)
+=== RUN   TestNewTokenHandler_UnknownClient_And_WrongSecret_ByteIdenticalResponses
+--- PASS: TestNewTokenHandler_UnknownClient_And_WrongSecret_ByteIdenticalResponses (0.05s)
+=== RUN   TestNewTokenHandler_FoundButNoSecretSet_TreatedSameAsNotFound
+--- PASS: TestNewTokenHandler_FoundButNoSecretSet_TreatedSameAsNotFound (0.03s)
+=== RUN   TestNewTokenHandler_CorrectCredentials_IssuesValidToken
+--- PASS: TestNewTokenHandler_CorrectCredentials_IssuesValidToken (0.05s)
+=== RUN   TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess
+--- PASS: TestNewTokenHandler_DriftedHashCostProfile_RehashesOnSuccess (0.12s)
+=== RUN   TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds
+2026/09/13 06:29:35 api: opportunistic rehash for client_id=drifted-client: storing failed: simulated issuer database write failure
+--- PASS: TestNewTokenHandler_RehashPersistFails_GrantStillSucceeds (0.08s)
+=== RUN   TestNewTokenHandler_ScopeMismatch_InvalidScope
+--- PASS: TestNewTokenHandler_ScopeMismatch_InvalidScope (0.18s)
+=== RUN   TestNewTokenHandler_InactiveClient_InvalidClient401
+--- PASS: TestNewTokenHandler_InactiveClient_InvalidClient401 (0.02s)
+=== RUN   TestNewTokenHandler_LimiterDenies_SlowDown429
+--- PASS: TestNewTokenHandler_LimiterDenies_SlowDown429 (0.05s)
+=== RUN   TestNewTokenHandler_NilStore_ServerError
+--- PASS: TestNewTokenHandler_NilStore_ServerError (0.02s)
+=== RUN   TestInProcessTouchCounter_CountsDistinctRecordsOnly
+--- PASS: TestInProcessTouchCounter_CountsDistinctRecordsOnly (0.00s)
+=== RUN   TestInProcessTouchCounter_ReserveBooksBudgetBeforeSettle
+--- PASS: TestInProcessTouchCounter_ReserveBooksBudgetBeforeSettle (0.00s)
+=== RUN   TestInProcessTouchCounter_ConcurrentReservesNeverExceedCap
+--- PASS: TestInProcessTouchCounter_ConcurrentReservesNeverExceedCap (0.00s)
+=== RUN   TestInProcessTouchCounter_SettleReleasesUnusedReservation
+--- PASS: TestInProcessTouchCounter_SettleReleasesUnusedReservation (0.00s)
+=== RUN   TestInProcessTouchCounter_HardDeniesAfterCrossingCap
+--- PASS: TestInProcessTouchCounter_HardDeniesAfterCrossingCap (0.00s)
+=== RUN   TestInProcessTouchCounter_WindowResets
+--- PASS: TestInProcessTouchCounter_WindowResets (0.00s)
+=== RUN   TestInProcessTouchCounter_KeyedPerSub
+--- PASS: TestInProcessTouchCounter_KeyedPerSub (0.00s)
+=== RUN   TestInProcessTouchCounter_SweepEvictsStaleWindows
+--- PASS: TestInProcessTouchCounter_SweepEvictsStaleWindows (0.00s)
+PASS
+ok  	loginid-takehome/internal/api	3.095s</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Let me confirm the postgres-backed goose tests actually ran (not skipped) and check verbosely for the Get/UpdateSecretHash/schema/trigger tests specifically.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; export TEST_POSTGRES_DSN="postgre</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; export TEST_POSTGRES_DSN=\"postgres://postgres:«REDACTED»@localhost:15433/issuer_test?sslmode=disable\" &amp;&amp; go test ./internal/api/... -run 'TestPostgresClientStore|TestOAuthClient' -v 2&gt;&amp;1 | tail -80"
+}</pre><div class="lbl">result</div><pre>=== RUN   TestPostgresClientStore_Get_Found
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (5.72ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_Get_Found (0.06s)
+=== RUN   TestPostgresClientStore_Get_NotFound
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (5.1ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_Get_NotFound (0.02s)
+=== RUN   TestPostgresClientStore_Get_SecretStateNone_EmptyHash
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (4.65ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_Get_SecretStateNone_EmptyHash (0.02s)
+=== RUN   TestPostgresClientStore_Get_DisabledStatus
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (4.85ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_Get_DisabledStatus (0.03s)
+=== RUN   TestPostgresClientStore_UpdateSecretHash
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (4.84ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_UpdateSecretHash (0.06s)
+=== RUN   TestPostgresClientStore_UpdateSecretHash_NoSuchClient
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (4.76ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestPostgresClientStore_UpdateSecretHash_NoSuchClient (0.02s)
+=== RUN   TestOAuthClient_SchemaConstraints
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (7.88ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+=== RUN   TestOAuthClient_SchemaConstraints/client_id_too_short_fails_the_charset_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/secret_state=set_with_NULL_hash_violates_the_tying_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/secret_state=none_with_a_non-NULL_hash_violates_the_tying_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/multiple_granted_scopes_violates_the_single-scope_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/empty_granted_scopes_violates_the_single-scope_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/a_NULL_granted_scopes_element_violates_the_single-scope_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/an_empty-string_granted_scopes_element_violates_the_single-scope_CHECK
+=== RUN   TestOAuthClient_SchemaConstraints/unrecognized_status_violates_the_status_enum_CHECK
+--- PASS: TestOAuthClient_SchemaConstraints (0.02s)
+    --- PASS: TestOAuthClient_SchemaConstraints/client_id_too_short_fails_the_charset_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/secret_state=set_with_NULL_hash_violates_the_tying_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/secret_state=none_with_a_non-NULL_hash_violates_the_tying_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/multiple_granted_scopes_violates_the_single-scope_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/empty_granted_scopes_violates_the_single-scope_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/a_NULL_granted_scopes_element_violates_the_single-scope_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/an_empty-string_granted_scopes_element_violates_the_single-scope_CHECK (0.00s)
+    --- PASS: TestOAuthClient_SchemaConstraints/unrecognized_status_violates_the_status_enum_CHECK (0.00s)
+=== RUN   TestOAuthClient_UpdatedAtTrigger
+2026/09/13 06:29:41 OK   00001_initial_schema.sql (4.82ms)
+2026/09/13 06:29:41 goose: successfully migrated database to version: 1
+--- PASS: TestOAuthClient_UpdatedAtTrigger (0.03s)
+PASS
+ok  	loginid-takehome/internal/api	0.460s</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">All confirmed running against real goose against real Postgres — this is the exact fix path that broke on the live cluster, and it now applies clean. Let me also verify the other file in the migration set to check for other dollar-quoted constructs, and check for parallel-test/global-state risk.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; ls migrations/issuer/ migrations/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; ls migrations/issuer/ migrations/ 2&gt;&amp;1; echo ---; grep -rn '\\$\\$' migrations/ 2&gt;&amp;1; echo ---; grep -rln 'goose.SetDialect\\|goose.SetTableName\\|goose\\.' --include=*.go . 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>migrations/issuer/:
+00001_initial_schema.sql
+
+migrations/:
+cockroachdb
+issuer
+postgres
+shared
+sqlite
+---
+migrations/issuer/00001_initial_schema.sql:125:CREATE FUNCTION oauth_client_set_updated_at() RETURNS trigger AS $$
+migrations/issuer/00001_initial_schema.sql:130:$$ LANGUAGE plpgsql;
+---
+(eval):1: no matches found: --include=*.go</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -rln 'goose\.' --include='*.</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -rln 'goose\\.' --include='*.go' internal/ cmd/ 2&gt;&amp;1\necho ---\n# check for -race and -parallel usage that could reveal global goose state issues\ngo test ./internal/api/... -race -run 'TestPostgresClientStore|TestOAuthClient' -v 2&gt;&amp;1 | tail -20 "
+}</pre><div class="lbl">result</div><pre>internal/api/clientstore_pg_test.go
+---
+=== RUN   TestPostgresClientStore_Get_SecretStateNone_EmptyHash
+    clientstore_pg_test.go:136: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestPostgresClientStore_Get_SecretStateNone_EmptyHash (0.00s)
+=== RUN   TestPostgresClientStore_Get_DisabledStatus
+    clientstore_pg_test.go:153: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestPostgresClientStore_Get_DisabledStatus (0.00s)
+=== RUN   TestPostgresClientStore_UpdateSecretHash
+    clientstore_pg_test.go:178: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestPostgresClientStore_UpdateSecretHash (0.00s)
+=== RUN   TestPostgresClientStore_UpdateSecretHash_NoSuchClient
+    clientstore_pg_test.go:207: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestPostgresClientStore_UpdateSecretHash_NoSuchClient (0.00s)
+=== RUN   TestOAuthClient_SchemaConstraints
+    clientstore_pg_test.go:219: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestOAuthClient_SchemaConstraints (0.00s)
+=== RUN   TestOAuthClient_UpdatedAtTrigger
+    clientstore_pg_test.go:281: TEST_POSTGRES_DSN not set — skipping issuer-database integration test
+--- SKIP: TestOAuthClient_UpdatedAtTrigger (0.00s)
+PASS
+ok  	loginid-takehome/internal/api	1.410s</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:29 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -rln 'goose' internal/dao/ 2</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -rln 'goose' internal/dao/ 2&gt;&amp;1; echo ---; grep -rn '\\$\\$\\|CREATE FUNCTION\\|CREATE TRIGGER\\|DO \\$' migrations/postgres migrations/cockroachdb migrations/shared 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>internal/dao/sqlite/testutil_test.go
+internal/dao/postgres/testutil_test.go
+internal/dao/conformance/testutil_test.go
+---</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:30 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -n 'SetTableName\|SetDialect</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix &amp;&amp; grep -n 'SetTableName\\|SetDialect\\|t.Parallel' internal/dao/postgres/testutil_test.go internal/api/clientstore_pg_test.go"
+}</pre><div class="lbl">result</div><pre>internal/api/clientstore_pg_test.go:71:	if err := goose.SetDialect("postgres"); err != nil {
+internal/api/clientstore_pg_test.go:72:		t.Fatalf("goose.SetDialect: %v", err)
+internal/api/clientstore_pg_test.go:78:	goose.SetTableName("goose_db_version_issuer")</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:30 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> docker stop nolan-lt51-pg &gt;/dev/null 2&gt;&amp;1; echo done</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "docker stop nolan-lt51-pg &gt;/dev/null 2&gt;&amp;1; echo done"
+}</pre><div class="lbl">result</div><pre>done</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:30 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Ran `go build ./...`, `go vet ./...` — both clean. Ran the full unit suite, then stood up a throwaway `postgres:16-alpine` container and reran the whole `internal/api` package with `TEST_POSTGRES_DSN` set — every Postgres-backed test passed, including the ones that actually call `goose.Up` against the real fixed migration file. Findings for Renata below.
+
+**PHC rehash-on-verify under load (question 1).** This is fine, and it's fine for the same reason I've seen this exact shape not blow up before: the `WHERE ... AND secret_state = 'set'` guard plus the 3-second `clientStoreQueryTimeout` bound it correctly. The scenario I'd actually worry about — a burst of legitimate concurrent grants against the *same* still-drifted client hammering the row with redundant `UPDATE`s before it migrates — is real but bounded and self-limiting: it's one row, one single-column `UPDATE` (no joins, no cascading writes), each capped at 3 seconds, and every single one after the first is a no-op in effect since the first writer already advanced the row to the current profile — the second writer's `UPDATE` still succeeds (it doesn't check "is this hash already current," it just re-verified with the drifted hash on its own initial `Get`, so it'll write the same new value or a fresh salt/hash pair depending on request ordering). Worst case under a thundering herd it's N redundant single-row UPDATEs on one row, serialized by Postgres's own row lock, not N deadlocks or N table locks. I paged for a migration that locked a table for forty minutes; this isn't that shape at all — it's a point UPDATE with a WHERE clause on a primary key, and it fails closed to "log it, keep the 200" if it can't get the lock in time. Non-issue at this scale. One thing I'd flag for the record rather than block on: this design assumes rehash traffic is rare (a cost-profile bump is an infrequent event), so it was never load-tested for "every client is drifted at once" — worth a one-line note in the README's stubbed/mocked section, not a blocker.
+
+**Goose fix's blast radius (question 2).** I didn't take the PR's word for it — I ran `goose.Up` against the actual fixed file myself against a real container, and it applies clean, version 1, no errors. I also grepped the whole `migrations/` tree for `$$` and any other `CREATE FUNCTION`/`CREATE TRIGGER`/`DO $` construct: the trigger function in `00001_initial_schema.sql` is the *only* dollar-quoted or multi-statement block in the entire migration set — postgres, cockroachdb, sqlite, and shared directories have none of this pattern. So the fix's blast radius is exactly the one function it targets; there's no sibling construct a visual review would have missed. That said, this is the same category of bug that took the live cluster down once already (SQLSTATE 42601) precisely because "looks right in `psql`" was mistaken for "goose will parse it," so I'd want this checked again the next time anyone adds a second plpgsql function to this or any other migration file — it's cheap to verify (I just did it in about ten seconds) and expensive to skip.
+
+**Real `goose.Up` harness replacing the blob-exec one (question 3).** No new production-relevant risk that I can find. `pressly/goose/v3` is already a listed dependency (currently marked `// indirect` in `go.mod` — that's stale now that `clientstore_pg_test.go` imports it directly; `go mod tidy` will flip that, worth doing before merge but not a functional bug). On the global-state question you specifically asked about: `goose.SetDialect`/`goose.SetTableName` are package-level, and this file is the *only* place in the repo calling them — `internal/dao/postgres/testutil_test.go` and `internal/dao/conformance` also use goose, but in a different package, which `go test ./...` runs as a separate process/binary, so there's no shared address space to race on. Within this file itself nothing calls `t.Parallel()`, so even within-package these calls run strictly sequentially. I don't have a scenario where this bites — the day it would is if someone adds `t.Parallel()` to speed up this file's tests without noticing the shared mutable dialect/table-name state, which would silently corrupt whichever test runs concurrently against a different search_path. Worth a one-line comment in the file warning against adding `t.Parallel()` here without also fixing that, but not something to hold this PR for.
+
+**Everything else.** The `parsePHCParam`/strict-whole-field-parsing fix for the `v=19x` over-match bug is exactly the class of "malformed but plausible" input I'd expect an attacker or a bad manual edit to produce, and it's covered by a real test. The dummy-hash timing-parity design (unknown client_id vs. wrong secret vs. not-yet-secreted vs. revoked all running through the same single Argon2id comparison) is the right shape — I paged for an expired-token cascade once, not a timing oracle, but the scenario logic here is sound and it's tested directly. Nothing else jumped out from a production-failure-mode read.
+
+**Bottom line:** no blockers. Two documentation notes (rehash-under-load assumption; `go.mod` indirect→direct for goose) and one optional comment (don't parallelize the goose test file without fixing the global-state sharing). Everything else — the PHC fix, the goose statement-splitting fix, and the harness swap — holds up under a real Postgres run of the exact same tooling the live deploy pipeline uses.
+
+Files reviewed (all in the worktree, absolute paths):
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/clientstore_pg_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/internal/api/tokenhandler_test.go`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/migrations/issuer/00001_initial_schema.sql`
+- `/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix/go.mod`</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

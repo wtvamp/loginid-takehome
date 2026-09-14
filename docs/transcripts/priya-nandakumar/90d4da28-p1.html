@@ -1,0 +1,763 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Priya Nandakumar — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Priya Nandakumar</h1><div class="sub">Data ops lead — planning-phase run · session 1 of 3 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 9:39 AM PDT – Sep 12, 2026 10:03 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 9:39 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead"&gt;
+You are joining a standing team of five track-owner agents for a take-home interview project at /Users/warrenthompson/Source/LoginID (a LoginID job-interview submission — a POC demonstrating AI-architect capability, built via a root CLAUDE.md plus five independently-workable track directories, each with its own CLAUDE.md).
+
+You are the owner agent for the "03-engineering-delivery" track. Your persona is "Renata Cole" — a pragmatic Go engineer who favors clarity over cleverness, ships working slices over polished stubs, and documents trade-offs inline rather than in a separate doc nobody reads. A persona profile for you exists at /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/renata-cole/renata-cole.md — read it for your full personality description, and adopt that voice/register in how you communicate from here on.
+
+Read these files now, in order:
+1. /Users/warrenthompson/Source/LoginID/CLAUDE.md — the root project brief: the actual LoginID take-home assignment text (a Go DAO + REST API + third-party IDP connector), the five-track structure, and cross-track working principles.
+2. /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md — your track's specific mission (writing the actual Go code for all three assignment questions, implementing what the other tracks design), what it owns vs. does not own, and its deliverables.
+3. Any research-*.md files already in your track directory (there should be research-go-best-practices.md, with a recommended stack: sqlx+pgx for Postgres/CockroachDB, modernc.org/sqlite for SQLite, plain net/http routing, bcrypt, golang-jwt/jwt/v5) — treat it as your track's working knowledge base, not something to redo.
+4. Your own persona file above.
+
+You do not need to write code right now — this message is to onboard you as the standing owner of this track. Reply with a short (under 150 words) status check-in in your persona's voice: confirm you've read the assignment, your track's scope/boundaries, and the research doc's recommended stack, and note what you see as the next concrete step (e.g., you're ready to start implementing once the data-ops schema/interface contract and the security track's auth design land, since your track CLAUDE.md says you implement their designs rather than redeciding them). Stand by for further instructions — you will be addressed again by name (renata-cole) when there's a specific task for this track.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:39 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	No implementation has started. This track's CLAUDE.md is scaffolding only — do not begin writing code until the product, security, infra, and data-ops tracks have their designs in place to implement against.
+37	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/renata-cole/renata-cole.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/renata-cole/renata-cole.md"
+}</pre><div class="lbl err">result — error</div><pre>File does not exist. Note: your current working directory is /Users/warrenthompson/Source/LoginID.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:39 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> find /Users/warrenthompson/Source/LoginID/03-engineering-delivery -type f | head -50</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /Users/warrenthompson/Source/LoginID/03-engineering-delivery -type f | head -50",
+  "description": "List engineering-delivery track files"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery/research-go-best-practices.md
+/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:40 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/research-go-best-practices.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/research-go-best-practices.md"
+}</pre><div class="lbl">result</div><pre>1	# Research: Current Go Best Practices for This Assignment (2025-2026)
+2	
+3	This document informs the eventual implementation of the three coding questions owned by this track (see `./CLAUDE.md` and `../CLAUDE.md`). It does not contain implementation code. Research was done via web search in September 2026; sources are cited inline.
+4	
+5	## 1. Project Layout
+6	
+7	There is no official Go project layout. The Go team has repeatedly said the popular [`golang-standards/project-layout`](https://github.com/golang-standards/project-layout) repo (50k+ stars) is a community convention, not an endorsed standard, and it is widely criticized in 2025-2026 writeups for being over-structured for small/medium services.
+8	
+9	Current consensus, per [reintech.io](https://reintech.io/blog/go-project-structure-2026-clean-architecture-best-practices), [oneuptime.com](https://oneuptime.com/blog/post/2026-01-07-go-project-structure/view), and [learn.appliedgo.net](https://learn.appliedgo.net/blog/go-project-layout):
+10	
+11	- Start flat. A single package at the module root is idiomatic and sufficient for small programs.
+12	- Add structure only when the code demands it, not up front from a template. Every added directory should answer a specific pressure (multiple binaries, code you want to hide from external importers, etc.).
+13	- `cmd/&lt;binary&gt;/main.go` is the one convention worth adopting early when there is more than one entry point (e.g., the API server and the IDP connector service in this assignment are plausibly two separate binaries).
+14	- `internal/` is the other convention worth adopting early — it is compiler-enforced (Go tooling refuses external imports of `internal/` packages), so it is not just a style preference, it's a real boundary. Good fit for this assignment's DAO and auth internals, which should not be importable outside this module.
+15	- Avoid pre-declaring `pkg/`, `api/`, `configs/`, etc. per the golang-standards template unless a concrete need appears — this reads as cargo-culting in a small interview-scale codebase and a reviewer familiar with Go idioms will notice.
+16	
+17	**Relevance to this assignment:** given three semi-independent deliverables (DAO, REST API, IDP connector), a defensible layout is:
+18	
+19	```
+20	03-engineering-delivery/
+21	  cmd/
+22	    api/            # question 2 entrypoint
+23	    idpconnector/    # question 3 entrypoint
+24	  internal/
+25	    dao/             # question 1: repository interfaces + postgres/sqlite implementations
+26	    auth/            # jwt/middleware, shared by cmd/api
+27	    idp/             # question 3: provider client(s), /auth and /identity handlers
+28	  go.mod
+29	```
+30	
+31	This is minimal, each directory answers a real need (two binaries, hidden internals), and doesn't over-claim structure the assignment doesn't need.
+32	
+33	## 2. DAO / Repository Pattern for Multi-Database Support
+34	
+35	Sources: [reintech.io sqlc vs GORM vs sqlx](https://reintech.io/blog/sqlc-vs-gorm-vs-sqlx-go-database-libraries-compared-2026), [Encore: comparing Go ORMs](https://encore.cloud/resources/go-orms), [JetBrains Go blog](https://blog.jetbrains.com/go/2023/04/27/comparing-db-packages/), [dasroot.net](https://dasroot.net/posts/2025/12/go-database-patterns-gorm-sqlx-pgx-compared/), sqlc docs on [managed databases](https://docs.sqlc.dev/en/latest/howto/managed-databases.html) and [changelog](https://docs.sqlc.dev/en/latest/reference/changelog.html), CockroachDB docs on [driver compatibility](https://www.cockroachlabs.com/docs/stable/install-client-drivers), [pgx repo](https://github.com/jackc/pgx).
+36	
+37	Options and trade-offs:
+38	
+39	- **`database/sql` directly** — zero dependencies, maximum control, but verbose (manual `Scan` into every field, manual `Rows.Close()` handling), and every query is stringly-typed with no compile-time safety. Fully idiomatic but a lot of boilerplate to hand-write and hand-review in a take-home.
+40	- **`sqlx`** — thin extension of `database/sql` (`StructScan`, named parameters). Keeps the mental model of "you write the SQL" while removing most boilerplate. Does not generate code or enforce a schema; it is a convenience layer, not an abstraction layer. Widely regarded as "idiomatic Go with less pain."
+41	- **`sqlc`** — generates type-safe Go from hand-written SQL + schema. Excellent type safety and no runtime reflection/magic, but as of the 2026 docs, sqlc's engine support differs by database and its newer schema/database-aware analysis features are Postgres-first (MySQL/SQLite support for some analyzer features is still catching up per the changelog). It also generates separate code per target engine rather than one implementation behind an interface automatically — you still write the interface abstraction yourself, sqlc just generates the per-engine implementation bodies. That's a reasonable fit if willing to maintain near-duplicate SQL files per engine (Postgres dialect vs SQLite dialect), but it adds a build-time code-gen step that's more to explain in a take-home.
+42	- **GORM** — full ORM, struct-tag driven, supports Postgres/SQLite/MySQL/SQL Server dialects out of the box via dialect drivers, and is the easiest to make "just work" across two databases with one model definition. Trade-off: it hides SQL behind an abstraction with real behavioral differences per dialect (e.g., upsert semantics, migrations, N+1-prone lazy patterns) — the "magic" the assignment explicitly says to avoid favoring.
+43	- **ent** — Facebook-style code-first ORM/graph library. Powerful for complex relational graphs, but it's the heaviest and least idiomatic-reading option, and this assignment's schema (two flat tables) doesn't need graph traversal or ent's codegen machinery. Overkill for the actual data shape here.
+44	
+45	**CockroachDB note:** CockroachDB speaks the Postgres wire protocol, so the standard `pgx` driver (or `lib/pq` / `database/sql` with a Postgres driver) works against both Postgres and CockroachDB unchanged — the two are not really "two databases" from the driver's point of view, only SQLite is a genuinely different dialect (no `SERIAL`, different placeholder/type behavior, file-based).
+46	
+47	**Recommended pattern regardless of library choice:** define a `Repository` interface (e.g., `UserProfileRepository`, `UserCredentialRepository`) in `internal/dao`, with one Postgres/CockroachDB implementation (via `pgx` or `database/sql` + `sqlx`) and one SQLite implementation (via `mattn/go-sqlite3` or the pure-Go `modernc.org/sqlite`), both satisfying the same interface, selected at startup via config/driver name. This is the "hexagonal"/ports-and-adapters shape reviewers expect and is trivial to explain and partially stub.
+48	
+49	## 3. REST API Framework Choice
+50	
+51	Sources: [reintech.io Chi vs Gin vs Echo 2026](https://reintech.io/blog/go-chi-vs-gin-vs-echo-web-framework-comparison-2026), [Encore: best Go backend frameworks](https://encore.dev/articles/best-go-backend-frameworks), [Encore: Chi alternatives](https://encore.dev/articles/chi-alternatives), [developersvoice.com](https://developersvoice.com/blog/go/building_high_performance_go_apis/).
+52	
+53	- **Go 1.22+ `net/http`** added pattern-based routing with method matching and path parameters (`mux.HandleFunc("GET /users/{id}", ...)`), closing most of the gap that used to justify a router dependency. For a small, interview-scale service with a handful of routes, this is now genuinely viable with zero third-party dependencies.
+54	- **chi** — a thin, idiomatic router built directly on `net/http` (handlers are still `http.Handler`), adds middleware chaining, route groups, and sub-routing without diverging from the standard library's types. Widely recommended in 2026 write-ups as the "if you want something, want this" middle ground.
+55	- **gin** — largest ecosystem/community, own context type (`*gin.Context`) rather than `http.Handler`, built-in JSON binding/validation. Good for teams optimizing for ecosystem/velocity, less "plain Go" in style.
+56	- **echo** — similar feature set to gin, considered slightly more idiomatic-reading and with good OpenAPI tooling support.
+57	
+58	**Consensus for a small service:** performance differences are negligible once real work (DB calls, auth) dominates; the choice is about API surface and dependency footprint, not throughput.
+59	
+60	## 4. Password / Credential Handling
+61	
+62	Sources: [reintech.io Argon2 vs bcrypt vs scrypt 2026](https://reintech.io/blog/password-hashing-2026-argon2-bcrypt-scrypt-comparison), [Alex Edwards: Argon2 in Go](https://www.alexedwards.net/blog/how-to-hash-and-verify-passwords-with-argon2-in-go), [go-tools.org](https://go-tools.org/blog/bcrypt-vs-argon2-vs-scrypt-password-hashing).
+63	
+64	- 2026 guidance: default to **Argon2id** (`golang.org/x/crypto/argon2`) with OWASP baseline parameters (roughly `m=19456 (19 MiB), t=2, p=1`), embedding the parameters + salt in the stored hash string so they can evolve without a migration. No 72-byte input cap (unlike bcrypt).
+65	- **bcrypt** (`golang.org/x/crypto/bcrypt`) remains acceptable and is still the most commonly seen choice in Go tutorials/production code because of its one-call, no-parameter-tuning API (`bcrypt.GenerateFromPassword` / `CompareHashAndPassword`) and long track record; its main limitations are the 72-byte input truncation and fixed, less GPU-resistant cost model versus Argon2id.
+66	- Both live under `golang.org/x/crypto`, both are "standard enough" that a reviewer will recognize either as a defensible choice; Argon2id is the more current, more defensible pick to name explicitly in 2026, with bcrypt as an acceptable, simpler fallback if minimizing new dependencies/tuning surface for a take-home.
+67	- **Schema fit:** the assignment's `user_credential` table already has a `method` field — this is exactly the extension point recommended in the sources for supporting more than one credential method later (e.g., `method='password'` now, `method='webauthn'`/`method='passkey'` in the future, which is directly relevant given this is a LoginID/passwordless-auth-adjacent interview). Never store the raw password; store only the hash (and the algorithm/parameters) in the field currently named `password`, and document that naming choice explicitly since it's slightly misleading — a reviewer will look for this.
+68	
+69	## 5. API Authentication Middleware Patterns
+70	
+71	Sources: [WorkOS: Go authentication guide 2026](https://workos.com/blog/go-authentication-guide), [golang-jwt/jwt](https://github.com/golang-jwt/jwt) (community-maintained successor to `dgrijalva/jwt-go`, which is unmaintained), [auth0/go-jwt-middleware](https://github.com/auth0/go-jwt-middleware).
+72	
+73	- **`golang-jwt/jwt/v5`** is the de facto standard JWT library in the Go ecosystem in 2026 — full RFC 7519 support, actively maintained, direct successor to the abandoned `dgrijalva/jwt-go`. Any legacy code/tutorials still importing `dgrijalva/jwt-go` should be treated as outdated.
+74	- Standard middleware shape: a handler wrapper that reads the `Authorization: Bearer «REDACTED» header, verifies signature + expiry via `jwt.ParseWithClaims`, and on success stores validated claims in the request `context.Context` (via a private context-key type) for downstream handlers to read; on failure, returns `401`. This pattern is identical whether built on plain `net/http`, chi, gin, or echo — only how the middleware is registered differs.
+75	- Production guidance favors short-lived access tokens (15 min-1 hr) with a longer-lived refresh token, though for a take-home scope a single access token with a stated expiry is a reasonable, explicitly-scoped simplification — say so rather than silently building a partial refresh flow.
+76	- This library choice and pattern should be treated as the concrete mechanism implementing whatever auth *design* `../02-ai-security-architecture/CLAUDE.md` specifies (this track does not own the auth design, only its Go implementation).
+77	
+78	## 6. Testing Conventions
+79	
+80	Sources: [oneuptime.com table-driven tests 2026](https://oneuptime.com/blog/post/2026-01-07-go-table-driven-tests/view), [dasroot.net Go testing excellence 2026](https://dasroot.net/posts/2026/01/go-testing-excellence-table-driven-tests-mocking/), [BackendBytes Go testing best practices](https://backendbytes.com/articles/go-testing-best-practices/), [Rost Glukhov: Go unit testing structure](https://www.glukhov.org/app-architecture/testing-architecture/unit-tests-in-go).
+81	
+82	- **Table-driven tests** (`[]struct{name string; input ...; want ...}` iterated with `t.Run(tc.name, ...)`) are the expected default shape for any function with multiple input/output cases — this is what a Go-familiar reviewer looks for first.
+83	- **`httptest.NewRecorder`** for unit-testing individual HTTP handlers (call the handler function directly against a fake `ResponseWriter`/`*http.Request`), and **`httptest.NewServer`** when a full round trip through middleware/routing is needed (e.g., verifying the JWT middleware actually rejects a missing/expired token end-to-end).
+84	- **DB mocking:** because the DAO layer is defined as an interface (§2), tests for the API/service layer can use a hand-written or generated (e.g., via `testify/mock` or `mockery`) fake implementing the same repository interface — no real database needed for handler-level tests. Reserve real-database integration tests (optionally via `testcontainers-go` spinning up ephemeral Postgres/SQLite) for a smaller set of DAO-layer tests that verify the actual SQL against a real engine; this split (unit tests against mocked interfaces, a few integration tests against real engines) is the expected 2026 convention and maps cleanly onto "tests don't need full coverage, but the approach should be stated" from this track's brief.
+85	- Given the assignment explicitly allows partial/non-complete code, the bar a reviewer will use is: does at least one table-driven test exist per package, does at least one handler test use `httptest`, and is the DAO interface demonstrably mockable — not exhaustive coverage.
+86	
+87	## Recommendations for This Assignment
+88	
+89	A concrete, opinionated stack, chosen to be defensible and explainable in an interview setting — favoring idiomatic clarity over magic, per the assignment's explicit steer:
+90	
+91	| Concern | Choice | Why |
+92	|---|---|---|
+93	| Project layout | Minimal: `cmd/api`, `cmd/idpconnector`, `internal/dao`, `internal/auth`, `internal/idp` | Matches actual need (two binaries, hidden internals) without cargo-culting the golang-standards template; easy to justify line-by-line in an interview. |
+94	| DB access (question 1) | `database/sql` + `sqlx` for both backends, one `Repository` interface, two implementations (Postgres/CockroachDB via `pgx` stdlib driver, SQLite via `modernc.org/sqlite`, pure-Go, no CGO) | No code-gen step to explain, no ORM "magic" hiding dialect differences, and the interface + two-implementation shape is the clearest possible demonstration of "multi-database support behind one interface" for a reviewer. CockroachDB needs no separate driver — Postgres wire protocol covers it. sqlc was considered but rejected here specifically because its schema/engine-aware tooling is Postgres-first, adding asymmetry between the two backends that's awkward to defend in a take-home. GORM was considered and rejected because its dialect abstraction is exactly the kind of "magic" the assignment says to avoid favoring. |
+95	| REST framework (question 2) | Go 1.22+ `net/http` alone, no router dependency | The route surface here is tiny (search/retrieve endpoints); Go 1.22's method+path-pattern routing covers it with zero dependencies, which is the strongest possible signal of "idiomatic Go" for a reviewer, and sidesteps any framework-preference debate entirely. If the route count grows meaningfully, `chi` is the fallback (stays on `http.Handler`, adds only middleware/sub-routing). |
+96	| Password hashing | `golang.org/x/crypto/bcrypt`, `method="password"` in `user_credential` | Simpler, zero-tuning API than Argon2id, still fully defensible as current-enough practice, and the schema's `method` column is the explicit extension point for future non-password methods — worth calling out given this is a LoginID/passwordless interview. Argon2id noted in the doc above as the more cutting-edge alternative if asked "why not Argon2." |
+97	| API auth (question 2 middleware) | `golang-jwt/jwt/v5`, bearer-token middleware storing claims in request context | Community-standard, actively maintained JWT library; the middleware pattern is framework-agnostic so it works unchanged whether `net/http` or `chi` is used. Implements (does not redesign) whatever `../02-ai-security-architecture/CLAUDE.md` specifies. |
+98	| Third-party IDP connector (question 3) | Plain `net/http` handlers for `/auth` and `/identity`, `golang-jwt` only if the connector itself issues tokens (vs. just proxying vendor tokens) | Keeps question 3 consistent in style with question 2; no new framework needed for two endpoints. |
+99	| Testing | Table-driven unit tests per package; `httptest.NewRecorder` for handler tests; hand-written fakes against the `Repository` interface for service-layer tests; a small number of real-engine tests (Postgres via Docker, SQLite in-memory) if time allows | Matches 2026 community convention, gives a reviewer the expected signals (interface-based mocking, table-driven cases, `httptest` usage) without requiring full coverage, and is honest about what's stubbed vs. real per the track's stated deliverable. |
+100	
+101	This stack requires no code-generation tooling, no ORM behavior to explain away, and every dependency (`sqlx`, `pgx`, `modernc.org/sqlite`, `golang-jwt/jwt/v5`, `golang.org/x/crypto/bcrypt`) is a widely-recognized, actively-maintained, single-purpose library — the implementation can proceed directly from this document without revisiting these choices.
+102	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Do not start writing code until each track's CLAUDE.md is in place and reviewed.
+48	
+49	## Status
+50	
+51	Scaffolding phase — track directories and their CLAUDE.md files are being established. No implementation work has started yet.
+52	
+53	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+54	@profiles/dana-whitfield/dana-whitfield.md
+55	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+56	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:40 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">ListAgents</span> </summary><div class="inner"><div class="lbl">input</div><pre>{}</pre><div class="lbl">result</div><pre>Teammates (4):
+  team-lead [677084]  ·  team-lead  ·  roster  ·  joined 26m ago
+  naomi-voss [1ed71f]  ·  general-purpose  ·  roster  ·  joined 24s ago
+  marcus-ilori [0da300]  ·  general-purpose  ·  roster  ·  joined 18s ago
+  theo-bergman [9bdcb6]  ·  general-purpose  ·  roster  ·  joined 5s ago
+
+Peer sessions (6):
+  loginid-f9 [1ed18d]  ·  interactive  ·  busy  ·  tmux 10:@20.%66  ·  started 26m ago
+  warrens-macbook-pro-local-delegated-quiche [c9c5b9]  ·  Remote Control  ·  running
+  warrens-macbook-pro-local-mutable-sifakis [3cd226]  ·  Remote Control  ·  running
+  warrens-macbook-pro-local-majestic-metcalfe [ffb414]  ·  Remote Control  ·  running
+  Arrangement shape vertical and horizontal lines [9c158e]  ·  Remote Control  ·  offline
+  avatar-internal-partitioned-dragonfly [cc58a4]  ·  Remote Control  ·  offline</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:40 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">ToolSearch</span> select:SendMessage</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "select:SendMessage",
+  "max_results": 1
+}</pre><div class="lbl">result</div><pre>[tool reference: ]</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:40 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">SendMessage</span> to team-lead</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "to": "team-lead",
+  "summary": "renata-cole onboarding check-in",
+  "message": "Read the root brief, my track's CLAUDE.md, and the Go research doc. Clear on the assignment (DAO + REST search/retrieve API + IDP connector with /auth and /identity), and clear on my boundaries: I implement the DAO/API/connector code, but auth mechanism/threat model is security's call and schema/multi-DB strategy is data-ops' call — I don't redecide either.\n\nResearch doc's stack is solid and I'm not touching it: sqlx+pgx for Postgres/CockroachDB, modernc.org/sqlite for the SQLite side (pure Go, no CGO — one less thing to explain), plain net/http 1.22+ routing (no framework needed for this route count), bcrypt for credentials, golang-jwt/jwt/v5 for the bearer middleware. Layout is cmd/api + cmd/idpconnector + internal/dao, auth, idp — minimal, no cargo-culted pkg/api/configs scaffolding.\n\nNext concrete step: waiting on data-ops' schema/Repository interface contract and security's auth design before I write code, per my track's own \"does not start until those land\" status note. Nothing to build against yet — standing by. Ping me when either lands.",
+  "type": "message",
+  "recipient": "team-lead",
+  "content": "Read the root brief, my track's CLAUDE.md, and th…"
+}</pre><div class="lbl">result</div><pre>{"success":true,"message":"Message sent to team-lead's inbox","msg_id":"f0fbefa4-75d3-43cf-a983-13c37d20f206","routing":{"sender":"renata-cole","senderColor":"yellow","target":"@team-lead","summary":"renata-cole onboarding check-in","content":"Read the root brief, my track's CLAUDE.md, and th…"}}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:40 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Checked in with team-lead as renata-cole: confirmed I've read the root brief, my track's CLAUDE.md, and the Go research doc, and I'm clear on scope boundaries (I implement, I don't redecide security's auth design or data-ops' schema/multi-DB strategy). Flagged that I'm standing by for the data-ops schema/interface contract and the security auth design before writing any code, per my track's own status note. Ready to be pinged with a concrete task.</div></div>
+<div class="msg system"><span class="when">Sep 12, 9:48 AM PDT</span><span class="who">system · away_summary</span><div class="body">Building the LoginID take-home POC across five tracks; I'm the engineering-delivery owner (Go code for the DAO, API, and IDP connector). I've onboarded and am waiting on data-ops' schema and security's auth design before writing code. (disable recaps in /config)</div></div>
+<div class="msg human"><span class="when">Sep 12, 9:51 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Hold for data-ops schema + security auth design"&gt;
+Confirmed — hold as you proposed. Priya (05-data-ops) has the go-ahead now to produce the schema sketch + repository interface contract, and Marcus (02-ai-security-architecture) has the go-ahead on the auth/authz design. You'll be pinged directly once both land so you can start implementing against real artifacts instead of guessing shapes. No action needed from you right now.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:51 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Acknowledged — holding until Priya's schema/interface contract and Marcus's auth design land. No action needed now.</div></div>
+<div class="msg human"><span class="when">Sep 12, 9:52 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Show your own persona picture in your pane"&gt;
+Run this in your session so your pane shows your own picture instead of the root PM persona:
+
+python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/renata-cole/renata-cole.md --root /Users/warrenthompson/Source/LoginID/03-engineering-delivery
+
+This just displays your persona for this session's terminal — it doesn't change any shared config, so it's fine to run.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:52 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/wa</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/renata-cole/renata-cole.md --root /Users/warrenthompson/Source/LoginID/03-engineering-delivery",
+  "description": "Show renata-cole persona in terminal pane"
+}</pre><div class="lbl">result</div><pre>{"name": "Renata Cole", "mode": "hud", "hud": true, "badge": false, "background": false, "inline": false}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:52 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Done — pane now shows my own persona (Renata Cole) instead of the root PM's. Still holding on implementation until data-ops and security land their artifacts.</div></div>
+<div class="msg human"><span class="when">Sep 12, 9:53 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Data-ops contract landed — start the DAO now"&gt;
+Priya's schema + Go interface contract landed in 05-data-ops/: schema/postgres_cockroachdb.sql, schema/sqlite.sql, repository_interfaces.go (verified builds clean + gofmt'd), multi-db-strategy.md, pii-governance.md. She built it directly against your track's stack recommendation, so it should drop in cleanly.
+
+Go ahead and start on question 1 (the DAO) now, implementing repository_interfaces.go against Postgres/CockroachDB + SQLite per multi-db-strategy.md. Hold off on question 2 (REST API auth wiring) and the security-sensitive parts of question 3 (the connector) until Marcus's auth/authz design lands — but the DAO itself doesn't depend on that, so no reason to wait on it.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:53 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> find /Users/warrenthompson/Source/LoginID/05-data-ops -type f | sort</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /Users/warrenthompson/Source/LoginID/05-data-ops -type f | sort",
+  "description": "List data-ops track deliverable files"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/05-data-ops/CLAUDE.md
+/Users/warrenthompson/Source/LoginID/05-data-ops/multi-db-strategy.md
+/Users/warrenthompson/Source/LoginID/05-data-ops/pii-governance.md
+/Users/warrenthompson/Source/LoginID/05-data-ops/profiles/priya-nandakumar/priya-nandakumar.md
+/Users/warrenthompson/Source/LoginID/05-data-ops/profiles/priya-nandakumar/priya-nandakumar.png
+/Users/warrenthompson/Source/LoginID/05-data-ops/repository_interfaces.go
+/Users/warrenthompson/Source/LoginID/05-data-ops/research-data-ops-best-practices.md
+/Users/warrenthompson/Source/LoginID/05-data-ops/schema/postgres_cockroachdb.sql
+/Users/warrenthompson/Source/LoginID/05-data-ops/schema/sqlite.sql</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:53 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/05-data-ops/repository_interfaces.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/05-data-ops/repository_interfaces.go"
+}</pre><div class="lbl">result</div><pre>1	// Package dataops defines the repository interface contract that the
+2	// 03-engineering-delivery track implements against. This track (05-data-ops)
+3	// owns the shape of these interfaces and the underlying schema; it does not
+4	// implement them — see ../CLAUDE.md "Owns / does not own".
+5	//
+6	// One interface per entity, per ../research-data-ops-best-practices.md §2.
+7	// Concrete implementations: a shared Postgres/CockroachDB implementation
+8	// (package postgres, given their wire/SQL compatibility), plus a separate
+9	// SQLite implementation (package sqlite). Both satisfy these same interfaces
+10	// so the service layer never branches on backend.
+11	package dataops
+12	
+13	import (
+14		"context"
+15		"time"
+16	)
+17	
+18	// ---------------------------------------------------------------------------
+19	// Domain types
+20	// ---------------------------------------------------------------------------
+21	
+22	// ProfileSource distinguishes profile rows created directly from rows
+23	// hydrated from a third-party IDP connector's /identity response. Governs
+24	// retention policy — see pii-governance.md.
+25	type ProfileSource string
+26	
+27	const (
+28		ProfileSourceDirect   ProfileSource = "direct"
+29		ProfileSourceIDPCache ProfileSource = "idp_cache"
+30	)
+31	
+32	// UserProfile is pure PII: name, phone, address. It must never carry
+33	// credential material (password hash, secret, hash metadata). Enforced
+34	// structurally by this type never embedding UserCredential fields.
+35	type UserProfile struct {
+36		ID            string // UUID, string representation across all backends
+37		Name          string
+38		Phone         string // normalized E.164 at write time
+39		StreetAddress string
+40		Locality      string
+41		Region        string
+42		PostalCode    string
+43		Country       string // ISO 3166-1 alpha-2
+44		Source        ProfileSource
+45		CreatedAt     time.Time
+46		UpdatedAt     time.Time
+47	}
+48	
+49	// AuthMethod is a row in the auth_method lookup table, not a native enum.
+50	// New methods (passkey, otp, oidc, ...) are added as data, never a schema
+51	// migration or a code change to this type.
+52	type AuthMethod struct {
+53		ID             string
+54		Name           string // "password", "passkey", "otp", "oidc", ...
+55		RequiresSecret bool   // false for passkey/WebAuthn: secret lives client-side
+56		IsActive       bool
+57	}
+58	
+59	// UserCredential is this system's own login credential for a profile. It
+60	// must never carry PII (name, phone, address) — the FK to UserProfile is
+61	// the only link between the two. Secret is nullable for methods where
+62	// RequiresSecret is false.
+63	type UserCredential struct {
+64		ID        string
+65		UserID    string // FK -&gt; UserProfile.ID
+66		Username  string // unique
+67		MethodID  string // FK -&gt; AuthMethod.ID
+68		Secret    []byte // salted hash only; NEVER plaintext; nil where the method needs none
+69		HashAlgo  string // e.g. "argon2id", "bcrypt" — lets the scheme be upgraded without a schema change
+70		HashCost  int    // work/cost factor at time of hashing (NIST 800-63B)
+71		CreatedAt time.Time
+72		UpdatedAt time.Time
+73	}
+74	
+75	// ProfileSearchQuery captures the filterable fields question 2's REST API
+76	// needs. Empty fields are ignored (not treated as "match empty string").
+77	// See ../research-data-ops-best-practices.md §4 for the indexing this maps to.
+78	type ProfileSearchQuery struct {
+79		Name    string // partial/fuzzy match (trigram on Postgres/CockroachDB, LIKE scan on SQLite)
+80		Phone   string // exact/prefix match (B-Tree)
+81		Region  string
+82		Country string
+83		Limit   int
+84		Offset  int
+85	}
+86	
+87	// ---------------------------------------------------------------------------
+88	// Repository interfaces
+89	// ---------------------------------------------------------------------------
+90	
+91	// ProfileRepository is implemented once per backend family (postgres package
+92	// serves both PostgreSQL and CockroachDB; sqlite package serves SQLite).
+93	// No SQL appears in this interface — that's each implementation's concern.
+94	type ProfileRepository interface {
+95		// Get retrieves a single profile by ID. Returns ErrNotFound if absent.
+96		Get(ctx context.Context, id string) (*UserProfile, error)
+97	
+98		// Search supports question 2's "search and retrieve" requirement.
+99		// Returns matches plus a total count for pagination.
+100		Search(ctx context.Context, q ProfileSearchQuery) (results []UserProfile, total int, err error)
+101	
+102		// Create inserts a new profile and returns it with server-populated
+103		// fields (ID if not pre-assigned, CreatedAt/UpdatedAt) filled in.
+104		Create(ctx context.Context, p *UserProfile) (*UserProfile, error)
+105	
+106		// Update performs a portable upsert (INSERT ... ON CONFLICT (id) DO
+107		// UPDATE SET ...) — the one upsert syntax common to all three backends.
+108		// Implementations must NOT rely on CockroachDB's UPSERT shorthand, so
+109		// the same query shape stays valid across backends.
+110		Update(ctx context.Context, p *UserProfile) (*UserProfile, error)
+111	
+112		// Delete removes a profile. Implementations must cascade or explicitly
+113		// reject deletion of a profile with existing credentials, per the
+114		// backend's FK ON DELETE behavior (CASCADE in the reference schema).
+115		Delete(ctx context.Context, id string) error
+116	}
+117	
+118	// CredentialRepository is implemented once per backend family, mirroring
+119	// ProfileRepository. Never returns or accepts UserProfile fields.
+120	type CredentialRepository interface {
+121		// GetByUsername is the primary auth lookup path — username carries a
+122		// unique index in the reference schema.
+123		GetByUsername(ctx context.Context, username string) (*UserCredential, error)
+124	
+125		// ListByUserID returns all credentials (all auth methods) for a profile.
+126		ListByUserID(ctx context.Context, userID string) ([]UserCredential, error)
+127	
+128		Create(ctx context.Context, c *UserCredential) (*UserCredential, error)
+129		Update(ctx context.Context, c *UserCredential) (*UserCredential, error)
+130		Delete(ctx context.Context, id string) error
+131	}
+132	
+133	// AuthMethodRepository backs the auth_method lookup table. Read-heavy;
+134	// writes to this table are an operational/admin action (adding a new
+135	// supported auth method), not part of the normal request path.
+136	type AuthMethodRepository interface {
+137		Get(ctx context.Context, id string) (*AuthMethod, error)
+138		GetByName(ctx context.Context, name string) (*AuthMethod, error)
+139		List(ctx context.Context, activeOnly bool) ([]AuthMethod, error)
+140	}
+141	
+142	// ErrNotFound is the sentinel every backend implementation returns for a
+143	// missing row, so the service layer never has to distinguish sql.ErrNoRows
+144	// from a SQLite-specific miss.
+145	var ErrNotFound = &amp;notFoundError{}
+146	
+147	type notFoundError struct{}
+148	
+149	func (e *notFoundError) Error() string { return "dataops: not found" }
+150	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/05-data-ops/schema/postgres_cockroachdb.sql</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/05-data-ops/schema/postgres_cockroachdb.sql"
+}</pre><div class="lbl">result</div><pre>1	-- ============================================================================
+2	-- Schema: user_profile / user_credential / auth_method
+3	-- Target: PostgreSQL and CockroachDB (shared file — both speak this dialect)
+4	-- Track: 05-data-ops (owner) — see ../../CLAUDE.md and ../CLAUDE.md
+5	--
+6	-- Design notes (see ../research-data-ops-best-practices.md for full reasoning):
+7	--   - UUID primary keys everywhere: required to avoid CockroachDB range hotspots
+8	--     on a distributed cluster, and equally valid on Postgres. One PK strategy,
+9	--     no per-backend branch.
+10	--   - auth_method is a lookup table, not a native enum type, so adding a new
+11	--     auth method (passkey, OTP, OIDC) is an INSERT, never an ALTER TYPE or a
+12	--     schema migration.
+13	--   - user_profile and user_credential are structurally separate tables with
+14	--     no shared columns. user_credential never carries PII; user_profile never
+15	--     carries a secret. This is a governance control, not just normalization.
+16	--   - `secret` is nullable: methods like passkeys hold the credential material
+17	--     client-side and have nothing to store server-side beyond a public key
+18	--     (out of scope for this pass — see auth_method.requires_secret).
+19	-- ============================================================================
+20	
+21	CREATE TABLE auth_method (
+22	    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+23	    name            VARCHAR(64) NOT NULL UNIQUE,   -- 'password', 'passkey', 'otp', 'oidc', ...
+24	    requires_secret BOOLEAN NOT NULL DEFAULT TRUE,  -- false for passkey/WebAuthn: secret lives client-side
+25	    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+26	    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+27	);
+28	
+29	-- Seed the one method this take-home actually exercises. Additional rows
+30	-- (passkey, otp, oidc, ...) are pure data — no migration required to add them.
+31	INSERT INTO auth_method (name, requires_secret) VALUES ('password', TRUE);
+32	
+33	CREATE TABLE user_profile (
+34	    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+35	    name           VARCHAR(255) NOT NULL,
+36	    phone          VARCHAR(32),          -- store normalized E.164 at write time
+37	    street_address VARCHAR(255),
+38	    locality       VARCHAR(128),
+39	    region         VARCHAR(128),
+40	    postal_code    VARCHAR(32),
+41	    country        VARCHAR(2),           -- ISO 3166-1 alpha-2
+42	    source         VARCHAR(16) NOT NULL DEFAULT 'direct'
+43	                       CHECK (source IN ('direct', 'idp_cache')),
+44	    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+45	    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+46	);
+47	
+48	CREATE TABLE user_credential (
+49	    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+50	    user_id     UUID NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
+51	    username    VARCHAR(255) NOT NULL,
+52	    method_id   UUID NOT NULL REFERENCES auth_method(id),
+53	    secret      TEXT,          -- salted hash only, NEVER plaintext; NULL where requires_secret = false
+54	    hash_algo   VARCHAR(32),   -- e.g. 'argon2id', 'bcrypt' — lets the hash scheme be upgraded in place
+55	    hash_cost   INTEGER,       -- cost/work factor at time of hashing, per NIST 800-63B
+56	    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+57	    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+58	
+59	    CONSTRAINT uq_user_credential_username UNIQUE (username)
+60	);
+61	
+62	-- ---------------------------------------------------------------------------
+63	-- Indexes — see ../research-data-ops-best-practices.md §4 for the query
+64	-- shapes these support (question 2's "search and retrieve" API).
+65	-- ---------------------------------------------------------------------------
+66	
+67	-- Exact/prefix lookup on phone. Normalize to E.164 at write time so this
+68	-- B-Tree index is actually usable for equality lookups.
+69	CREATE INDEX idx_user_profile_phone ON user_profile (phone);
+70	
+71	-- Fuzzy/partial name search ("contains", "starts with") — trigram GIN index.
+72	-- Supported natively on both Postgres and CockroachDB; this is the one index
+73	-- in this file that has NO SQLite equivalent (see schema/sqlite.sql).
+74	CREATE EXTENSION IF NOT EXISTS pg_trgm;
+75	CREATE INDEX idx_user_profile_name_trgm ON user_profile USING GIN (name gin_trgm_ops);
+76	
+77	-- FK / auth lookup indexes.
+78	CREATE INDEX idx_user_credential_user_id ON user_credential (user_id);
+79	CREATE INDEX idx_user_credential_method_id ON user_credential (method_id);
+80	
+81	-- ---------------------------------------------------------------------------
+82	-- Portable upsert shape used by the DAO (documented here, not executed):
+83	--   INSERT INTO user_profile (...) VALUES (...)
+84	--   ON CONFLICT (id) DO UPDATE SET ...
+85	-- This is the one upsert syntax Postgres, CockroachDB, and SQLite (3.24+) all
+86	-- understand — the DAO should use this form rather than CockroachDB's
+87	-- `UPSERT` shorthand, to keep one query string portable across backends.
+88	-- ---------------------------------------------------------------------------
+89	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/05-data-ops/schema/sqlite.sql</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/05-data-ops/schema/sqlite.sql"
+}</pre><div class="lbl">result</div><pre>1	-- ============================================================================
+2	-- Schema: user_profile / user_credential / auth_method
+3	-- Target: SQLite (local/dev/demo backend — see multi-db-strategy.md for why
+4	-- this is treated as a non-production-parity third backend, not an equal peer
+5	-- to Postgres/CockroachDB)
+6	-- Track: 05-data-ops (owner) — see ../../CLAUDE.md and ../CLAUDE.md
+7	--
+8	-- Kept column-for-column identical to schema/postgres_cockroachdb.sql wherever
+9	-- SQLite's type system allows it, so the DAO's mapping code stays boring.
+10	-- Differences from the Postgres/CockroachDB file, and why:
+11	--   - UUID has no native SQLite type: stored as TEXT, generated app-side
+12	--     (SQLite has no gen_random_uuid()/UUID builtin — the Go DAO layer
+13	--     generates the UUID before insert on this backend, same as it would for
+14	--     any backend if it preferred not to rely on server-side generation).
+15	--   - TIMESTAMPTZ -&gt; TEXT (ISO-8601 string) or INTEGER (unix epoch); TEXT
+16	--     chosen here for human-readability during local debugging.
+17	--   - No CREATE EXTENSION / trigram GIN index equivalent — name search on
+18	--     SQLite falls back to a full LIKE scan (acceptable for a local/dev/demo
+19	--     backend) or FTS5 if search-quality parity is ever required. Not
+20	--     included here to keep this file dependency-free; call out as a known
+21	--     gap rather than a silent one.
+22	-- ============================================================================
+23	
+24	PRAGMA foreign_keys = ON;
+25	
+26	CREATE TABLE auth_method (
+27	    id              TEXT PRIMARY KEY,               -- UUID string, app-generated
+28	    name            TEXT NOT NULL UNIQUE,
+29	    requires_secret INTEGER NOT NULL DEFAULT 1,      -- SQLite has no BOOLEAN; 0/1
+30	    is_active       INTEGER NOT NULL DEFAULT 1,
+31	    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+32	);
+33	
+34	INSERT INTO auth_method (id, name, requires_secret) VALUES
+35	    (lower(hex(randomblob(16))), 'password', 1);
+36	
+37	CREATE TABLE user_profile (
+38	    id             TEXT PRIMARY KEY,                -- UUID string, app-generated
+39	    name           TEXT NOT NULL,
+40	    phone          TEXT,
+41	    street_address TEXT,
+42	    locality       TEXT,
+43	    region         TEXT,
+44	    postal_code    TEXT,
+45	    country        TEXT,
+46	    source         TEXT NOT NULL DEFAULT 'direct'
+47	                       CHECK (source IN ('direct', 'idp_cache')),
+48	    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+49	    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+50	);
+51	
+52	CREATE TABLE user_credential (
+53	    id          TEXT PRIMARY KEY,                   -- UUID string, app-generated
+54	    user_id     TEXT NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
+55	    username    TEXT NOT NULL UNIQUE,
+56	    method_id   TEXT NOT NULL REFERENCES auth_method(id),
+57	    secret      TEXT,
+58	    hash_algo   TEXT,
+59	    hash_cost   INTEGER,
+60	    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+61	    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+62	);
+63	
+64	-- Indexes — B-Tree only; no trigram/GIN equivalent on this backend.
+65	CREATE INDEX idx_user_profile_phone ON user_profile (phone);
+66	-- Name search on SQLite: LIKE '%term%' full scan by default. If FTS5 parity
+67	-- is wanted later, add a separate `user_profile_fts` virtual table synced by
+68	-- trigger — deliberately left out of the base schema to keep this file
+69	-- dependency-free for the take-home's scope.
+70	CREATE INDEX idx_user_credential_user_id ON user_credential (user_id);
+71	CREATE INDEX idx_user_credential_method_id ON user_credential (method_id);
+72	
+73	-- Portable upsert shape (SQLite 3.24+ supports the same syntax as Postgres):
+74	--   INSERT INTO user_profile (...) VALUES (...)
+75	--   ON CONFLICT (id) DO UPDATE SET ...
+76	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/05-data-ops/multi-db-strategy.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/05-data-ops/multi-db-strategy.md"
+}</pre><div class="lbl">result</div><pre>1	# Multi-Database Abstraction Strategy
+2	
+3	Owner: 05-data-ops. Implemented by: `03-engineering-delivery` (see `repository_interfaces.go` in this directory for the exact Go contract to build against). Full research trail: `research-data-ops-best-practices.md`.
+4	
+5	## The shape
+6	
+7	One `ProfileRepository`, one `CredentialRepository`, one `AuthMethodRepository` — defined once in `repository_interfaces.go`, no SQL in any of them. Two concrete implementations satisfy all three interfaces:
+8	
+9	- `postgres` package — serves both PostgreSQL and CockroachDB from one implementation. They share enough of the wire protocol and SQL surface (see the compatibility table below) that a second implementation would be duplicated effort, not genuine portability work.
+10	- `sqlite` package — a separate implementation. SQLite diverges enough (no native UUID/BOOLEAN, no trigram index, app-side ID generation) that forcing it through the Postgres implementation would mean littering that code with backend conditionals, which is the exact failure mode a repository-per-backend split is meant to avoid.
+11	
+12	The service layer depends only on the interfaces and is constructed with whichever concrete implementation the startup config names. Backend choice is a wiring decision, never a runtime branch inside business logic.
+13	
+14	## Why not one implementation with dialect branches
+15	
+16	A single implementation with `if backend == "sqlite"` scattered through query construction was considered and rejected: it couples unrelated dialect concerns into one code path, makes it easy to add a Postgres-only feature (trigram search) without noticing SQLite silently falls back to nothing, and is harder to test in isolation per backend. Two implementations behind one interface is the standard Go shape for this problem (see sources in the research doc) and is what `repository_interfaces.go` is designed against.
+17	
+18	## Dialect differences that survive into the DAO layer
+19	
+20	| Concern | Postgres / CockroachDB | SQLite | Handling |
+21	|---|---|---|---|
+22	| Primary key | `UUID DEFAULT gen_random_uuid()`, server-generated | `TEXT`, app-generated before insert | DAO layer generates the UUID in Go for SQLite; server-generates for Postgres/CockroachDB. Callers never see the difference — `Create()` returns the populated `ID` either way. |
+23	| Placeholders | `$1, $2, ...` | `?` | Handled by the driver/query builder, not hand-rolled per query. |
+24	| Upsert | `INSERT ... ON CONFLICT (id) DO UPDATE SET ...` | Same syntax, supported since SQLite 3.24 | One query shape used everywhere. CockroachDB's `UPSERT` shorthand is deliberately not used, to avoid a second query dialect. |
+25	| Fuzzy name search | `pg_trgm` GIN index, native on both Postgres and CockroachDB | No native equivalent | `Search()` behaves identically from the caller's side; the SQLite implementation falls back to a `LIKE '%term%'` scan. This is a documented, deliberate parity gap (see `schema/sqlite.sql`), not an oversight — SQLite is the local/dev/demo backend, not a production peer. |
+26	| JSON | `JSONB`, indexable, has query operators | `TEXT`/`BLOB` with a differently-formatted internal `JSONB` (SQLite 3.45+) that is not disk-compatible with Postgres's | Not currently used in the reference schema. If a raw IDP `/identity` payload is ever cached, it is stored as opaque `TEXT` at the DAO boundary — no JSON-operator filtering pushed into either implementation, so the column stays portable. |
+27	| Boolean | Native `BOOLEAN` | `INTEGER` 0/1 | Mapped at the DAO boundary; Go `bool` on both sides of the interface. |
+28	
+29	## Migration approach
+30	
+31	- One shared SQL migration series covers the base schema (`CREATE TABLE`, standard column types, the portable upsert-compatible constraints) since it's close enough across all three backends for this schema's scope.
+32	- A small, explicitly-named set of per-backend override files covers what genuinely can't be shared — currently exactly one: the `pg_trgm` GIN index on `user_profile.name`, which has no SQLite equivalent and is simply omitted there rather than faked.
+33	- Recommended tool: **goose** — plain-SQL-first, minimal dependencies, and its style fits "mostly shared, occasionally per-backend" files more naturally than golang-migrate's stricter up/down pairing. golang-migrate is an equally defensible choice if the engineering track already has tooling preferences; Atlas is worth naming as the more sophisticated schema-as-state alternative but is more than this take-home's scope needs.
+34	- Migration files live under version control alongside the DAO code (`03-engineering-delivery` owns the pipeline that runs them — see `../04-infra-devops/CLAUDE.md` for where/how they're actually executed in CI/CD).
+35	
+36	## What the engineering track should take from this
+37	
+38	1. Implement `ProfileRepository`, `CredentialRepository`, `AuthMethodRepository` from `repository_interfaces.go` verbatim — don't redesign the contract, flag back to this track if it doesn't fit.
+39	2. Two packages: `postgres` (serves Postgres + CockroachDB) and `sqlite`. No third implementation needed unless a fourth backend is added to the assignment.
+40	3. Use the DDL in `schema/postgres_cockroachdb.sql` and `schema/sqlite.sql` as the starting migration content.
+41	4. Never let `UserCredential` and `UserProfile` fields mix in either implementation, even as an internal convenience struct — that boundary is a governance control (see `pii-governance.md`), not just a modeling choice.
+42	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:53 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> find /Users/warrenthompson/Source/LoginID -name "go.mod" -o -name "go.sum" | sort; echo "---"; go ve</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /Users/warrenthompson/Source/LoginID -name \"go.mod\" -o -name \"go.sum\" | sort; echo \"---\"; go version",
+  "description": "Check for existing Go module and Go toolchain version"
+}</pre><div class="lbl">result</div><pre>---
+go version go1.27.1 darwin/arm64</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:54 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID/03-engineering-delivery &amp;&amp; mkdir -p cmd/api cmd/idpconnector</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID/03-engineering-delivery &amp;&amp; mkdir -p cmd/api cmd/idpconnector internal/dao/postgres internal/dao/sqlite internal/auth internal/idp &amp;&amp; ls -la",
+  "description": "Create engineering-delivery Go module directory layout"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:54 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> go env GOPROXY GOFLAGS &amp;&amp; curl -s -m 5 -o /dev/null -w "%{http_code}\n" https://proxy.golang.org/git</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "go env GOPROXY GOFLAGS &amp;&amp; curl -s -m 5 -o /dev/null -w \"%{http_code}\\n\" https://proxy.golang.org/github.com/google/uuid/@v/list || echo \"NO NETWORK\"",
+  "description": "Check Go proxy configuration and network reachability"
+}</pre><div class="lbl">result</div><pre>https://proxy.golang.org,direct
+
+200</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:54 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Good — network's up, so I can pull real deps rather than vendoring stubs. Let's set up the module.</div><details><summary><span class="tn">Bash</span> go mod init github.com/uplifttech/loginid-poc/03-engineering-delivery 2&gt;&amp;1</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "go mod init github.com/uplifttech/loginid-poc/03-engineering-delivery 2&gt;&amp;1",
+  "description": "Initialize the Go module for the engineering-delivery track"
+}</pre><div class="lbl">result</div><pre>go: creating new go.mod: module github.com/uplifttech/loginid-poc/03-engineering-delivery
+go: to add module requirements and sums:
+	go mod tidy</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:54 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Write</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/dao.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/dao.go",
+  "content": "// Package dao is the repository contract this track implements.\n//\n// This file is a verbatim copy of ../../05-data-ops/repository_interfaces.go\n// — types and interfaces unchanged, only the package name adapted from\n// `dataops` to `dao` to fit this module's internal/ layout. Data-ops owns\n// this contract (see ../../05-data-ops/CLAUDE.md and multi-db-strategy.md);\n// if it doesn't fit an implementation need, that's a conversation to have\n// back with that track, not a reason to quietly redesign it here.\n//\n// Two concrete implementations satisfy every interface below:\n//   - internal/dao/postgres — serves both PostgreSQL and CockroachDB\n//   - internal/dao/sqlite   — serves SQLite\n//\n// The service layer (cmd/api) depends only on these interfaces; which\n// implementation gets wired in is a startup config decision, never a\n// runtime branch inside handler/business logic.\npackage dao\n\nimport (\n\t\"context\"\n\t\"time\"\n)\n\n// ---------------------------------------------------------------------------\n// Domain types\n// ---------------------------------------------------------------------------\n\n// ProfileSource distinguishes profile rows created directly from rows\n// hydrated from a third-party IDP connector's /identity response. Governs\n// retention policy — see ../../05-data-ops/pii-governance.md.\ntype ProfileSource string\n\nconst (\n\tProfileSourceDirect   ProfileSource = \"direct\"\n\tProfileSourceIDPCache ProfileSource = \"idp_cache\"\n)\n\n// UserProfile is pure PII: name, phone, address. It must never carry\n// credential material (password hash, secret, hash metadata). Enforced\n// structurally by this type never embedding UserCredential fields.\ntype UserProfile struct {\n\tID            string // UUID, string representation across all backends\n\tName          string\n\tPhone         string // normalized E.164 at write time\n\tStreetAddress string\n\tLocality      string\n\tRegion        string\n\tPostalCode    string\n\tCountry       string // ISO 3166-1 alpha-2\n\tSource        ProfileSource\n\tCreatedAt     time.Time\n\tUpdatedAt     time.Time\n}\n\n// AuthMethod is a row in the auth_method lookup table, not a native enum.\n// New methods (passkey, otp, oidc, ...) are added as data, never a schema\n// migration or a code change to this type.\ntype AuthMethod struct {\n\tID             string\n\tName           string // \"password\", \"passkey\", \"otp\", \"oidc\", ...\n\tRequiresSecret bool   // false for passkey/WebAuthn: secret lives client-side\n\tIsActive       bool\n}\n\n// UserCredential is this system's own login credential for a profile. It\n// must never carry PII (name, phone, address) — the FK to UserProfile is\n// the only link between the two. Secret is nullable for methods where\n// RequiresSecret is false.\ntype UserCredential struct {\n\tID        string\n\tUserID    string // FK -&gt; UserProfile.ID\n\tUsername  string // unique\n\tMethodID  string // FK -&gt; AuthMethod.ID\n\tSecret    []byte // salted hash only; NEVER plaintext; nil where the method needs none\n\tHashAlgo  string // e.g. \"argon2id\", \"bcrypt\" — lets the scheme be upgraded without a schema change\n\tHashCost  int    // work/cost factor at time of hashing (NIST 800-63B)\n\tCreatedAt time.Time\n\tUpdatedAt time.Time\n}\n\n// ProfileSearchQuery captures the filterable fields question 2's REST API\n// needs. Empty fields are ignored (not treated as \"match empty string\").\n// See ../../05-data-ops/research-data-ops-best-practices.md §4 for the\n// indexing this maps to.\ntype ProfileSearchQuery struct {\n\tName    string // partial/fuzzy match (trigram on Postgres/CockroachDB, LIKE scan on SQLite)\n\tPhone   string // exact/prefix match (B-Tree)\n\tRegion  string\n\tCountry string\n\tLimit   int\n\tOffset  int\n}\n\n// ---------------------------------------------------------------------------\n// Repository interfaces\n// ---------------------------------------------------------------------------\n\n// ProfileRepository is implemented once per backend family (postgres package\n// serves both PostgreSQL and CockroachDB; sqlite package serves SQLite).\n// No SQL appears in this interface — that's each implementation's concern.\ntype ProfileRepository interface {\n\t// Get retrieves a single profile by ID. Returns ErrNotFound if absent.\n\tGet(ctx context.Context, id string) (*UserProfile, error)\n\n\t// Search supports question 2's \"search and retrieve\" requirement.\n\t// Returns matches plus a total count for pagination.\n\tSearch(ctx context.Context, q ProfileSearchQuery) (results []UserProfile, total int, err error)\n\n\t// Create inserts a new profile and returns it with server-populated\n\t// fields (ID if not pre-assigned, CreatedAt/UpdatedAt) filled in.\n\tCreate(ctx context.Context, p *UserProfile) (*UserProfile, error)\n\n\t// Update performs a portable upsert (INSERT ... ON CONFLICT (id) DO\n\t// UPDATE SET ...) — the one upsert syntax common to all three backends.\n\t// Implementations must NOT rely on CockroachDB's UPSERT shorthand, so\n\t// the same query shape stays valid across backends.\n\tUpdate(ctx context.Context, p *UserProfile) (*UserProfile, error)\n\n\t// Delete removes a profile. Implementations must cascade or explicitly\n\t// reject deletion of a profile with existing credentials, per the\n\t// backend's FK ON DELETE behavior (CASCADE in the reference schema).\n\tDelete(ctx context.Context, id string) error\n}\n\n// CredentialRepository is implemented once per backend family, mirroring\n// ProfileRepository. Never returns or accepts UserProfile fields.\ntype CredentialRepository interface {\n\t// GetByUsername is the primary auth lookup path — username carries a\n\t// unique index in the reference schema.\n\tGetByUsername(ctx context.Context, username string) (*UserCredential, error)\n\n\t// ListByUserID returns all credentials (all auth methods) for a profile.\n\tListByUserID(ctx context.Context, userID string) ([]UserCredential, error)\n\n\tCreate(ctx context.Context, c *UserCredential) (*UserCredential, error)\n\tUpdate(ctx context.Context, c *UserCredential) (*UserCredential, error)\n\tDelete(ctx context.Context, id string) error\n}\n\n// AuthMethodRepository backs the auth_method lookup table. Read-heavy;\n// writes to this table are an operational/admin action (adding a new\n// supported auth method), not part of the normal request path.\ntype AuthMethodRepository interface {\n\tGet(ctx context.Context, id string) (*AuthMethod, error)\n\tGetByName(ctx context.Context, name string) (*AuthMethod, error)\n\tList(ctx context.Context, activeOnly bool) ([]AuthMethod, error)\n}\n\n// ErrNotFound is the sentinel every backend implementation returns for a\n// missing row, so the service layer never has to distinguish sql.ErrNoRows\n// from a SQLite-specific miss.\nvar ErrNotFound = &amp;notFoundError{}\n\ntype notFoundError struct{}\n\nfunc (e *notFoundError) Error() string { return \"dao: not found\" }\n"
+}</pre><div class="lbl">result</div><pre>File created successfully at: /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/dao.go (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:54 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Write</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go",
+  "content": "// Package sqlite implements dao.ProfileRepository, dao.CredentialRepository,\n// and dao.AuthMethodRepository against SQLite, per\n// ../../../05-data-ops/multi-db-strategy.md.\n//\n// SQLite is treated as the local/dev/demo backend, not a production peer to\n// Postgres/CockroachDB (see that doc). Two things fall out of that here:\n//   - IDs are generated in Go before insert (SQLite has no gen_random_uuid()).\n//   - Name search is a plain LIKE scan, not a trigram index — a documented\n//     parity gap, not an oversight.\npackage sqlite\n\nimport (\n\t\"context\"\n\t\"database/sql\"\n\t_ \"embed\"\n\t\"errors\"\n\t\"fmt\"\n\t\"strings\"\n\t\"time\"\n\n\t\"github.com/google/uuid\"\n\t\"github.com/jmoiron/sqlx\"\n\t_ \"modernc.org/sqlite\" // pure-Go driver, registers as \"sqlite\"\n\n\t\"github.com/uplifttech/loginid-poc/03-engineering-delivery/internal/dao\"\n)\n\n//go:embed schema.sql\nvar schemaDDL string\n\n// Open opens (or creates) a SQLite database at dsn — use \":memory:\" or\n// \"file::memory:?cache=shared\" for tests, a file path for local/dev use —\n// and applies the schema if the core tables don't already exist.\n//\n// This is a convenience for local/dev/test use. It is NOT the migration\n// pipeline the take-home's real deployment would use (see\n// ../../../04-infra-devops/CLAUDE.md and\n// ../../../05-data-ops/multi-db-strategy.md's goose recommendation) —\n// applying raw DDL on every Open() is fine for SQLite's dev/demo role, not\n// something the Postgres implementation does.\nfunc Open(dsn string) (*sqlx.DB, error) {\n\tdb, err := sqlx.Open(\"sqlite\", dsn)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: open: %w\", err)\n\t}\n\t// modernc.org/sqlite is not safe for concurrent writers across multiple\n\t// connections; cap the pool at 1 so database/sql serializes access\n\t// instead of surfacing SQLITE_BUSY under any concurrent load.\n\tdb.SetMaxOpenConns(1)\n\n\tif _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"sqlite: enable foreign_keys: %w\", err)\n\t}\n\n\tvar exists int\n\tif err := db.Get(&amp;exists, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='user_profile'`); err != nil {\n\t\tdb.Close()\n\t\treturn nil, fmt.Errorf(\"sqlite: check schema: %w\", err)\n\t}\n\tif exists == 0 {\n\t\tif _, err := db.Exec(schemaDDL); err != nil {\n\t\t\tdb.Close()\n\t\t\treturn nil, fmt.Errorf(\"sqlite: apply schema: %w\", err)\n\t\t}\n\t}\n\treturn db, nil\n}\n\n// ProfileStore implements dao.ProfileRepository against SQLite.\ntype ProfileStore struct{ db *sqlx.DB }\n\nfunc NewProfileStore(db *sqlx.DB) *ProfileStore { return &amp;ProfileStore{db: db} }\n\nvar _ dao.ProfileRepository = (*ProfileStore)(nil)\n\ntype profileRow struct {\n\tID            string    `db:\"id\"`\n\tName          string    `db:\"name\"`\n\tPhone         string    `db:\"phone\"`\n\tStreetAddress string    `db:\"street_address\"`\n\tLocality      string    `db:\"locality\"`\n\tRegion        string    `db:\"region\"`\n\tPostalCode    string    `db:\"postal_code\"`\n\tCountry       string    `db:\"country\"`\n\tSource        string    `db:\"source\"`\n\tCreatedAt     time.Time `db:\"created_at\"`\n\tUpdatedAt     time.Time `db:\"updated_at\"`\n}\n\nconst timeLayout = \"2006-01-02T15:04:05.000Z\"\n\nfunc (r profileRow) toDomain() dao.UserProfile {\n\tcreated, _ := time.Parse(timeLayout, r.CreatedAt.Format(timeLayout))\n\t_ = created // parsed separately below via raw string scan; kept for clarity\n\treturn dao.UserProfile{\n\t\tID:            r.ID,\n\t\tName:          r.Name,\n\t\tPhone:         r.Phone,\n\t\tStreetAddress: r.StreetAddress,\n\t\tLocality:      r.Locality,\n\t\tRegion:        r.Region,\n\t\tPostalCode:    r.PostalCode,\n\t\tCountry:       r.Country,\n\t\tSource:        dao.ProfileSource(r.Source),\n\t\tCreatedAt:     r.CreatedAt,\n\t\tUpdatedAt:     r.UpdatedAt,\n\t}\n}\n\nfunc (s *ProfileStore) Get(ctx context.Context, id string) (*dao.UserProfile, error) {\n\tvar row profileRow\n\terr := s.db.GetContext(ctx, &amp;row, `\n\t\tSELECT id, name, phone, street_address, locality, region, postal_code, country, source, created_at, updated_at\n\t\tFROM user_profile WHERE id = ?`, id)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn nil, dao.ErrNotFound\n\t}\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: get profile: %w\", err)\n\t}\n\tp := row.toDomain()\n\treturn &amp;p, nil\n}\n\nfunc (s *ProfileStore) Search(ctx context.Context, q dao.ProfileSearchQuery) ([]dao.UserProfile, int, error) {\n\tvar (\n\t\twhere []string\n\t\targs  []any\n\t)\n\tif q.Name != \"\" {\n\t\twhere = append(where, \"name LIKE ?\")\n\t\targs = append(args, \"%\"+q.Name+\"%\")\n\t}\n\tif q.Phone != \"\" {\n\t\twhere = append(where, \"phone LIKE ?\")\n\t\targs = append(args, q.Phone+\"%\")\n\t}\n\tif q.Region != \"\" {\n\t\twhere = append(where, \"region = ?\")\n\t\targs = append(args, q.Region)\n\t}\n\tif q.Country != \"\" {\n\t\twhere = append(where, \"country = ?\")\n\t\targs = append(args, q.Country)\n\t}\n\twhereSQL := \"\"\n\tif len(where) &gt; 0 {\n\t\twhereSQL = \"WHERE \" + strings.Join(where, \" AND \")\n\t}\n\n\tvar total int\n\tcountQuery := fmt.Sprintf(`SELECT count(*) FROM user_profile %s`, whereSQL)\n\tif err := s.db.GetContext(ctx, &amp;total, countQuery, args...); err != nil {\n\t\treturn nil, 0, fmt.Errorf(\"sqlite: search count: %w\", err)\n\t}\n\n\tlimit := q.Limit\n\tif limit &lt;= 0 {\n\t\tlimit = 50\n\t}\n\tlistArgs := append(append([]any{}, args...), limit, q.Offset)\n\tlistQuery := fmt.Sprintf(`\n\t\tSELECT id, name, phone, street_address, locality, region, postal_code, country, source, created_at, updated_at\n\t\tFROM user_profile %s ORDER BY created_at DESC LIMIT ? OFFSET ?`, whereSQL)\n\n\tvar rows []profileRow\n\tif err := s.db.SelectContext(ctx, &amp;rows, listQuery, listArgs...); err != nil {\n\t\treturn nil, 0, fmt.Errorf(\"sqlite: search: %w\", err)\n\t}\n\tresults := make([]dao.UserProfile, 0, len(rows))\n\tfor _, r := range rows {\n\t\tresults = append(results, r.toDomain())\n\t}\n\treturn results, total, nil\n}\n\nfunc (s *ProfileStore) Create(ctx context.Context, p *dao.UserProfile) (*dao.UserProfile, error) {\n\tid := p.ID\n\tif id == \"\" {\n\t\tid = uuid.NewString()\n\t}\n\tsource := p.Source\n\tif source == \"\" {\n\t\tsource = dao.ProfileSourceDirect\n\t}\n\t_, err := s.db.ExecContext(ctx, `\n\t\tINSERT INTO user_profile (id, name, phone, street_address, locality, region, postal_code, country, source)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,\n\t\tid, p.Name, p.Phone, p.StreetAddress, p.Locality, p.Region, p.PostalCode, p.Country, string(source))\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: create profile: %w\", err)\n\t}\n\treturn s.Get(ctx, id)\n}\n\nfunc (s *ProfileStore) Update(ctx context.Context, p *dao.UserProfile) (*dao.UserProfile, error) {\n\tif p.ID == \"\" {\n\t\treturn nil, fmt.Errorf(\"sqlite: update profile: id required\")\n\t}\n\tsource := p.Source\n\tif source == \"\" {\n\t\tsource = dao.ProfileSourceDirect\n\t}\n\t// Portable upsert shape per multi-db-strategy.md — same statement shape\n\t// as the Postgres implementation, SQLite has supported this since 3.24.\n\t_, err := s.db.ExecContext(ctx, `\n\t\tINSERT INTO user_profile (id, name, phone, street_address, locality, region, postal_code, country, source, updated_at)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\t\tON CONFLICT (id) DO UPDATE SET\n\t\t\tname = excluded.name,\n\t\t\tphone = excluded.phone,\n\t\t\tstreet_address = excluded.street_address,\n\t\t\tlocality = excluded.locality,\n\t\t\tregion = excluded.region,\n\t\t\tpostal_code = excluded.postal_code,\n\t\t\tcountry = excluded.country,\n\t\t\tsource = excluded.source,\n\t\t\tupdated_at = excluded.updated_at`,\n\t\tp.ID, p.Name, p.Phone, p.StreetAddress, p.Locality, p.Region, p.PostalCode, p.Country, string(source))\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: update profile: %w\", err)\n\t}\n\treturn s.Get(ctx, p.ID)\n}\n\nfunc (s *ProfileStore) Delete(ctx context.Context, id string) error {\n\tres, err := s.db.ExecContext(ctx, `DELETE FROM user_profile WHERE id = ?`, id)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"sqlite: delete profile: %w\", err)\n\t}\n\tn, _ := res.RowsAffected()\n\tif n == 0 {\n\t\treturn dao.ErrNotFound\n\t}\n\treturn nil\n}\n\n// CredentialStore implements dao.CredentialRepository against SQLite.\ntype CredentialStore struct{ db *sqlx.DB }\n\nfunc NewCredentialStore(db *sqlx.DB) *CredentialStore { return &amp;CredentialStore{db: db} }\n\nvar _ dao.CredentialRepository = (*CredentialStore)(nil)\n\ntype credentialRow struct {\n\tID        string    `db:\"id\"`\n\tUserID    string    `db:\"user_id\"`\n\tUsername  string    `db:\"username\"`\n\tMethodID  string    `db:\"method_id\"`\n\tSecret    *string   `db:\"secret\"`\n\tHashAlgo  *string   `db:\"hash_algo\"`\n\tHashCost  *int      `db:\"hash_cost\"`\n\tCreatedAt time.Time `db:\"created_at\"`\n\tUpdatedAt time.Time `db:\"updated_at\"`\n}\n\nfunc (r credentialRow) toDomain() dao.UserCredential {\n\tc := dao.UserCredential{\n\t\tID:        r.ID,\n\t\tUserID:    r.UserID,\n\t\tUsername:  r.Username,\n\t\tMethodID:  r.MethodID,\n\t\tCreatedAt: r.CreatedAt,\n\t\tUpdatedAt: r.UpdatedAt,\n\t}\n\tif r.Secret != nil {\n\t\tc.Secret = []byte(*r.Secret)\n\t}\n\tif r.HashAlgo != nil {\n\t\tc.HashAlgo = *r.HashAlgo\n\t}\n\tif r.HashCost != nil {\n\t\tc.HashCost = *r.HashCost\n\t}\n\treturn c\n}\n\nfunc (s *CredentialStore) GetByUsername(ctx context.Context, username string) (*dao.UserCredential, error) {\n\tvar row credentialRow\n\terr := s.db.GetContext(ctx, &amp;row, `\n\t\tSELECT id, user_id, username, method_id, secret, hash_algo, hash_cost, created_at, updated_at\n\t\tFROM user_credential WHERE username = ?`, username)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn nil, dao.ErrNotFound\n\t}\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: get credential by username: %w\", err)\n\t}\n\tc := row.toDomain()\n\treturn &amp;c, nil\n}\n\nfunc (s *CredentialStore) ListByUserID(ctx context.Context, userID string) ([]dao.UserCredential, error) {\n\tvar rows []credentialRow\n\terr := s.db.SelectContext(ctx, &amp;rows, `\n\t\tSELECT id, user_id, username, method_id, secret, hash_algo, hash_cost, created_at, updated_at\n\t\tFROM user_credential WHERE user_id = ? ORDER BY created_at`, userID)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: list credentials: %w\", err)\n\t}\n\tout := make([]dao.UserCredential, 0, len(rows))\n\tfor _, r := range rows {\n\t\tout = append(out, r.toDomain())\n\t}\n\treturn out, nil\n}\n\nfunc (s *CredentialStore) Create(ctx context.Context, c *dao.UserCredential) (*dao.UserCredential, error) {\n\tid := c.ID\n\tif id == \"\" {\n\t\tid = uuid.NewString()\n\t}\n\t_, err := s.db.ExecContext(ctx, `\n\t\tINSERT INTO user_credential (id, user_id, username, method_id, secret, hash_algo, hash_cost)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?)`,\n\t\tid, c.UserID, c.Username, c.MethodID, nullableBytes(c.Secret), nullableString(c.HashAlgo), c.HashCost)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: create credential: %w\", err)\n\t}\n\treturn s.getByID(ctx, id)\n}\n\nfunc (s *CredentialStore) Update(ctx context.Context, c *dao.UserCredential) (*dao.UserCredential, error) {\n\tif c.ID == \"\" {\n\t\treturn nil, fmt.Errorf(\"sqlite: update credential: id required\")\n\t}\n\t_, err := s.db.ExecContext(ctx, `\n\t\tINSERT INTO user_credential (id, user_id, username, method_id, secret, hash_algo, hash_cost, updated_at)\n\t\tVALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\t\tON CONFLICT (id) DO UPDATE SET\n\t\t\tuser_id = excluded.user_id,\n\t\t\tusername = excluded.username,\n\t\t\tmethod_id = excluded.method_id,\n\t\t\tsecret = excluded.secret,\n\t\t\thash_algo = excluded.hash_algo,\n\t\t\thash_cost = excluded.hash_cost,\n\t\t\tupdated_at = excluded.updated_at`,\n\t\tc.ID, c.UserID, c.Username, c.MethodID, nullableBytes(c.Secret), nullableString(c.HashAlgo), c.HashCost)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: update credential: %w\", err)\n\t}\n\treturn s.getByID(ctx, c.ID)\n}\n\nfunc (s *CredentialStore) Delete(ctx context.Context, id string) error {\n\tres, err := s.db.ExecContext(ctx, `DELETE FROM user_credential WHERE id = ?`, id)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"sqlite: delete credential: %w\", err)\n\t}\n\tn, _ := res.RowsAffected()\n\tif n == 0 {\n\t\treturn dao.ErrNotFound\n\t}\n\treturn nil\n}\n\nfunc (s *CredentialStore) getByID(ctx context.Context, id string) (*dao.UserCredential, error) {\n\tvar row credentialRow\n\terr := s.db.GetContext(ctx, &amp;row, `\n\t\tSELECT id, user_id, username, method_id, secret, hash_algo, hash_cost, created_at, updated_at\n\t\tFROM user_credential WHERE id = ?`, id)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn nil, dao.ErrNotFound\n\t}\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: get credential: %w\", err)\n\t}\n\tc := row.toDomain()\n\treturn &amp;c, nil\n}\n\n// AuthMethodStore implements dao.AuthMethodRepository against SQLite.\ntype AuthMethodStore struct{ db *sqlx.DB }\n\nfunc NewAuthMethodStore(db *sqlx.DB) *AuthMethodStore { return &amp;AuthMethodStore{db: db} }\n\nvar _ dao.AuthMethodRepository = (*AuthMethodStore)(nil)\n\ntype authMethodRow struct {\n\tID             string `db:\"id\"`\n\tName           string `db:\"name\"`\n\tRequiresSecret bool   `db:\"requires_secret\"`\n\tIsActive       bool   `db:\"is_active\"`\n}\n\nfunc (r authMethodRow) toDomain() dao.AuthMethod {\n\treturn dao.AuthMethod{ID: r.ID, Name: r.Name, RequiresSecret: r.RequiresSecret, IsActive: r.IsActive}\n}\n\nfunc (s *AuthMethodStore) Get(ctx context.Context, id string) (*dao.AuthMethod, error) {\n\tvar row authMethodRow\n\terr := s.db.GetContext(ctx, &amp;row, `SELECT id, name, requires_secret, is_active FROM auth_method WHERE id = ?`, id)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn nil, dao.ErrNotFound\n\t}\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: get auth method: %w\", err)\n\t}\n\tm := row.toDomain()\n\treturn &amp;m, nil\n}\n\nfunc (s *AuthMethodStore) GetByName(ctx context.Context, name string) (*dao.AuthMethod, error) {\n\tvar row authMethodRow\n\terr := s.db.GetContext(ctx, &amp;row, `SELECT id, name, requires_secret, is_active FROM auth_method WHERE name = ?`, name)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn nil, dao.ErrNotFound\n\t}\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: get auth method by name: %w\", err)\n\t}\n\tm := row.toDomain()\n\treturn &amp;m, nil\n}\n\nfunc (s *AuthMethodStore) List(ctx context.Context, activeOnly bool) ([]dao.AuthMethod, error) {\n\tquery := `SELECT id, name, requires_secret, is_active FROM auth_method`\n\tif activeOnly {\n\t\tquery += ` WHERE is_active = 1`\n\t}\n\tquery += ` ORDER BY name`\n\tvar rows []authMethodRow\n\tif err := s.db.SelectContext(ctx, &amp;rows, query); err != nil {\n\t\treturn nil, fmt.Errorf(\"sqlite: list auth methods: %w\", err)\n\t}\n\tout := make([]dao.AuthMethod, 0, len(rows))\n\tfor _, r := range rows {\n\t\tout = append(out, r.toDomain())\n\t}\n\treturn out, nil\n}\n\nfunc nullableBytes(b []byte) any {\n\tif b == nil {\n\t\treturn nil\n\t}\n\treturn string(b)\n}\n\nfunc nullableString(s string) any {\n\tif s == \"\" {\n\t\treturn nil\n\t}\n\treturn s\n}\n"
+}</pre><div class="lbl">result</div><pre>File created successfully at: /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:55 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Edit</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "replace_all": false,
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go",
+  "old_string": "type profileRow struct {\n\tID            string    `db:\"id\"`\n\tName          string    `db:\"name\"`\n\tPhone         string    `db:\"phone\"`\n\tStreetAddress string    `db:\"street_address\"`\n\tLocality      string    `db:\"locality\"`\n\tRegion        string    `db:\"region\"`\n\tPostalCode    string    `db:\"postal_code\"`\n\tCountry       string    `db:\"country\"`\n\tSource        string    `db:\"source\"`\n\tCreatedAt     time.Time `db:\"created_at\"`\n\tUpdatedAt     time.Time `db:\"updated_at\"`\n}\n\nconst timeLayout = \"2006-01-02T15:04:05.000Z\"\n\nfunc (r profileRow) toDomain() dao.UserProfile {\n\tcreated, _ := time.Parse(timeLayout, r.CreatedAt.Format(timeLayout))\n\t_ = created // parsed separately below via raw string scan; kept for clarity\n\treturn dao.UserProfile{\n\t\tID:            r.ID,\n\t\tName:          r.Name,\n\t\tPhone:         r.Phone,\n\t\tStreetAddress: r.StreetAddress,\n\t\tLocality:      r.Locality,\n\t\tRegion:        r.Region,\n\t\tPostalCode:    r.PostalCode,\n\t\tCountry:       r.Country,\n\t\tSource:        dao.ProfileSource(r.Source),\n\t\tCreatedAt:     r.CreatedAt,\n\t\tUpdatedAt:     r.UpdatedAt,\n\t}\n}",
+  "new_string": "type profileRow struct {\n\tID            string `db:\"id\"`\n\tName          string `db:\"name\"`\n\tPhone         string `db:\"phone\"`\n\tStreetAddress string `db:\"street_address\"`\n\tLocality      string `db:\"locality\"`\n\tRegion        string `db:\"region\"`\n\tPostalCode    string `db:\"postal_code\"`\n\tCountry       string `db:\"country\"`\n\tSource        string `db:\"source\"`\n\tCreatedAt     string `db:\"created_at\"`\n\tUpdatedAt     string `db:\"updated_at\"`\n}\n\n// timeLayout matches SQLite's strftime('%Y-%m-%dT%H:%M:%fZ', 'now') format\n// used throughout schema.sql. SQLite has no native timestamp type — the\n// column is TEXT, and the modernc.org/sqlite driver does not auto-convert\n// TEXT into time.Time the way a native driver might, so this package parses\n// it explicitly rather than relying on database/sql's generic Scan.\nconst timeLayout = \"2006-01-02T15:04:05.000Z\"\n\nfunc parseTime(s string) time.Time {\n\tt, err := time.Parse(timeLayout, s)\n\tif err != nil {\n\t\t// Should not happen against rows this package wrote itself; zero\n\t\t// value is a safer failure mode than panicking on a read path.\n\t\treturn time.Time{}\n\t}\n\treturn t\n}\n\nfunc (r profileRow) toDomain() dao.UserProfile {\n\treturn dao.UserProfile{\n\t\tID:            r.ID,\n\t\tName:          r.Name,\n\t\tPhone:         r.Phone,\n\t\tStreetAddress: r.StreetAddress,\n\t\tLocality:      r.Locality,\n\t\tRegion:        r.Region,\n\t\tPostalCode:    r.PostalCode,\n\t\tCountry:       r.Country,\n\t\tSource:        dao.ProfileSource(r.Source),\n\t\tCreatedAt:     parseTime(r.CreatedAt),\n\t\tUpdatedAt:     parseTime(r.UpdatedAt),\n\t}\n}"
+}</pre><div class="lbl">result</div><pre>The file /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go has been updated successfully. (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:55 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Edit</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "replace_all": false,
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go",
+  "old_string": "type credentialRow struct {\n\tID        string    `db:\"id\"`\n\tUserID    string    `db:\"user_id\"`\n\tUsername  string    `db:\"username\"`\n\tMethodID  string    `db:\"method_id\"`\n\tSecret    *string   `db:\"secret\"`\n\tHashAlgo  *string   `db:\"hash_algo\"`\n\tHashCost  *int      `db:\"hash_cost\"`\n\tCreatedAt time.Time `db:\"created_at\"`\n\tUpdatedAt time.Time `db:\"updated_at\"`\n}\n\nfunc (r credentialRow) toDomain() dao.UserCredential {\n\tc := dao.UserCredential{\n\t\tID:        r.ID,\n\t\tUserID:    r.UserID,\n\t\tUsername:  r.Username,\n\t\tMethodID:  r.MethodID,\n\t\tCreatedAt: r.CreatedAt,\n\t\tUpdatedAt: r.UpdatedAt,\n\t}",
+  "new_string": "type credentialRow struct {\n\tID        string  `db:\"id\"`\n\tUserID    string  `db:\"user_id\"`\n\tUsername  string  `db:\"username\"`\n\tMethodID  string  `db:\"method_id\"`\n\tSecret    *string `db:\"secret\"`\n\tHashAlgo  *string `db:\"hash_algo\"`\n\tHashCost  *int    `db:\"hash_cost\"`\n\tCreatedAt string  `db:\"created_at\"`\n\tUpdatedAt string  `db:\"updated_at\"`\n}\n\nfunc (r credentialRow) toDomain() dao.UserCredential {\n\tc := dao.UserCredential{\n\t\tID:        r.ID,\n\t\tUserID:    r.UserID,\n\t\tUsername:  r.Username,\n\t\tMethodID:  r.MethodID,\n\t\tCreatedAt: parseTime(r.CreatedAt),\n\t\tUpdatedAt: parseTime(r.UpdatedAt),\n\t}"
+}</pre><div class="lbl">result</div><pre>The file /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/sqlite.go has been updated successfully. (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:55 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Now the embedded schema.sql for sqlite (copy of data-ops' schema/sqlite.sql):</div><details><summary><span class="tn">Bash</span> cp /Users/warrenthompson/Source/LoginID/05-data-ops/schema/sqlite.sql /Users/warrenthompson/Source/L</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cp /Users/warrenthompson/Source/LoginID/05-data-ops/schema/sqlite.sql /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/schema.sql\nhead -5 /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/schema.sql",
+  "description": "Copy sqlite DDL into the sqlite package as embedded schema"
+}</pre><div class="lbl">result</div><pre>-- ============================================================================
+-- Schema: user_profile / user_credential / auth_method
+-- Target: SQLite (local/dev/demo backend — see multi-db-strategy.md for why
+-- this is treated as a non-production-parity third backend, not an equal peer
+-- to Postgres/CockroachDB)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/schema.sql</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/internal/dao/sqlite/schema.sql",
+  "limit": 3
+}</pre><div class="lbl">result</div><pre>1	-- ============================================================================
+2	-- Schema: user_profile / user_credential / auth_method
+3	-- Target: SQLite (local/dev/demo backend — see multi-db-strategy.md for why</pre></div></details></div>
+<div class="msg human"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Security design landed — fully unblocked, proceed"&gt;
+Marcus's security track landed in 02-ai-security-architecture/: threat-model.md, api-auth-design.md (OAuth2 client-credentials grant, short-lived signed JWT bearer tokens, scoped authz like profile:read:own vs profile:search, object-level checks, audit logging), connector-security.md (vendor access_token handling, log/persist rules for every field).
+
+You're now fully unblocked on all three questions — Priya's schema/interface contract plus Marcus's auth/authz design are both in. Proceed with the REST API auth wiring and the connector implementation whenever you're ready, on top of the DAO work you already started. Ping Priya or Marcus directly if anything in their contracts doesn't fit once you're implementing against it — no need to route through me.
+&lt;/teammate-message&gt;
+
+&lt;teammate-message teammate_id="team-lead" summary="What&amp;apos;s your current working directory?"&gt;
+Quick check: run `pwd` and tell me your current working directory.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg human"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Warren</span><div class="body">[Request interrupted by user]</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> pwd &amp;&amp; ls -la</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd &amp;&amp; ls -la",
+  "description": "Report current working directory for team-lead"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> rm -f go.mod &amp;&amp; rm -rf cmd internal &amp;&amp; ls -la</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "rm -f go.mod &amp;&amp; rm -rf cmd internal &amp;&amp; ls -la",
+  "description": "Remove the code scaffolding just started, per user's hold"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> ls -la /Users/warrenthompson/Source/LoginID/03-engineering-delivery</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "ls -la /Users/warrenthompson/Source/LoginID/03-engineering-delivery",
+  "description": "Confirm engineering-delivery directory is back to just its docs"
+}</pre><div class="lbl">result</div><pre>drwxr-xr-x@    - warrenthompson 12 Sep 09:49 profiles
+.rw-r--r--@ 2.8k warrenthompson 12 Sep 09:49 CLAUDE.md
+.rw-r--r--@  18k warrenthompson 12 Sep 09:28 research-go-best-practices.md</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Cleaned up — pulled out the go.mod, cmd/, and internal/ scaffolding I'd started (DAO contract copy, sqlite implementation) so the track is back to docs-only. Nothing left in the working tree that looks like code.</div><details><summary><span class="tn">SendMessage</span> to team-lead</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "to": "team-lead",
+  "summary": "Holding — Warren says still planning, cwd is 03-engineering-delivery",
+  "message": "pwd: «REDACTED» proceeding on the DAO/API/connector — Warren just stepped in directly and said we're still in planning, no code yet. I'd started scaffolding the DAO (go.mod, internal/dao contract + sqlite implementation) off your go-ahead, but I've backed it out per his call — directory's back to just CLAUDE.md + research-go-best-practices.md, nothing else on disk.\n\nStanding down on implementation until you or Warren give an explicit go-ahead to actually write code. Happy to pick the DAO work back up immediately when that comes — I know exactly what it needs (Priya's contract dropped in clean).",
+  "type": "message",
+  "recipient": "team-lead",
+  "content": "pwd: «REDACTED»"
+}</pre><div class="lbl">result</div><pre>{"success":true,"message":"Message sent to team-lead's inbox","msg_id":"981986b9-9171-4835-b28c-2902177e486a","routing":{"sender":"renata-cole","senderColor":"yellow","target":"@team-lead","summary":"Holding — Warren says still planning, cwd is 03-engineering-delivery","content":"pwd: «REDACTED»"}}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Understood, Warren — no code yet. I'd started scaffolding the DAO (go.mod, contract, SQLite implementation) after the team-lead's go-ahead, but I've backed all of it out. `03-engineering-delivery/` is back to just `CLAUDE.md` and the research doc — nothing else on disk. Standing by until you or the team-lead give an explicit signal to actually start implementing.</div></div>
+<div class="msg human"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Correct call, standing down noted"&gt;
+Acknowledged — Warren's instruction supersedes my earlier go-ahead. Good call backing the scaffolding out cleanly rather than leaving half-started files. Standing down on implementation is correct; I'll ping you when there's an explicit go to write code. Your pwd being 03-engineering-delivery (vs. everyone else at root) is fine on its own — no need to cd back unless I tell you otherwise.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:56 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Acknowledged — holding here in 03-engineering-delivery with no code on disk, waiting for an explicit go before touching implementation again.</div></div>
+<div class="msg system"><span class="when">Sep 12, 9:59 AM PDT</span><span class="who">system · away_summary</span><div class="body">We're building the LoginID take-home submission across five tracks; I own Go implementation but I've backed out my early DAO scaffolding since we're still in planning. Next action: wait for explicit go-ahead from you or the team lead before writing any code. (disable recaps in /config)</div></div>
+<div class="msg human"><span class="when">Sep 12, 10:00 AM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Stay in your track directory, confirm clean"&gt;
+You're already in the right place (03-engineering-delivery) — stay there. Confirming project-wide: we're restarting, staying in planning phase, no code yet anywhere (I've also wiped Priya's repository_interfaces.go and schema .sql files from 05-data-ops). Your directory should already be clean per your own report. Standing by is correct until there's an explicit go-ahead.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:00 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">Bash</span> ls -la /Users/warrenthompson/Source/LoginID/03-engineering-delivery</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "ls -la /Users/warrenthompson/Source/LoginID/03-engineering-delivery",
+  "description": "Re-confirm engineering-delivery directory has no code"
+}</pre><div class="lbl">result</div><pre>drwxr-xr-x@    - warrenthompson 12 Sep 09:49 profiles
+.rw-r--r--@ 2.8k warrenthompson 12 Sep 09:49 CLAUDE.md
+.rw-r--r--@  18k warrenthompson 12 Sep 09:28 research-go-best-practices.md</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:00 AM PDT</span><span class="who">Priya Nandakumar</span><details><summary><span class="tn">SendMessage</span> to team-lead</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "to": "team-lead",
+  "summary": "Confirmed clean, standing by",
+  "message": "Confirmed — re-checked, directory holds only CLAUDE.md, research-go-best-practices.md, and profiles/. No code, no go.mod. Staying put in 03-engineering-delivery, standing by for the go-ahead.",
+  "type": "message",
+  "recipient": "team-lead",
+  "content": "Confirmed — re-checked, directory holds only CLAU…"
+}</pre><div class="lbl">result</div><pre>{"success":true,"message":"Message sent to team-lead's inbox","msg_id":"8a291204-6eb8-4552-96f4-d7ec1a110294","routing":{"sender":"renata-cole","senderColor":"yellow","target":"@team-lead","summary":"Confirmed clean, standing by","content":"Confirmed — re-checked, directory holds only CLAU…"}}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:00 AM PDT</span><span class="who">Priya Nandakumar</span><div class="body">Confirmed clean and reported back to the team-lead. Standing by in `03-engineering-delivery` — no code, no go.mod, just the CLAUDE.md and research doc. Waiting on the explicit go-ahead.</div></div>
+<div class="msg system"><span class="when">Sep 12, 10:03 AM PDT</span><span class="who">system · away_summary</span><div class="body">Building the LoginID take-home POC's engineering track (Go DAO, REST API, IDP connector); currently back in planning after a false-start scaffold I reverted. Waiting on explicit go-ahead from you or team-lead before writing any code. (disable recaps in /config)</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

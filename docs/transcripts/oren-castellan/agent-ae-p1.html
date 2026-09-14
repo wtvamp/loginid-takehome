@@ -1,0 +1,484 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 24 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 11:33 AM PDT – Sep 13, 2026 11:34 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 11:33 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #64 on the loginid-takehome repo (branch fix/sweep-db-connect-timeout): https://github.com/wtvamp/loginid-takehome/pull/64
+
+Context: Naomi (PO) found live that the LT-44 retention-sweep CronJob's pod sat "Running" for minutes with one TCP socket in SYN_SENT to Postgres (a NetworkPolicy gap on 04's side, being fixed separately) and never logged anything at all. This PR is 03's fix: the sweep code (cmd/api-service's APP_MODE=sweep mode) must fail loud on an unreachable database instead of hanging, independent of whatever network fix lands.
+
+Root cause: `dao.New`/`sql.Open` never actually dial a connection — they just validate the driver/DSN string. So nothing bounded the FIRST real connection attempt, which happened inside `internal/sweep.Run`'s own first `DeleteExpired` call, using a context derived only from `signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)` — no deadline of its own. A genuinely unreachable database meant an unbounded hang.
+
+The fix, in cmd/api-service/main.go's `runSweepMode`:
+1. A `log.Printf("api-service: sweep starting, classes=..., interval_seconds=%s", interval)` line fires immediately, before anything touches the database.
+2. A NEW bounded connectivity check: opens a separate `*sql.DB` via `sql.Open(driverName, cfg.DBDSN)` (using the existing `sqlDriverNameFor` helper), then calls `pingDB.PingContext(pingCtx)` where `pingCtx` has a `context.WithTimeout(context.Background(), sweepDBConnectTimeout)` (20 seconds). On ping error, logs a classified failure line via a new `classifySweepDBConnectError(err) string` helper (checks `errors.Is(err, context.DeadlineExceeded)` for "connect_timeout", else substring-matches "connection refused" and "no such host" in the error text, else "unknown") and calls `os.Exit(1)` immediately — never proceeding to `sweep.Run` at all.
+3. Only if the ping succeeds does execution continue to open `repo` via `dao.New` and call `sweep.Run` as before.
+4. New `config.SweepIntervalSeconds` field (purely descriptive env var `SWEEP_INTERVAL_SECONDS`, classified in `config.OptionalEnvVars` — never read by internal/sweep's own logic, just echoed in the startup log line).
+
+I already live-verified this against a real unreachable database (a non-routable IP as the Postgres host) and confirmed: the startup line appears immediately, the process fails after exactly 20 seconds with `class=connect_timeout` logged, and exits non-zero. I also re-ran it against a real reachable Postgres to confirm the happy path has no regression.
+
+Please focus your review on:
+1. Is there any ordering bug or resource-leak risk in the new ping-check block — e.g., could `pingDB` (the separate `*sql.DB` handle) leak a connection if `PingContext` times out vs. succeeds vs. errors immediately? Check that `pingDB.Close()` is called on every exit path.
+2. Does `os.Exit(1)` called from inside this ping-check block (nested inside an `if driverName := sqlDriverNameFor(...); driverName != ""` block, itself inside `runSweepMode`) correctly skip all the `defer` statements that were registered EARLIER in the function (there's a `defer func() { _ = repo.Close() }()` registered right after `dao.New` succeeds, before this ping check runs) — is that a problem? (Hint: `os.Exit` famously does NOT run deferred functions — is that acceptable here, given repo was already opened via `dao.New` by this point, or does this leak whatever `dao.New` set up? Check what dao.New/sql.Open actually allocate and whether skipping the deferred Close matters given the process is about to exit anyway.)
+3. Whether `classifySweepDBConnectError`'s substring-matching approach on `err.Error()` is fragile in a way that matters (e.g., could a legitimate, different error accidentally match "connection refused" or "no such host" and be misclassified, in a way that would mislead an operator)?
+4. Any other correctness issue.
+
+Read the actual diff (gh pr diff 64, or check out the branch) rather than trusting this description. Report back findings in under 300 words — concrete issues only, with file:line references.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:33 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md"
+}</pre><div class="lbl">result</div><pre>1	---
+2	schema_version: 1
+3	name: "Oren Castellan"
+4	slug: "oren-castellan"
+5	image: "profiles/oren-castellan/oren-castellan.png"
+6	
+7	nsfw: false
+8	display:
+9	  image: true
+10	  name: true
+11	  autostart: false
+12	generation:
+13	  backend: "comfyui"
+14	  model: "comfyui-workflow.json"
+15	  prompt: "Oren Castellan, a meticulous and understated man in his late 30s with short neat hair, wire-rim glasses, wearing a plain navy button-down shirt, calm focused expression, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+16	  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+17	  seed: null
+18	  gif_mode: null
+19	  created_at: "2026-09-12T00:00:00Z"
+20	---
+21	
+22	# Oren Castellan
+23	
+24	![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+25	
+26	
+27	## Personality
+28	
+29	Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied.
+30	
+31	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:33 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> gh pr diff 64 --repo wtvamp/loginid-takehome</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh pr diff 64 --repo wtvamp/loginid-takehome"
+}</pre><div class="lbl">result</div><pre>diff --git a/cmd/api-service/main.go b/cmd/api-service/main.go
+index db1c6b6..99bdf26 100644
+--- a/cmd/api-service/main.go
++++ b/cmd/api-service/main.go
+@@ -7,11 +7,13 @@ package main
+ import (
+ 	"context"
+ 	"database/sql"
++	"errors"
+ 	"fmt"
+ 	"log"
+ 	"net/http"
+ 	"os"
+ 	"os/signal"
++	"strings"
+ 	"syscall"
+ 	"time"
+ 
+@@ -130,6 +132,39 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
+ 	return &amp;onboarding.Service{Tokens: tokens, Connector: connectorClient}, nil
+ }
+ 
++// sweepDBConnectTimeout bounds the very first database round-trip this
++// process attempts, per Naomi Voss's (PO) live-run finding: a sweep pod
++// sat Running for minutes with one socket in SYN_SENT to Postgres (a
++// NetworkPolicy omission, Theo's own fix) and never logged anything —
++// dao.New/sql.Open never dial (they only validate the driver/DSN), so
++// nothing bounded the first real connection attempt inside
++// sweep.Run's own DeleteExpired call, and nothing logged before that
++// point either. 20s sits in the middle of the 10-30s range this
++// finding asked for; coordinate with Theo (04) if his CronJob's
++// activeDeadlineSeconds (the outer bound) is ever set below this plus
++// sweep's own expected run time — this is the inner bound, and must
++// stay comfortably below the outer one.
++const sweepDBConnectTimeout = 20 * time.Second
++
++// classifySweepDBConnectError names the failure class in the one
++// structured log line runSweepMode emits on a connect failure — a
++// human triaging a failed CronJob run needs "timeout" vs "refused" vs
++// "unknown" at a glance, without parsing a raw driver error string.
++func classifySweepDBConnectError(err error) string {
++	if errors.Is(err, context.DeadlineExceeded) {
++		return "connect_timeout"
++	}
++	msg := err.Error()
++	switch {
++	case strings.Contains(msg, "connection refused"):
++		return "connection_refused"
++	case strings.Contains(msg, "no such host"):
++		return "dns_error"
++	default:
++		return "unknown"
++	}
++}
++
+ // runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
+ // sweep exactly once against the real database and exit — never starts
+ // an HTTP server, never builds a router. ctx is derived from
+@@ -149,12 +184,42 @@ func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
+ // a real error) — a non-zero exit is what makes a failed sweep show up
+ // as a failed Kubernetes Job, not a silently-succeeding one.
+ func runSweepMode(cfg config.Config) {
++	interval := cfg.SweepIntervalSeconds
++	if interval == "" {
++		interval = "unset"
++	}
++	log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", interval)
++
+ 	repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+ 	if err != nil {
+ 		log.Fatalf("api-service: sweep: opening DAO repository: %v", err)
+ 	}
+ 	defer func() { _ = repo.Close() }()
+ 
++	// A bounded connectivity check BEFORE anything else touches the
++	// database — sql.Open above never dials, so without this,
++	// sweep.Run's own first DeleteExpired call would be the actual
++	// first connection attempt, made with the signal-derived context
++	// below (SIGTERM/SIGINT only, no deadline of its own) and no
++	// timeout of its own either — exactly the hang this fixes. A
++	// separate *sql.DB, not repo itself: dao.Repository exposes no
++	// Ping (05's contract doesn't have one), mirroring the same
++	// pattern the verifier's /healthz probe already uses.
++	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
++		pingDB, err := sql.Open(driverName, cfg.DBDSN)
++		if err != nil {
++			log.Fatalf("api-service: sweep: opening DB ping handle: %v", err)
++		}
++		pingCtx, cancel := context.WithTimeout(context.Background(), sweepDBConnectTimeout)
++		pingErr := pingDB.PingContext(pingCtx)
++		cancel()
++		_ = pingDB.Close()
++		if pingErr != nil {
++			log.Printf("api-service: sweep: database unreachable (class=%s) after %s: %v", classifySweepDBConnectError(pingErr), sweepDBConnectTimeout, pingErr)
++			os.Exit(1)
++		}
++	}
++
+ 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+ 	defer stop()
+ 
+diff --git a/cmd/api-service/main_test.go b/cmd/api-service/main_test.go
+index 26c4aba..60647d1 100644
+--- a/cmd/api-service/main_test.go
++++ b/cmd/api-service/main_test.go
+@@ -1,6 +1,9 @@
+ package main
+ 
+ import (
++	"context"
++	"errors"
++	"fmt"
+ 	"strings"
+ 	"testing"
+ 
+@@ -156,3 +159,29 @@ func TestNewOnboardingService(t *testing.T) {
+ 		})
+ 	}
+ }
++
++// TestClassifySweepDBConnectError is Naomi Voss's (PO) live-run finding
++// made concrete: a sweep pod hung silently against an unreachable
++// database, and the fix's whole point is naming the failure class in
++// one structured log line rather than leaving an operator to parse a
++// raw driver error string.
++func TestClassifySweepDBConnectError(t *testing.T) {
++	cases := []struct {
++		name string
++		err  error
++		want string
++	}{
++		{name: "context deadline exceeded", err: context.DeadlineExceeded, want: "connect_timeout"},
++		{name: "wrapped deadline exceeded", err: fmt.Errorf("dialing: %w", context.DeadlineExceeded), want: "connect_timeout"},
++		{name: "connection refused", err: errors.New("dial tcp 10.0.0.5:5432: connect: connection refused"), want: "connection_refused"},
++		{name: "dns failure", err: errors.New("dial tcp: lookup postgres.example: no such host"), want: "dns_error"},
++		{name: "unrecognized error text", err: errors.New("something else entirely"), want: "unknown"},
++	}
++	for _, c := range cases {
++		t.Run(c.name, func(t *testing.T) {
++			if got := classifySweepDBConnectError(c.err); got != c.want {
++				t.Errorf("classifySweepDBConnectError(%v) = %q, want %q", c.err, got, c.want)
++			}
++		})
++	}
++}
+diff --git a/internal/config/config.go b/internal/config/config.go
+index ca3216d..c34f119 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -106,6 +106,16 @@ type Config struct {
+ 	IDPABCBaseURL      string
+ 	IDPABCClientID     string
+ 	IDPABCClientSecret string
++
++	// SweepIntervalSeconds is purely descriptive: the CronJob's own
++	// schedule interval, in seconds, echoed in APP_MODE=sweep's startup
++	// log line so an operator reading pod logs doesn't have to
++	// cross-reference the CronJob manifest separately to know how often
++	// this is supposed to run. Never read by internal/sweep itself —
++	// the sweep's own retention-window/batching logic has no dependency
++	// on its own schedule. Empty when unset; the startup log line says
++	// "unset" rather than a misleading default.
++	SweepIntervalSeconds string
+ }
+ 
+ // Load reads the process environment into a Config. DB_DSN_FILE, when set,
+@@ -195,6 +205,8 @@ func Load() (Config, error) {
+ 		IDPABCBaseURL:      os.Getenv("IDP_ABC_BASE_URL"),
+ 		IDPABCClientID:     os.Getenv("IDP_ABC_CLIENT_ID"),
+ 		IDPABCClientSecret: os.Getenv("IDP_ABC_CLIENT_SECRET"),
++
++		SweepIntervalSeconds: os.Getenv("SWEEP_INTERVAL_SECONDS"),
+ 	}, nil
+ }
+ 
+@@ -410,4 +422,5 @@ var OptionalEnvVars = map[string]string{
+ 	"IDP_ABC_CLIENT_SECRET":        "vendor's own credential surface, not this project's own auth surface",
+ 	"ISSUER_TOKEN_URL":             "where api-service calls the issuer for its own connector-scoped token; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
+ 	"IDP_CONNECTOR_BASE_URL":       "where api-service calls idp-connector's /auth and /identity; presence validated by internal/onboarding.NewTokenSource, not RequiredAuthEnvVars",
++	"SWEEP_INTERVAL_SECONDS":       "purely descriptive — echoed in APP_MODE=sweep's startup log line, never read by internal/sweep's own retention/batching logic",
+ }
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index 819b47e..16ee0f9 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -220,3 +220,27 @@ func TestValidateEnvVarValue(t *testing.T) {
+ 		})
+ 	}
+ }
++
++// TestLoad_SweepIntervalSeconds confirms this purely-descriptive field
++// flows through Load unchanged, and is empty (not some default) when
++// unset — cmd/api-service's own startup log line is what turns empty
++// into the human-readable "unset", not this package.
++func TestLoad_SweepIntervalSeconds(t *testing.T) {
++	t.Setenv("SWEEP_INTERVAL_SECONDS", "86400")
++	cfg, err := Load()
++	if err != nil {
++		t.Fatalf("Load returned error: %v", err)
++	}
++	if cfg.SweepIntervalSeconds != "86400" {
++		t.Errorf("SweepIntervalSeconds = %q, want %q", cfg.SweepIntervalSeconds, "86400")
++	}
++
++	t.Setenv("SWEEP_INTERVAL_SECONDS", "")
++	cfg, err = Load()
++	if err != nil {
++		t.Fatalf("Load returned error: %v", err)
++	}
++	if cfg.SweepIntervalSeconds != "" {
++		t.Errorf("SweepIntervalSeconds = %q, want empty when unset", cfg.SweepIntervalSeconds)
++	}
++}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:33 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> grep -n "sqlDriverNameFor" -A 15 /Users/warrenthompson/Source/LoginID/cmd/api-service/main.go 2&gt;/dev</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"sqlDriverNameFor\" -A 15 /Users/warrenthompson/Source/LoginID/cmd/api-service/main.go 2&gt;/dev/null || find /Users/warrenthompson/Source/LoginID -maxdepth 2 -name \"*.go\" | head; echo \"---\"; find /Users/warrenthompson/Source/LoginID-worktrees -maxdepth 1 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>34:// sqlDriverNameFor maps cfg.DBDriver ("postgres"/"cockroachdb"/"sqlite" —
+35-// dao.Register's driver names, per dao/factory.go) to the underlying
+36-// database/sql driver name each backend package registers itself under
+37-// (internal/dao/postgres/postgres.go: "pgx"; internal/dao/sqlite/sqlite.go:
+38-// "sqlite") — needed only for LT-52's separate /healthz ping handle, since
+39-// dao.Repository itself exposes no Ping and this is a thin sql.Open, not a
+40-// second copy of either backend's connection logic.
+41:func sqlDriverNameFor(daoDriver string) string {
+42-	switch daoDriver {
+43-	case "postgres", "cockroachdb":
+44-		return "pgx"
+45-	case "sqlite":
+46-		return "sqlite"
+47-	default:
+48-		return ""
+49-	}
+50-}
+51-
+52-// validateAuthConfig catches exactly the two live-review findings that
+53-// motivated it — first AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE, then
+54-// AUTH_JWKS_URL, silently absent from the deployed manifests, each time
+55-// letting a verifier or issuer come up cleanly and fail in a way that
+56-// looked like an ordinary token-rejection rather than a configuration
+--
+245:		if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+246-			pingDB, err = sql.Open(driverName, cfg.DBDSN)
+247-			if err != nil {
+248-				log.Printf("api-service: opening /healthz DB ping handle: %v — /healthz will report db=down", err)
+249-				pingDB = nil
+250-			}
+251-		}
+252-
+253-		// LT-33: api-service's own outbound call to cmd/idp-connector.
+254-		// Constructed here ONLY as a startup-time config smoke test — no
+255-		// handler exists yet that calls it (no assignment question asks
+256-		// for an onboarding endpoint, and this story's own non-goals rule
+257-		// one out), so the constructed *onboarding.Service below is
+258-		// deliberately discarded, not stored anywhere reachable. This is
+259-		// NOT the same pattern as repo/pingDB above: those two ARE
+260-		// consumed by NewVerifierRouter's handlers; this exists only so
+---
+/Users/warrenthompson/Source/LoginID-worktrees
+/Users/warrenthompson/Source/LoginID-worktrees/LT-32-infra
+/Users/warrenthompson/Source/LoginID-worktrees/A6-fix
+/Users/warrenthompson/Source/LoginID-worktrees/03-docs
+/Users/warrenthompson/Source/LoginID-worktrees/LT-44-hang-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-49
+/Users/warrenthompson/Source/LoginID-worktrees/LT-40
+/Users/warrenthompson/Source/LoginID-worktrees/LT-47
+/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41
+/Users/warrenthompson/Source/LoginID-worktrees/LT-37
+/Users/warrenthompson/Source/LoginID-worktrees/LT-39
+/Users/warrenthompson/Source/LoginID-worktrees/LT-52
+/Users/warrenthompson/Source/LoginID-worktrees/LT-38
+/Users/warrenthompson/Source/LoginID-worktrees/LT-36
+/Users/warrenthompson/Source/LoginID-worktrees/LT-51-phc-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-38-ci-skip-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation
+/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz
+/Users/warrenthompson/Source/LoginID-worktrees/docs-s3-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-38-db-isolation
+/Users/warrenthompson/Source/LoginID-worktrees/LT-40-config-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-44
+/Users/warrenthompson/Source/LoginID-worktrees/LT-45
+/Users/warrenthompson/Source/LoginID-worktrees/LT-51
+/Users/warrenthompson/Source/LoginID-worktrees/lint-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-33
+/Users/warrenthompson/Source/LoginID-worktrees/05-fwd-req
+/Users/warrenthompson/Source/LoginID-worktrees/checksum-fix
+/Users/warrenthompson/Source/LoginID-worktrees/LT-32</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:34 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-44-hang-fix 2&gt;/dev/null &amp;&amp; git log --oneline -3</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-44-hang-fix 2&gt;/dev/null &amp;&amp; git log --oneline -3 &amp;&amp; grep -n \"func New\" -A 20 internal/dao/*.go internal/dao/postgres/*.go internal/dao/sqlite/*.go 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>40a7aaa fix: APP_MODE=sweep fails loud on an unreachable database instead of hanging
+82daf66 refinement/LT-44.md: fail-loud-on-unreachable-DB fix, tracked for the first time
+7b7dbc1 LOG: LT-46 auth-loop gap (#61), LT-44 NetworkPolicy/deadline gap, deployer RBAC and preflight (#62), LT-49 app side (#59)
+internal/dao/factory.go:14:func New(driver, dsn string) (Repository, error) {
+internal/dao/factory.go-15-	ctor, ok := drivers[driver]
+internal/dao/factory.go-16-	if !ok {
+internal/dao/factory.go-17-		return nil, fmt.Errorf("dao: unknown driver %q", driver)
+internal/dao/factory.go-18-	}
+internal/dao/factory.go-19-	return ctor(dsn)
+internal/dao/factory.go-20-}
+internal/dao/factory.go-21-
+internal/dao/factory.go-22-type driverCtor func(dsn string) (Repository, error)
+internal/dao/factory.go-23-
+internal/dao/factory.go-24-var drivers = map[string]driverCtor{}
+internal/dao/factory.go-25-
+internal/dao/factory.go-26-// Register is called by a backend package's init() to register itself
+internal/dao/factory.go-27-// under a driver name (e.g. "postgres", "cockroachdb", "sqlite"). Not part
+internal/dao/factory.go-28-// of 05's Go-shaped contract — an internal wiring mechanism this track owns
+internal/dao/factory.go-29-// so New's signature never has to change as backends are added.
+internal/dao/factory.go-30-func Register(name string, ctor driverCtor) {
+internal/dao/factory.go-31-	drivers[name] = ctor
+internal/dao/factory.go-32-}
+internal/dao/postgres/postgres.go:35:func New(dsn string, e engine) (dao.Repository, error) {
+internal/dao/postgres/postgres.go-36-	db, err := sql.Open("pgx", dsn)
+internal/dao/postgres/postgres.go-37-	if err != nil {
+internal/dao/postgres/postgres.go-38-		return nil, fmt.Errorf("postgres: opening connection: %w", err)
+internal/dao/postgres/postgres.go-39-	}
+internal/dao/postgres/postgres.go-40-	return &amp;repository{db: db, engine: e}, nil
+internal/dao/postgres/postgres.go-41-}
+internal/dao/postgres/postgres.go-42-
+internal/dao/postgres/postgres.go-43-func (r *repository) Profiles() dao.ProfileRepository       { return profileRepo{r} }
+internal/dao/postgres/postgres.go-44-func (r *repository) Credentials() dao.CredentialRepository { return credentialRepo{r} }
+internal/dao/postgres/postgres.go-45-func (r *repository) Methods() dao.AuthMethodRepository     { return authMethodRepo{r} }
+internal/dao/postgres/postgres.go-46-
+internal/dao/postgres/postgres.go-47-func (r *repository) Close() error { return r.db.Close() }
+internal/dao/postgres/postgres.go-48-
+internal/dao/postgres/postgres.go-49-// withRetry runs fn inside a transaction, retrying on a genuine SQLSTATE
+internal/dao/postgres/postgres.go-50-// 40001 (serialization failure) only when r.engine is "cockroachdb" — on
+internal/dao/postgres/postgres.go-51-// "postgres" it runs fn exactly once. See retry.go.
+internal/dao/postgres/postgres.go-52-func (r *repository) withRetry(ctx context.Context, fn func(*sql.Tx) error) error {
+internal/dao/postgres/postgres.go-53-	return withRetry(ctx, r.db, r.engine, fn)
+internal/dao/postgres/postgres.go-54-}
+internal/dao/sqlite/sqlite.go:29:func New(dsn string) (dao.Repository, error) {
+internal/dao/sqlite/sqlite.go-30-	// foreign_keys is per-CONNECTION, not a property of the database file
+internal/dao/sqlite/sqlite.go-31-	// — a bare `PRAGMA foreign_keys = ON` exec after opening only covers
+internal/dao/sqlite/sqlite.go-32-	// the one connection that happened to run it, and silently stops
+internal/dao/sqlite/sqlite.go-33-	// covering anything the moment the pool acquires a second connection
+internal/dao/sqlite/sqlite.go-34-	// (a raised MaxOpenConns, a reconnect after an error, ...). Requesting
+internal/dao/sqlite/sqlite.go-35-	// it via the DSN's `_foreign_keys` query param makes modernc.org/sqlite
+internal/dao/sqlite/sqlite.go-36-	// apply it to every connection it opens, by construction (05's
+internal/dao/sqlite/sqlite.go-37-	// amendment A3, surfaced during PR #8 review). SetMaxOpenConns(1)
+internal/dao/sqlite/sqlite.go-38-	// below is kept for its own, separate reason (SQLite's single-writer
+internal/dao/sqlite/sqlite.go-39-	// model) — it must not be the only thing keeping this guarantee true.
+internal/dao/sqlite/sqlite.go-40-	dsn = withForeignKeysOn(dsn)
+internal/dao/sqlite/sqlite.go-41-
+internal/dao/sqlite/sqlite.go-42-	db, err := sql.Open("sqlite", dsn)
+internal/dao/sqlite/sqlite.go-43-	if err != nil {
+internal/dao/sqlite/sqlite.go-44-		return nil, fmt.Errorf("sqlite: opening connection: %w", err)
+internal/dao/sqlite/sqlite.go-45-	}
+internal/dao/sqlite/sqlite.go-46-	// SetMaxOpenConns(1) correctly stops this package's own goroutines
+internal/dao/sqlite/sqlite.go-47-	// from hitting SQLITE_BUSY against each other — but it does not
+internal/dao/sqlite/sqlite.go-48-	// remove contention, it moves it into database/sql's pool queue.
+internal/dao/sqlite/sqlite.go-49-	// Under concurrent callers (e.g. api-service handling concurrent</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:34 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Confirmed: `dao.New` allocates a `*sql.DB` (via `sql.Open`, which just validates DSN/driver, no dial) held by `repo`. Now the ordering/leak assessment.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-44-hang-fix &amp;&amp; sed -n '180,230p' cmd/api-servic</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-44-hang-fix &amp;&amp; sed -n '180,230p' cmd/api-service/main.go"
+}</pre><div class="lbl">result</div><pre>// Exits non-zero if any class's sweep ended in error (not merely
+// "still had rows to examine" — internal/sweep.runClass's own loop
+// already keeps calling DeleteExpired until Drained or an error, so by
+// the time Run returns, every class either drained successfully or hit
+// a real error) — a non-zero exit is what makes a failed sweep show up
+// as a failed Kubernetes Job, not a silently-succeeding one.
+func runSweepMode(cfg config.Config) {
+	interval := cfg.SweepIntervalSeconds
+	if interval == "" {
+		interval = "unset"
+	}
+	log.Printf("api-service: sweep starting, classes=direct,idp_cache,idp_cache_orphan, interval_seconds=%s", interval)
+
+	repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+	if err != nil {
+		log.Fatalf("api-service: sweep: opening DAO repository: %v", err)
+	}
+	defer func() { _ = repo.Close() }()
+
+	// A bounded connectivity check BEFORE anything else touches the
+	// database — sql.Open above never dials, so without this,
+	// sweep.Run's own first DeleteExpired call would be the actual
+	// first connection attempt, made with the signal-derived context
+	// below (SIGTERM/SIGINT only, no deadline of its own) and no
+	// timeout of its own either — exactly the hang this fixes. A
+	// separate *sql.DB, not repo itself: dao.Repository exposes no
+	// Ping (05's contract doesn't have one), mirroring the same
+	// pattern the verifier's /healthz probe already uses.
+	if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+		pingDB, err := sql.Open(driverName, cfg.DBDSN)
+		if err != nil {
+			log.Fatalf("api-service: sweep: opening DB ping handle: %v", err)
+		}
+		pingCtx, cancel := context.WithTimeout(context.Background(), sweepDBConnectTimeout)
+		pingErr := pingDB.PingContext(pingCtx)
+		cancel()
+		_ = pingDB.Close()
+		if pingErr != nil {
+			log.Printf("api-service: sweep: database unreachable (class=%s) after %s: %v", classifySweepDBConnectError(pingErr), sweepDBConnectTimeout, pingErr)
+			os.Exit(1)
+		}
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	metrics := sweep.NewPrometheusMetricEmitter()
+	results := sweep.Run(ctx, repo, time.Now(), metrics)
+
+	failed := false
+	for _, r := range results {</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:34 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Findings, in review-note form.
+
+Review of PR #64 (`fix/sweep-db-connect-timeout`), read against `gh pr diff 64` and confirmed against `internal/dao/factory.go`, `internal/dao/postgres/postgres.go:35-47`, `internal/dao/sqlite/sqlite.go:29-45`.
+
+1. `pingDB` handle itself: clean. `main.go:207-215` — `pingDB.Close()` runs unconditionally at line 214, before the error branch, on all three outcomes (dial error before Ping is never reached since `sql.Open` doesn't dial; ping success; ping timeout; ping error). No leak on this handle.
+
+2. `os.Exit(1)` at `main.go:216` skipping the `defer func(){ _ = repo.Close() }()` registered at `main.go:196`: this is a real leak, not a hypothetical one. `dao.New` → `postgres.New`/`sqlite.New` calls `sql.Open` and stores the resulting `*sql.DB` in `repo` (`postgres.go:36-40`, `sqlite.go:42-45`) — that's a live connection-pool object with its own idle-timer goroutines, even before any connection is dialed. `os.Exit` bypasses all deferred calls per the stdlib doc, so `repo`'s `*sql.DB` is abandoned. In practice this doesn't matter here: the process is exiting immediately after, the OS reclaims the process's file descriptors and goroutines on exit, and `sql.DB.Close()` doesn't flush anything durable. So it's a leak that costs nothing in this specific code path — acceptable, but the comment block above (lines 200-206) doesn't say why it's fine to leave `repo` unclosed; it should note that explicitly rather than let a reader wonder whether it's an oversight.
+
+3. `classifySweepDBConnectError` substring matching (`main.go` new function): `"no such host"` and `"connection refused"` are the pgx/net driver's actual wrapped error text, not something a legitimate unrelated error is likely to contain — low collision risk in practice. One real gap: a TLS handshake failure or auth failure (wrong password) against a *reachable* database would fall into `"unknown"`, not misleading exactly, but it undersells the operator's diagnostic story — the PR's own motivating scenario (SYN_SENT hang) is fully covered by `connect_timeout`, so this isn't a blocker, just worth a follow-up ticket if wrong-credential failures start showing up as sweep failures in practice.
+
+4. No other correctness issue. `sqlDriverNameFor` returning `""` for an unrecognized driver silently skips the ping check and falls through to the old unbounded path — worth flagging since it means an unrecognized `DBDriver` value regresses to the exact bug being fixed, silently. Given `dao.New` just above already validates the driver name and would have failed first with an unknown driver, this is dead code in practice, not a live gap.
+
+**Verdict: approve**, with one ask — add a one-line comment at the `os.Exit(1)` explaining the deliberate `repo.Close()` skip is safe because the process exits immediately (point 2), so a future editor doesn't "fix" it into a leak-avoidance refactor that reintroduces ordering risk.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

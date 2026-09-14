@@ -1,0 +1,1882 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 11 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 4:56 AM PDT – Sep 13, 2026 4:58 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 4:56 AM PDT</span><span class="who">Lead</span><div class="body">You reviewed GitHub PR #30 (wtvamp/loginid-takehome, branch feature/LT-40) twice already: round 1 found two minor issues (both fixed), round 2 (at commit 03181f6) found that the JWKS cache's ordinary TTL-refresh path had no retry floor, letting a sustained issuer outage trigger one network fetch per request for the whole outage.
+
+The branch has a new commit since your round-2 review: a615dfa. It's supposed to fix exactly the finding you raised (added jwksMinRefreshRetryInterval, a 5s floor on retry attempts, plus a factored-out enforceStaleness() call so the staleness ceiling is still enforced during the backoff), AND separately fixes a finding from a different reviewer (Ingrid Solano, 02) about the unknown-kid rate-limit being a single global gate instead of per-kid, which let an unauthenticated attacker occupy the one reservation slot with a fabricated kid and starve a legitimate key rotation.
+
+Run `gh pr diff 30 --repo wtvamp/loginid-takehome` to see the CURRENT full diff at a615dfa (not just the delta) and confirm:
+1. Is your original retry-floor finding now actually fixed correctly? Trace KeyForKid, refresh(), and enforceStaleness() carefully — does the staleness ceiling still get enforced on a call that skips the network fetch because of the retry floor?
+2. Sanity-check the per-kid fix (reserveUnknownKidRetry, now keyed by kid with a size cap) even though it wasn't your original finding — any bug in it?
+3. Any new issues in this round's diff?
+
+This needs to be a genuine round-3 review post for the PR thread (the merge gate specifically requires your own round-3 post, not just my paraphrase of an earlier round). Report back in plain prose: concrete findings if any, or confirmation everything checks out, with enough specificity that it can be posted as a real review comment under your name.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:56 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Bash</span> gh pr diff 30 --repo wtvamp/loginid-takehome</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh pr diff 30 --repo wtvamp/loginid-takehome"
+}</pre><div class="lbl">result</div><pre>&lt;persisted-output&gt;
+Output too large (99KB). Full output saved to: /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/tool-results/bcbn66mob.txt
+
+Preview (first 2KB):
+diff --git a/cmd/api-service/main.go b/cmd/api-service/main.go
+index 5c170ee..636be6d 100644
+--- a/cmd/api-service/main.go
++++ b/cmd/api-service/main.go
+@@ -10,6 +10,10 @@ import (
+ 
+ 	"loginid-takehome/internal/app"
+ 	"loginid-takehome/internal/config"
++	"loginid-takehome/internal/dao"
++
++	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
++	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+ )
+ 
+ func main() {
+@@ -24,7 +28,39 @@ func main() {
+ 	}
+ 
+ 	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
+-	if err := http.ListenAndServe(addr, app.NewRouter("api-service", app.Mode(cfg.AppMode))); err != nil {
++
++	var handler http.Handler
++	switch app.Mode(cfg.AppMode) {
++	case app.ModeVerifier:
++		// The verifying Deployment is the one that talks to the
++		// database (LT-39's search/retrieve handlers) — the issuer
++		// Deployment (below) never needs a Repository at all, since it
++		// only mints tokens.
++		//
++		// A failure here does NOT Fatal: on a cluster where the database
++		// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
++		// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
++		// misconfigured, this process must still come up and serve
++		// /healthz rather than crash-loop the whole verifying Deployment
++		// over a dependency only two of its routes need. repo stays nil;
++		// NewVerifierRouter fails those two routes closed with 503
++		// instead of panicking on a nil Repository.
++		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
++		if err != nil {
++			log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
++			repo = nil
++		}
++		handler = app.NewVerifierRouter(cfg, repo)
++	default:
++		// ModeIssuer (and the unrecognized-mode fallback, which
++		// NewRouter itself already logs loudly and treats as verifier —
++		// see app.NewRouter's own doc comment) don't need the full
+...
+&lt;/persisted-output&gt;</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:56 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/tool-results/bcbn66mob.txt"
+}</pre><div class="lbl">result</div><pre>1	diff --git a/cmd/api-service/main.go b/cmd/api-service/main.go
+2	index 5c170ee..636be6d 100644
+3	--- a/cmd/api-service/main.go
+4	+++ b/cmd/api-service/main.go
+5	@@ -10,6 +10,10 @@ import (
+6	 
+7	 	"loginid-takehome/internal/app"
+8	 	"loginid-takehome/internal/config"
+9	+	"loginid-takehome/internal/dao"
+10	+
+11	+	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+12	+	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+13	 )
+14	 
+15	 func main() {
+16	@@ -24,7 +28,39 @@ func main() {
+17	 	}
+18	 
+19	 	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
+20	-	if err := http.ListenAndServe(addr, app.NewRouter("api-service", app.Mode(cfg.AppMode))); err != nil {
+21	+
+22	+	var handler http.Handler
+23	+	switch app.Mode(cfg.AppMode) {
+24	+	case app.ModeVerifier:
+25	+		// The verifying Deployment is the one that talks to the
+26	+		// database (LT-39's search/retrieve handlers) — the issuer
+27	+		// Deployment (below) never needs a Repository at all, since it
+28	+		// only mints tokens.
+29	+		//
+30	+		// A failure here does NOT Fatal: on a cluster where the database
+31	+		// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
+32	+		// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
+33	+		// misconfigured, this process must still come up and serve
+34	+		// /healthz rather than crash-loop the whole verifying Deployment
+35	+		// over a dependency only two of its routes need. repo stays nil;
+36	+		// NewVerifierRouter fails those two routes closed with 503
+37	+		// instead of panicking on a nil Repository.
+38	+		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+39	+		if err != nil {
+40	+			log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+41	+			repo = nil
+42	+		}
+43	+		handler = app.NewVerifierRouter(cfg, repo)
+44	+	default:
+45	+		// ModeIssuer (and the unrecognized-mode fallback, which
+46	+		// NewRouter itself already logs loudly and treats as verifier —
+47	+		// see app.NewRouter's own doc comment) don't need the full
+48	+		// verifier stack; NewRouter's existing /auth/token placeholder
+49	+		// (LT-32) and /healthz cover both.
+50	+		handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))
+51	+	}
+52	+
+53	+	if err := http.ListenAndServe(addr, handler); err != nil {
+54	 		log.Fatalf("api-service: %v", err)
+55	 	}
+56	 }
+57	diff --git a/go.mod b/go.mod
+58	index acc3f60..eaf1188 100644
+59	--- a/go.mod
+60	+++ b/go.mod
+61	@@ -3,6 +3,7 @@ module loginid-takehome
+62	 go 1.27.1
+63	 
+64	 require (
+65	+	github.com/golang-jwt/jwt/v5 v5.3.1
+66	 	github.com/google/uuid v1.6.0
+67	 	github.com/jackc/pgx/v5 v5.11.0
+68	 	modernc.org/sqlite v1.58.0
+69	diff --git a/go.sum b/go.sum
+70	index 0863108..cf541fe 100644
+71	--- a/go.sum
+72	+++ b/go.sum
+73	@@ -3,6 +3,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
+74	 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+75	 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
+76	 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
+77	+github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
+78	+github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
+79	 github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3 h1:LMLX+LgTNWpfvCBdFebv6EsYotImrt/Ppc5cXIriCSo=
+80	 github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3/go.mod h1:jl5iWTm0/hd5PjEYEOuwAJ57L/CibdZfrqZ5XA5GrCk=
+81	 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+82	diff --git a/internal/api/audit.go b/internal/api/audit.go
+83	index 7d9b37b..73f791d 100644
+84	--- a/internal/api/audit.go
+85	+++ b/internal/api/audit.go
+86	@@ -25,6 +25,15 @@ const (
+87	 	AuditCapExceeded   AuditEventKind = "cumulative_cap_exceeded"
+88	 	AuditRequestFailed AuditEventKind = "request_failed" // a DAO/internal error, not a policy decision
+89	 	AuditSuccess       AuditEventKind = "success"
+90	+
+91	+	// AuditJWKSUnavailable is LT-40's distinct signal for the JWKS
+92	+	// fail-closed case (Tomasz Wrede, 02 cold review, PM ruling): the
+93	+	// cached key set exceeded its max-staleness bound with no successful
+94	+	// refresh, and the verifier refused every token rather than trust
+95	+	// keys that old — a token-infrastructure degradation, not an
+96	+	// ordinary bad-credential attempt, and worth distinguishing from
+97	+	// AuditAuthnFailure for exactly that reason.
+98	+	AuditJWKSUnavailable AuditEventKind = "jwks_unavailable"
+99	 )
+100	 
+101	 // AuditEvent carries exactly the fields handoff-03-auth.md v3's audit-log
+102	diff --git a/internal/api/errors.go b/internal/api/errors.go
+103	index 4c00b13..170ed7b 100644
+104	--- a/internal/api/errors.go
+105	+++ b/internal/api/errors.go
+106	@@ -114,3 +114,15 @@ func writeInternalError(w http.ResponseWriter, err error) {
+107	 	}
+108	 	writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+109	 }
+110	+
+111	+// WriteServiceUnavailable is exported for internal/app's router wiring:
+112	+// when the DAO repository couldn't be constructed at startup (e.g. no
+113	+// DB_DRIVER/DB_DSN configured yet), the verifying Deployment must still
+114	+// start and serve /healthz — it must not crash-loop the whole process
+115	+// over a dependency LT-39's handlers need but nothing else does. Callers
+116	+// that have no working Repository at all route the protected endpoints
+117	+// to this instead of constructing a Deps with a nil Repo (which would
+118	+// panic the first time a handler called d.Repo.Profiles()).
+119	+func WriteServiceUnavailable(w http.ResponseWriter) {
+120	+	writeError(w, http.StatusServiceUnavailable, "service_unavailable", "service temporarily unavailable")
+121	+}
+122	diff --git a/internal/api/grantlimiter.go b/internal/api/grantlimiter.go
+123	new file mode 100644
+124	index 0000000..ba7c35c
+125	--- /dev/null
+126	+++ b/internal/api/grantlimiter.go
+127	@@ -0,0 +1,182 @@
+128	+package api
+129	+
+130	+import (
+131	+	"context"
+132	+	"sync"
+133	+	"time"
+134	+)
+135	+
+136	+// GrantLimiter enforces the token-issuing endpoint's own failed-grant
+137	+// rate limiting and progressive backoff — handoff-03-auth.md v3:
+138	+// "Token-endpoint brute-force protection, separate from the resource-API
+139	+// rate limits ... failed-grant rate limiting and progressive backoff per
+140	+// client_id and per source IP on the token-issuing endpoint itself, plus
+141	+// alerting on a sustained run of failed grants against one client_id."
+142	+//
+143	+// This is genuinely separate from RateLimiter (ratelimit.go): that type
+144	+// gates the resource API by an already-authenticated sub, at a fixed
+145	+// per-minute rate; this one gates the endpoint that issues the
+146	+// credential in the first place, keyed independently by client_id AND
+147	+// by source IP — a distributed brute force (many IPs, one client_id)
+148	+// and a single-source credential-stuffing run (one IP, many client_ids)
+149	+// are both attack shapes this is meant to slow down, and either key
+150	+// exceeding its own backoff blocks the attempt.
+151	+//
+152	+// Not wired to a live endpoint by this story: /auth/token's real grant
+153	+// logic is LT-51's scope (this story's non-goals). This is the
+154	+// ready-to-use component LT-51 constructs and calls from the real
+155	+// handler — building it now, tested in isolation, means LT-51 doesn't
+156	+// also have to design a backoff/alerting scheme under its own deadline.
+157	+type GrantLimiter interface {
+158	+	// Allow reports whether a grant attempt for clientID from sourceIP
+159	+	// may proceed right now — false while either key is in backoff.
+160	+	Allow(ctx context.Context, clientID, sourceIP string) (bool, error)
+161	+	// RecordFailure records a failed grant attempt for both clientID and
+162	+	// sourceIP, advancing each key's backoff state independently.
+163	+	// Crossing the alert threshold for a given client_id (not source IP
+164	+	// — the requirement names client_id specifically) fires alert
+165	+	// exactly once per crossing, not once per subsequent failure.
+166	+	RecordFailure(ctx context.Context, clientID, sourceIP string)
+167	+	// RecordSuccess clears backoff state for both clientID and
+168	+	// sourceIP — a successful grant resets the count, standard
+169	+	// exponential-backoff practice: this deters sustained brute force,
+170	+	// it does not permanently degrade a legitimate client that mistyped
+171	+	// a secret once.
+172	+	RecordSuccess(ctx context.Context, clientID, sourceIP string)
+173	+}
+174	+
+175	+// grantBackoffState is one key's (a client_id's, or a source IP's)
+176	+// consecutive-failure bookkeeping.
+177	+type grantBackoffState struct {
+178	+	consecutiveFailures int
+179	+	blockedUntil        time.Time
+180	+	alerted             bool
+181	+}
+182	+
+183	+// InProcessGrantLimiter is an in-process implementation. As with
+184	+// RateLimiter/TouchCounter's in-process implementations, a shared store
+185	+// is the multi-instance replacement behind the same interface — the
+186	+// mechanism is this track's call, per handoff-03-auth.md v3.
+187	+//
+188	+// Both maps are swept periodically (see sweepLocked) rather than left to
+189	+// grow forever: this component's own doc comment names "a distributed
+190	+// brute force (many IPs, one client_id)" as a defended attack shape, and
+191	+// that is exactly the traffic pattern that would otherwise grow
+192	+// bySourceIP without bound — every distinct attacking IP earns a
+193	+// permanent entry that only a matching RecordSuccess would remove, which
+194	+// an attacking IP by definition never triggers (Nolan Reyes, PR #30
+195	+// review — the same unbounded-growth shape an earlier PR's TouchCounter
+196	+// review already found and fixed once).
+197	+type InProcessGrantLimiter struct {
+198	+	mu             sync.Mutex
+199	+	byClientID     map[string]*grantBackoffState
+200	+	bySourceIP     map[string]*grantBackoffState
+201	+	baseBackoff    time.Duration
+202	+	maxBackoff     time.Duration
+203	+	alertThreshold int
+204	+	alertFn        func(clientID string, consecutiveFailures int)
+205	+	now            func() time.Time
+206	+	lastSweep      time.Time
+207	+}
+208	+
+209	+// grantSweepInterval and grantEntryTTL bound how long a key's state
+210	+// survives with no further failures against it. A blocked key is never
+211	+// swept before its own backoff has elapsed (sweeping mid-block would
+212	+// silently un-block it early); grantEntryTTL is generous past any
+213	+// realistic maxBackoff so a legitimately still-escalating attacker isn't
+214	+// reset early either.
+215	+const (
+216	+	grantSweepInterval = time.Minute
+217	+	grantEntryTTL      = time.Hour
+218	+)
+219	+
+220	+// NewInProcessGrantLimiter constructs a limiter with exponential backoff
+221	+// starting at baseBackoff (doubling per consecutive failure, capped at
+222	+// maxBackoff) and alertFn called once per client_id crossing
+223	+// alertThreshold consecutive failures. alertFn may be nil (no alerting —
+224	+// tests use this; production wiring passes a real sink).
+225	+func NewInProcessGrantLimiter(baseBackoff, maxBackoff time.Duration, alertThreshold int, alertFn func(clientID string, consecutiveFailures int)) *InProcessGrantLimiter {
+226	+	return &amp;InProcessGrantLimiter{
+227	+		byClientID:     make(map[string]*grantBackoffState),
+228	+		bySourceIP:     make(map[string]*grantBackoffState),
+229	+		baseBackoff:    baseBackoff,
+230	+		maxBackoff:     maxBackoff,
+231	+		alertThreshold: alertThreshold,
+232	+		alertFn:        alertFn,
+233	+		now:            time.Now,
+234	+	}
+235	+}
+236	+
+237	+func (l *InProcessGrantLimiter) Allow(_ context.Context, clientID, sourceIP string) (bool, error) {
+238	+	l.mu.Lock()
+239	+	defer l.mu.Unlock()
+240	+	now := l.now()
+241	+	l.sweepLocked(now)
+242	+	return !isBlocked(l.byClientID[clientID], now) &amp;&amp; !isBlocked(l.bySourceIP[sourceIP], now), nil
+243	+}
+244	+
+245	+// sweepLocked drops any entry whose blockedUntil is at least
+246	+// grantEntryTTL in the past — called with l.mu already held, at most
+247	+// once per grantSweepInterval, so it adds no per-call cost beyond a
+248	+// single time comparison on every other call.
+249	+func (l *InProcessGrantLimiter) sweepLocked(now time.Time) {
+250	+	if now.Sub(l.lastSweep) &lt; grantSweepInterval {
+251	+		return
+252	+	}
+253	+	l.lastSweep = now
+254	+	sweepMap(l.byClientID, now)
+255	+	sweepMap(l.bySourceIP, now)
+256	+}
+257	+
+258	+func sweepMap(m map[string]*grantBackoffState, now time.Time) {
+259	+	for key, s := range m {
+260	+		if now.Sub(s.blockedUntil) &gt;= grantEntryTTL {
+261	+			delete(m, key)
+262	+		}
+263	+	}
+264	+}
+265	+
+266	+func isBlocked(s *grantBackoffState, now time.Time) bool {
+267	+	return s != nil &amp;&amp; now.Before(s.blockedUntil)
+268	+}
+269	+
+270	+func (l *InProcessGrantLimiter) RecordFailure(_ context.Context, clientID, sourceIP string) {
+271	+	l.mu.Lock()
+272	+	defer l.mu.Unlock()
+273	+	now := l.now()
+274	+
+275	+	cs := l.advance(l.byClientID, clientID, now)
+276	+	l.advance(l.bySourceIP, sourceIP, now)
+277	+
+278	+	if cs.consecutiveFailures &gt;= l.alertThreshold &amp;&amp; !cs.alerted {
+279	+		cs.alerted = true
+280	+		if l.alertFn != nil {
+281	+			l.alertFn(clientID, cs.consecutiveFailures)
+282	+		}
+283	+	}
+284	+}
+285	+
+286	+// advance increments key's consecutive-failure count and sets its
+287	+// exponential backoff window, creating the state entry if this is its
+288	+// first failure.
+289	+func (l *InProcessGrantLimiter) advance(m map[string]*grantBackoffState, key string, now time.Time) *grantBackoffState {
+290	+	s, ok := m[key]
+291	+	if !ok {
+292	+		s = &amp;grantBackoffState{}
+293	+		m[key] = s
+294	+	}
+295	+	s.consecutiveFailures++
+296	+	backoff := l.baseBackoff &lt;&lt; uint(s.consecutiveFailures-1) // 2^(n-1) * base
+297	+	if backoff &gt; l.maxBackoff || backoff &lt;= 0 {               // overflow guard: a left-shifted duration can wrap negative
+298	+		backoff = l.maxBackoff
+299	+	}
+300	+	s.blockedUntil = now.Add(backoff)
+301	+	return s
+302	+}
+303	+
+304	+func (l *InProcessGrantLimiter) RecordSuccess(_ context.Context, clientID, sourceIP string) {
+305	+	l.mu.Lock()
+306	+	defer l.mu.Unlock()
+307	+	delete(l.byClientID, clientID)
+308	+	delete(l.bySourceIP, sourceIP)
+309	+}
+310	diff --git a/internal/api/grantlimiter_test.go b/internal/api/grantlimiter_test.go
+311	new file mode 100644
+312	index 0000000..5b6185e
+313	--- /dev/null
+314	+++ b/internal/api/grantlimiter_test.go
+315	@@ -0,0 +1,185 @@
+316	+package api
+317	+
+318	+import (
+319	+	"context"
+320	+	"testing"
+321	+	"time"
+322	+)
+323	+
+324	+func TestGrantLimiter_AllowsFirstAttempt(t *testing.T) {
+325	+	l := NewInProcessGrantLimiter(time.Second, time.Minute, 5, nil)
+326	+	allow, err := l.Allow(context.Background(), "client-a", "«IP»")
+327	+	if err != nil || !allow {
+328	+		t.Fatalf("Allow = %v, %v; want true, nil", allow, err)
+329	+	}
+330	+}
+331	+
+332	+func TestGrantLimiter_BlocksAfterFailure(t *testing.T) {
+333	+	l := NewInProcessGrantLimiter(time.Minute, time.Hour, 5, nil)
+334	+	ctx := context.Background()
+335	+	l.RecordFailure(ctx, "client-a", "«IP»")
+336	+
+337	+	allow, err := l.Allow(ctx, "client-a", "«IP»")
+338	+	if err != nil {
+339	+		t.Fatalf("Allow: %v", err)
+340	+	}
+341	+	if allow {
+342	+		t.Error("should be blocked immediately after a failure, within the backoff window")
+343	+	}
+344	+}
+345	+
+346	+func TestGrantLimiter_BackoffIsExponential(t *testing.T) {
+347	+	l := NewInProcessGrantLimiter(time.Second, time.Hour, 100, nil)
+348	+	fakeNow := time.Now()
+349	+	l.now = func() time.Time { return fakeNow }
+350	+	ctx := context.Background()
+351	+
+352	+	l.RecordFailure(ctx, "client-a", "«IP»")
+353	+	// First failure: 1s backoff. Advance 1.5s — should be allowed again.
+354	+	fakeNow = fakeNow.Add(1500 * time.Millisecond)
+355	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); !allow {
+356	+		t.Fatal("should be allowed again after the first (1s) backoff elapses")
+357	+	}
+358	+
+359	+	l.RecordFailure(ctx, "client-a", "«IP»")
+360	+	// Second consecutive failure: 2s backoff. Advance only 1.5s again —
+361	+	// should still be blocked, proving the window grew.
+362	+	fakeNow = fakeNow.Add(1500 * time.Millisecond)
+363	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); allow {
+364	+		t.Error("should still be blocked — the second failure's backoff (2s) hasn't elapsed yet")
+365	+	}
+366	+}
+367	+
+368	+func TestGrantLimiter_BackoffCappedAtMax(t *testing.T) {
+369	+	l := NewInProcessGrantLimiter(time.Second, 5*time.Second, 100, nil)
+370	+	fakeNow := time.Now()
+371	+	l.now = func() time.Time { return fakeNow }
+372	+	ctx := context.Background()
+373	+
+374	+	for i := 0; i &lt; 10; i++ {
+375	+		l.RecordFailure(ctx, "client-a", "«IP»")
+376	+	}
+377	+	// Even after many failures, the backoff must not exceed maxBackoff.
+378	+	fakeNow = fakeNow.Add(5*time.Second + time.Millisecond)
+379	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); !allow {
+380	+		t.Error("backoff should be capped at maxBackoff (5s), not grow unbounded across 10 failures")
+381	+	}
+382	+}
+383	+
+384	+func TestGrantLimiter_KeyedIndependentlyByClientIDAndSourceIP(t *testing.T) {
+385	+	l := NewInProcessGrantLimiter(time.Hour, time.Hour, 100, nil)
+386	+	ctx := context.Background()
+387	+
+388	+	// A distributed brute force: many source IPs against one client_id.
+389	+	// The client_id key alone must block a request even from a fresh IP.
+390	+	l.RecordFailure(ctx, "client-a", "«IP»")
+391	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); allow {
+392	+		t.Error("a blocked client_id must block attempts from a different source IP too")
+393	+	}
+394	+
+395	+	// A single-source credential-stuffing run: many client_ids from one
+396	+	// IP. The source-IP key alone must block a fresh client_id from that
+397	+	// same IP.
+398	+	if allow, _ := l.Allow(ctx, "client-b", "«IP»"); allow {
+399	+		t.Error("a blocked source IP must block attempts for a different client_id too")
+400	+	}
+401	+
+402	+	// A genuinely unrelated (client_id, IP) pair must not be affected.
+403	+	if allow, _ := l.Allow(ctx, "client-c", "«IP»"); !allow {
+404	+		t.Error("an unrelated client_id/source IP pair must not be blocked")
+405	+	}
+406	+}
+407	+
+408	+func TestGrantLimiter_SuccessResetsBackoff(t *testing.T) {
+409	+	l := NewInProcessGrantLimiter(time.Hour, time.Hour, 100, nil)
+410	+	ctx := context.Background()
+411	+
+412	+	l.RecordFailure(ctx, "client-a", "«IP»")
+413	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); allow {
+414	+		t.Fatal("should be blocked after a failure")
+415	+	}
+416	+
+417	+	l.RecordSuccess(ctx, "client-a", "«IP»")
+418	+	if allow, _ := l.Allow(ctx, "client-a", "«IP»"); !allow {
+419	+		t.Error("a successful grant should reset backoff state entirely")
+420	+	}
+421	+}
+422	+
+423	+// TestGrantLimiter_AlertsOnceOnSustainedFailureRun is
+424	+// handoff-03-auth.md v3's "alerting on a sustained run of failed grants
+425	+// against one client_id" — fired exactly once per threshold crossing,
+426	+// not once per failure past it (which would just be alert-fatigue noise
+427	+// indistinguishable from the failures themselves).
+428	+func TestGrantLimiter_AlertsOnceOnSustainedFailureRun(t *testing.T) {
+429	+	var alerts []int
+430	+	l := NewInProcessGrantLimiter(time.Nanosecond, time.Nanosecond, 3, func(clientID string, consecutiveFailures int) {
+431	+		alerts = append(alerts, consecutiveFailures)
+432	+	})
+433	+	fakeNow := time.Now()
+434	+	l.now = func() time.Time { return fakeNow }
+435	+	ctx := context.Background()
+436	+
+437	+	for i := 0; i &lt; 6; i++ {
+438	+		l.RecordFailure(ctx, "client-a", "«IP»")
+439	+		fakeNow = fakeNow.Add(time.Millisecond) // clear the (nanosecond) backoff each time
+440	+	}
+441	+
+442	+	if len(alerts) != 1 {
+443	+		t.Fatalf("alerts fired = %v, want exactly one (at the threshold crossing)", alerts)
+444	+	}
+445	+	if alerts[0] != 3 {
+446	+		t.Errorf("alert fired at %d consecutive failures, want at the threshold (3)", alerts[0])
+447	+	}
+44
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:56 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/tool-results/bcbn66mob.txt",
+  "offset": 1145,
+  "limit": 700
+}</pre><div class="lbl">result</div><pre>1145	+	if err != nil {
+1146	+		t.Fatalf("generating key: %v", err)
+1147	+	}
+1148	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+1149	+	s := newJWKSTestServer(body)
+1150	+	defer s.Close()
+1151	+
+1152	+	cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min
+1153	+	fakeNow := time.Now()
+1154	+	cache.now = func() time.Time { return fakeNow }
+1155	+	ctx := context.Background()
+1156	+
+1157	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1158	+		t.Fatalf("first KeyForKid: %v", err)
+1159	+	}
+1160	+	s.up.Store(false)
+1161	+	// Advance past maxStaleness (3min) from the last successful fetch.
+1162	+	fakeNow = fakeNow.Add(4 * time.Minute)
+1163	+	_, err = cache.KeyForKid(ctx, "key-1")
+1164	+	if err == nil {
+1165	+		t.Fatal("expected an error once the cache exceeds max staleness with the issuer still unreachable")
+1166	+	}
+1167	+	if !errors.Is(err, ErrJWKSStale) {
+1168	+		t.Errorf("error = %v, want it to wrap ErrJWKSStale so the middleware can log a distinct audit event", err)
+1169	+	}
+1170	+}
+1171	+
+1172	+// TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch is the PM's
+1173	+// ruling on Tomasz Wrede's MEDIUM-HIGH finding: an unknown kid (a key
+1174	+// the issuer may have just rotated in) triggers one out-of-band refetch
+1175	+// before the cache gives up, rather than waiting up to a full TTL for
+1176	+// the next calendar-scheduled refresh.
+1177	+func TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch(t *testing.T) {
+1178	+	oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+1179	+	if err != nil {
+1180	+		t.Fatalf("generating key: %v", err)
+1181	+	}
+1182	+	newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+1183	+	if err != nil {
+1184	+		t.Fatalf("generating key: %v", err)
+1185	+	}
+1186	+
+1187	+	var requests atomic.Int32
+1188	+	var serveNewKey atomic.Bool
+1189	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+1190	+		requests.Add(1)
+1191	+		w.Header().Set("Content-Type", "application/json")
+1192	+		if serveNewKey.Load() {
+1193	+			_, _ = w.Write(jwksBody(t, "key-new", &amp;newKey.PublicKey))
+1194	+		} else {
+1195	+			_, _ = w.Write(jwksBody(t, "key-old", &amp;oldKey.PublicKey))
+1196	+		}
+1197	+	}))
+1198	+	defer srv.Close()
+1199	+
+1200	+	// A long TTL so the calendar-scheduled refresh would NOT fire on its
+1201	+	// own within this test — proving any successful lookup of "key-new"
+1202	+	// came from the unknown-kid-triggered refetch, not an ordinary TTL
+1203	+	// rollover.
+1204	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+1205	+	ctx := context.Background()
+1206	+
+1207	+	if _, err := cache.KeyForKid(ctx, "key-old"); err != nil {
+1208	+		t.Fatalf("priming the cache with key-old: %v", err)
+1209	+	}
+1210	+	requestsAfterPriming := requests.Load()
+1211	+
+1212	+	// The issuer rotates: key-new is now published, but the cache's TTL
+1213	+	// hasn't expired.
+1214	+	serveNewKey.Store(true)
+1215	+	if _, err := cache.KeyForKid(ctx, "key-new"); err != nil {
+1216	+		t.Fatalf("KeyForKid(key-new) = %v, want the unknown-kid refetch to find it", err)
+1217	+	}
+1218	+	if requests.Load() &lt;= requestsAfterPriming {
+1219	+		t.Error("expected an extra fetch triggered by the unknown kid, beyond the priming fetch")
+1220	+	}
+1221	+}
+1222	+
+1223	+func TestJWKSCache_UnknownKidRefetchIsRateLimited(t *testing.T) {
+1224	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+1225	+	if err != nil {
+1226	+		t.Fatalf("generating key: %v", err)
+1227	+	}
+1228	+	var requests atomic.Int32
+1229	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+1230	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+1231	+		requests.Add(1)
+1232	+		w.Header().Set("Content-Type", "application/json")
+1233	+		_, _ = w.Write(body)
+1234	+	}))
+1235	+	defer srv.Close()
+1236	+
+1237	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+1238	+	fakeNow := time.Now()
+1239	+	cache.now = func() time.Time { return fakeNow }
+1240	+	ctx := context.Background()
+1241	+
+1242	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1243	+		t.Fatalf("priming: %v", err)
+1244	+	}
+1245	+	requestsAfterPriming := requests.Load()
+1246	+
+1247	+	// Two lookups for an unknown kid in quick succession (same fake
+1248	+	// "now") must trigger at most one extra refetch between them, not
+1249	+	// one per lookup — that's the rate limit closing the "unknown-kid
+1250	+	// flood hammers the issuer" gap.
+1251	+	_, _ = cache.KeyForKid(ctx, "no-such-kid")
+1252	+	afterFirstUnknown := requests.Load()
+1253	+	_, _ = cache.KeyForKid(ctx, "no-such-kid")
+1254	+	afterSecondUnknown := requests.Load()
+1255	+
+1256	+	if afterFirstUnknown != requestsAfterPriming+1 {
+1257	+		t.Errorf("first unknown-kid lookup triggered %d extra fetch(es), want exactly 1", afterFirstUnknown-requestsAfterPriming)
+1258	+	}
+1259	+	if afterSecondUnknown != afterFirstUnknown {
+1260	+		t.Errorf("second unknown-kid lookup (within the rate-limit window) triggered an extra fetch: %d -&gt; %d, want no change", afterFirstUnknown, afterSecondUnknown)
+1261	+	}
+1262	+}
+1263	+
+1264	+// TestJWKSCache_FailedRefreshDoesNotHammerIssuer is Oren Castellan's PR
+1265	+// #30 re-review finding: without a floor on retry attempts, every single
+1266	+// request during a sustained issuer outage triggered its own network
+1267	+// fetch (bounded only by maxStaleness, not by request volume) — the same
+1268	+// "don't hammer a struggling dependency" reasoning already applied to the
+1269	+// unknown-kid path, missing from the ordinary TTL-refresh path. Multiple
+1270	+// KeyForKid calls in quick succession, all past TTL with the issuer down,
+1271	+// must make only one real fetch attempt per jwksMinRefreshRetryInterval.
+1272	+func TestJWKSCache_FailedRefreshDoesNotHammerIssuer(t *testing.T) {
+1273	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+1274	+	if err != nil {
+1275	+		t.Fatalf("generating key: %v", err)
+1276	+	}
+1277	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+1278	+	s := newJWKSTestServer(body)
+1279	+	defer s.Close()
+1280	+
+1281	+	cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min, min retry floor = 5s
+1282	+	fakeNow := time.Now()
+1283	+	cache.now = func() time.Time { return fakeNow }
+1284	+	ctx := context.Background()
+1285	+
+1286	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1287	+		t.Fatalf("priming: %v", err)
+1288	+	}
+1289	+
+1290	+	s.up.Store(false)
+1291	+	fakeNow = fakeNow.Add(time.Minute + time.Second) // TTL expired
+1292	+
+1293	+	var requestsBefore int32
+1294	+	// Read the server's own request counter via a second server field
+1295	+	// would require plumbing; instead assert indirectly: repeated calls
+1296	+	// within the retry floor must all return the SAME error quickly
+1297	+	// (served from enforceStaleness, not a fresh fetch attempt) — a real
+1298	+	// per-call fetch would each take however long the (down) server's
+1299	+	// connection refusal takes, which is fast here, so we assert on
+1300	+	// lastAttempt not advancing instead.
+1301	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1302	+		t.Fatalf("first post-TTL call: %v", err)
+1303	+	}
+1304	+	cache.mu.Lock()
+1305	+	firstAttempt := cache.lastAttempt
+1306	+	cache.mu.Unlock()
+1307	+	_ = requestsBefore
+1308	+
+1309	+	fakeNow = fakeNow.Add(time.Second) // still within jwksMinRefreshRetryInterval (5s) of firstAttempt
+1310	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1311	+		t.Fatalf("second post-TTL call (within retry floor): %v", err)
+1312	+	}
+1313	+	cache.mu.Lock()
+1314	+	secondAttempt := cache.lastAttempt
+1315	+	cache.mu.Unlock()
+1316	+
+1317	+	if !secondAttempt.Equal(firstAttempt) {
+1318	+		t.Errorf("a second call within jwksMinRefreshRetryInterval triggered a new fetch attempt (lastAttempt moved from %v to %v) — want it to back off and reuse the stale cache instead", firstAttempt, secondAttempt)
+1319	+	}
+1320	+
+1321	+	// Past the retry floor, a new attempt IS made.
+1322	+	fakeNow = fakeNow.Add(jwksMinRefreshRetryInterval)
+1323	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1324	+		t.Fatalf("third post-TTL call (past retry floor): %v", err)
+1325	+	}
+1326	+	cache.mu.Lock()
+1327	+	thirdAttempt := cache.lastAttempt
+1328	+	cache.mu.Unlock()
+1329	+	if thirdAttempt.Equal(firstAttempt) {
+1330	+		t.Error("a call past jwksMinRefreshRetryInterval should have made a new fetch attempt")
+1331	+	}
+1332	+}
+1333	+
+1334	+// TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry proves the
+1335	+// staleness ceiling isn't silently suspended while the retry floor is
+1336	+// skipping real fetch attempts — enforceStaleness must still fire once
+1337	+// maxStaleness is exceeded, even on a call that isn't itself attempting
+1338	+// a fetch.
+1339	+func TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry(t *testing.T) {
+1340	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+1341	+	if err != nil {
+1342	+		t.Fatalf("generating key: %v", err)
+1343	+	}
+1344	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+1345	+	s := newJWKSTestServer(body)
+1346	+	defer s.Close()
+1347	+
+1348	+	cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min
+1349	+	fakeNow := time.Now()
+1350	+	cache.now = func() time.Time { return fakeNow }
+1351	+	ctx := context.Background()
+1352	+
+1353	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1354	+		t.Fatalf("priming: %v", err)
+1355	+	}
+1356	+	s.up.Store(false)
+1357	+
+1358	+	// One real attempt right after TTL expires, which fails and sets
+1359	+	// lastAttempt.
+1360	+	fakeNow = fakeNow.Add(time.Minute + time.Second)
+1361	+	_, _ = cache.KeyForKid(ctx, "key-1")
+1362	+
+1363	+	// Jump straight past maxStaleness (3min from the last SUCCESSFUL
+1364	+	// fetch), but still within jwksMinRefreshRetryInterval of the last
+1365	+	// ATTEMPT — this call must back off from a new fetch attempt and
+1366	+	// still correctly fail closed via enforceStaleness, not silently
+1367	+	// succeed with the stale cache because no new attempt was made.
+1368	+	fakeNow = fakeNow.Add(4 * time.Minute)
+1369	+	_, err = cache.KeyForKid(ctx, "key-1")
+1370	+	if err == nil {
+1371	+		t.Fatal("expected an error once past max staleness, even on a call that backs off from a new fetch attempt")
+1372	+	}
+1373	+	if !errors.Is(err, ErrJWKSStale) {
+1374	+		t.Errorf("error = %v, want ErrJWKSStale", err)
+1375	+	}
+1376	+}
+1377	+
+1378	+// TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal is Ingrid
+1379	+// Solano's (02) cold re-check finding: KeyForKid runs before signature
+1380	+// verification, so an unauthenticated caller can send a token with a
+1381	+// fabricated kid at no cost. A single GLOBAL reservation gate would let
+1382	+// that caller occupy the one slot by repeating a garbage kid every
+1383	+// jwksUnknownKidRefetchInterval, starving a DIFFERENT, legitimately
+1384	+// rotated-in real kid's own refetch back to the full calendar TTL —
+1385	+// silently recreating most of the original gap. Reserving per kid closes
+1386	+// this: a garbage kid's own reservation must not block a different real
+1387	+// kid's reservation in the same window.
+1388	+func TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal(t *testing.T) {
+1389	+	oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+1390	+	if err != nil {
+1391	+		t.Fatalf("generating key: %v", err)
+1392	+	}
+1393	+	newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+1394	+	if err != nil {
+1395	+		t.Fatalf("generating key: %v", err)
+1396	+	}
+1397	+
+1398	+	var serveNewKey atomic.Bool
+1399	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+1400	+		w.Header().Set("Content-Type", "application/json")
+1401	+		if serveNewKey.Load() {
+1402	+			_, _ = w.Write(jwksBody(t, "key-new", &amp;newKey.PublicKey))
+1403	+		} else {
+1404	+			_, _ = w.Write(jwksBody(t, "key-old", &amp;oldKey.PublicKey))
+1405	+		}
+1406	+	}))
+1407	+	defer srv.Close()
+1408	+
+1409	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+1410	+	ctx := context.Background()
+1411	+
+1412	+	if _, err := cache.KeyForKid(ctx, "key-old"); err != nil {
+1413	+		t.Fatalf("priming: %v", err)
+1414	+	}
+1415	+
+1416	+	// Attacker occupies the reservation for a garbage kid.
+1417	+	_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+1418	+	// Repeats it immediately — this must be denied (rate-limited), same
+1419	+	// as before the fix.
+1420	+	_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+1421	+
+1422	+	// The issuer rotates for real. A legitimate lookup for the new kid,
+1423	+	// in the SAME window the attacker's garbage kid already consumed,
+1424	+	// must still get its own reservation and succeed — not be starved by
+1425	+	// the attacker's unrelated kid.
+1426	+	serveNewKey.Store(true)
+1427	+	if _, err := cache.KeyForKid(ctx, "key-new"); err != nil {
+1428	+		t.Errorf("KeyForKid(key-new) = %v, want the real rotated key's own reservation to succeed regardless of an attacker's unrelated garbage-kid reservation", err)
+1429	+	}
+1430	+}
+1431	+
+1432	+// TestJWKSCache_UnknownKidReservationCapsDistinctKids is the other half
+1433	+// of Ingrid's ruling: rate-limiting is scoped per kid, not removed — a
+1434	+// flood of distinct fabricated kids must still be bounded, not each get
+1435	+// their own unconditional extra fetch.
+1436	+func TestJWKSCache_UnknownKidReservationCapsDistinctKids(t *testing.T) {
+1437	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+1438	+	if err != nil {
+1439	+		t.Fatalf("generating key: %v", err)
+1440	+	}
+1441	+	var requests atomic.Int32
+1442	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+1443	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+1444	+		requests.Add(1)
+1445	+		w.Header().Set("Content-Type", "application/json")
+1446	+		_, _ = w.Write(body)
+1447	+	}))
+1448	+	defer srv.Close()
+1449	+
+1450	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+1451	+	ctx := context.Background()
+1452	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+1453	+		t.Fatalf("priming: %v", err)
+1454	+	}
+1455	+	requestsAfterPriming := requests.Load()
+1456	+
+1457	+	// Flood with more distinct garbage kids than jwksMaxTrackedUnknownKids.
+1458	+	for i := 0; i &lt; jwksMaxTrackedUnknownKids+20; i++ {
+1459	+		_, _ = cache.KeyForKid(ctx, fmt.Sprintf("garbage-kid-%d", i))
+1460	+	}
+1461	+
+1462	+	extraFetches := requests.Load() - requestsAfterPriming
+1463	+	if int(extraFetches) &gt; jwksMaxTrackedUnknownKids {
+1464	+		t.Errorf("a flood of %d distinct garbage kids triggered %d extra fetches, want at most %d (the cap)", jwksMaxTrackedUnknownKids+20, extraFetches, jwksMaxTrackedUnknownKids)
+1465	+	}
+1466	+}
+1467	diff --git a/internal/api/jwtmiddleware.go b/internal/api/jwtmiddleware.go
+1468	new file mode 100644
+1469	index 0000000..5bf0871
+1470	--- /dev/null
+1471	+++ b/internal/api/jwtmiddleware.go
+1472	@@ -0,0 +1,243 @@
+1473	+// jwtmiddleware.go is LT-40's core: verify the client-credentials JWT
+1474	+// scheme from handoff-03-auth.md v3/v4 and populate AuthContext for
+1475	+// LT-39's already-built handlers. This is the actual integration seam
+1476	+// with S6's work, not new response-shape design — a verification failure
+1477	+// uses the exact same writeUnauthorized this package's handlers already
+1478	+// call for a missing AuthContext.
+1479	+package api
+1480	+
+1481	+import (
+1482	+	"context"
+1483	+	"errors"
+1484	+	"net/http"
+1485	+	"strings"
+1486	+	"time"
+1487	+
+1488	+	"github.com/golang-jwt/jwt/v5"
+1489	+)
+1490	+
+1491	+// jwtAlgorithm is the one signing algorithm this verifier ever accepts.
+1492	+// Passed explicitly to jwt.WithValidMethods on every parse — never left
+1493	+// to the library's default, per handoff-03-auth.md v3's explicit
+1494	+// instruction ("check your JWT library's default behavior — several
+1495	+// popular libraries have shipped this vulnerability by not doing this by
+1496	+// default") and RFC 8725 §3.1. This is what makes alg:none and an
+1497	+// HMAC-with-the-public-key-as-secret downgrade both fail before the
+1498	+// library ever calls KeySource — jwt/v5's WithValidMethods rejects a
+1499	+// token whose header alg isn't in this allowlist ahead of signature
+1500	+// verification, not as a secondary check after.
+1501	+const jwtAlgorithm = "RS256"
+1502	+
+1503	+// claims is this service's JWT claim set (handoff-03-auth.md v3's
+1504	+// minimum: sub, scope, exp, iat, aud, plus iss and kid via the header).
+1505	+// RegisteredClaims gives exp/iat/iss/aud validation for free from the
+1506	+// library — this verifier still explicitly re-checks Audience below
+1507	+// because jwt/v5's built-in audience check (via WithAudience) does not
+1508	+// distinguish "no aud claim at all" from "aud present but empty," and a
+1509	+// token with no audience claim must not silently pass as if it matched.
+1510	+type claims struct {
+1511	+	Scope string `json:"scope"`
+1512	+	jwt.RegisteredClaims
+1513	+}
+1514	+
+1515	+// jwtVerifier is the collaborator NewJWTMiddleware wraps — an interface
+1516	+// so a test can supply a fake instead of a real *JWKSCache doing network
+1517	+// I/O, mirroring this package's existing test-double approach
+1518	+// (decisions/test-double-strategy.md).
+1519	+type jwtVerifier struct {
+1520	+	keys     KeySource
+1521	+	issuer   string
+1522	+	audience string
+1523	+}
+1524	+
+1525	+// verify parses and fully validates tokenString, returning the populated
+1526	+// AuthContext on success. Every failure returns a generic error — the
+1527	+// specific reason (expired, wrong audience, bad signature, unknown kid,
+1528	+// disallowed algorithm) is never distinguishable to the caller of this
+1529	+// function beyond "verification failed," which is what makes
+1530	+// writeUnauthorized's single, undifferentiated 401 body correct here
+1531	+// without an extra translation step.
+1532	+func (v *jwtVerifier) verify(ctx context.Context, tokenString string) (AuthContext, error) {
+1533	+	var c claims
+1534	+	token, err := jwt.ParseWithClaims(tokenString, &amp;c, func(t *jwt.Token) (any, error) {
+1535	+		kid, _ := t.Header["kid"].(string)
+1536	+		if kid == "" {
+1537	+			return nil, errors.New("token header has no kid")
+1538	+		}
+1539	+		return v.keys.KeyForKid(ctx, kid)
+1540	+	}, jwt.WithValidMethods([]string{jwtAlgorithm}), jwt.WithIssuer(v.issuer))
+1541	+	if err != nil {
+1542	+		return AuthContext{}, err
+1543	+	}
+1544	+	if !token.Valid {
+1545	+		return AuthContext{}, errors.New("token invalid")
+1546	+	}
+1547	+
+1548	+	// Audience checked explicitly, not via jwt.WithAudience above: v5's
+1549	+	// audience option treats an all-nil/absent Audience claim
+1550	+	// inconsistently across versions in a way we don't want to depend
+1551	+	// on — asserting it here directly means this check's behavior is
+1552	+	// this file's own to guarantee, not the library's default to trust.
+1553	+	if !hasAudience(c.Audience, v.audience) {
+1554	+		return AuthContext{}, errors.New("token audience mismatch")
+1555	+	}
+1556	+
+1557	+	if c.Subject == "" {
+1558	+		return AuthContext{}, errors.New("token has no sub claim")
+1559	+	}
+1560	+
+1561	+	scope, err := singleScope(c.Scope)
+1562	+	if err != nil {
+1563	+		return AuthContext{}, err
+1564	+	}
+1565	+
+1566	+	return AuthContext{Sub: c.Subject, Scope: scope}, nil
+1567	+}
+1568	+
+1569	+func hasAudience(aud jwt.ClaimStrings, want string) bool {
+1570	+	for _, a := range aud {
+1571	+		if a == want {
+1572	+			return true
+1573	+		}
+1574	+	}
+1575	+	return false
+1576	+}
+1577	+
+1578	+// singleScope requires the token's scope claim to name exactly one
+1579	+// distinct recognized scope. handoff-03-auth.md v3 describes the claim
+1580	+// as "space-delimited, values below" without describing how a handler
+1581	+// disambiguates a multi-scope token per request, and AuthContext (LT-39)
+1582	+// carries exactly one Scope by design ("handoff-03-auth.md v3 doesn't
+1583	+// describe multi-scope tokens being disambiguated per-request, so one
+1584	+// request carries exactly one Scope"). Rather than guess which of
+1585	+// several granted scopes a request is "really" using — silently picking
+1586	+// one is exactly the kind of authorization ambiguity this project's
+1587	+// contracts have consistently ruled against — a to
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:56 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/tool-results/bcbn66mob.txt",
+  "offset": 1845,
+  "limit": 757
+}</pre><div class="lbl">result</div><pre>1845	+}
+1846	+
+1847	+func TestJWTMiddleware_ValidTokenPopulatesAuthContext(t *testing.T) {
+1848	+	key := generateRSAKeyPair(t)
+1849	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1850	+	tok := signToken(t, key, defaultOpts("key-1"))
+1851	+
+1852	+	w, ac := doRequest(mw, tok)
+1853	+	if w.Code != http.StatusOK {
+1854	+		t.Fatalf("status = %d, want 200", w.Code)
+1855	+	}
+1856	+	if ac.Sub != "client-under-test" || ac.Scope != ScopeSearch {
+1857	+		t.Errorf("AuthContext = %+v, want Sub=client-under-test Scope=profile:search", ac)
+1858	+	}
+1859	+}
+1860	+
+1861	+func TestJWTMiddleware_MissingToken_401(t *testing.T) {
+1862	+	key := generateRSAKeyPair(t)
+1863	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1864	+	w, _ := doRequest(mw, "")
+1865	+	if w.Code != http.StatusUnauthorized {
+1866	+		t.Errorf("status = %d, want 401", w.Code)
+1867	+	}
+1868	+}
+1869	+
+1870	+func TestJWTMiddleware_ExpiredToken_401(t *testing.T) {
+1871	+	key := generateRSAKeyPair(t)
+1872	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1873	+	opts := defaultOpts("key-1")
+1874	+	opts.expired = true
+1875	+	tok := signToken(t, key, opts)
+1876	+
+1877	+	w, _ := doRequest(mw, tok)
+1878	+	if w.Code != http.StatusUnauthorized {
+1879	+		t.Errorf("status = %d, want 401 for an expired token", w.Code)
+1880	+	}
+1881	+}
+1882	+
+1883	+func TestJWTMiddleware_WrongAudience_401(t *testing.T) {
+1884	+	key := generateRSAKeyPair(t)
+1885	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1886	+	opts := defaultOpts("key-1")
+1887	+	opts.audience = "some-other-service"
+1888	+	tok := signToken(t, key, opts)
+1889	+
+1890	+	w, _ := doRequest(mw, tok)
+1891	+	if w.Code != http.StatusUnauthorized {
+1892	+		t.Errorf("status = %d, want 401 for a mismatched audience", w.Code)
+1893	+	}
+1894	+}
+1895	+
+1896	+func TestJWTMiddleware_WrongIssuer_401(t *testing.T) {
+1897	+	key := generateRSAKeyPair(t)
+1898	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1899	+	opts := defaultOpts("key-1")
+1900	+	opts.issuer = "https://not-the-real-issuer.example"
+1901	+	tok := signToken(t, key, opts)
+1902	+
+1903	+	w, _ := doRequest(mw, tok)
+1904	+	if w.Code != http.StatusUnauthorized {
+1905	+		t.Errorf("status = %d, want 401 for a mismatched issuer", w.Code)
+1906	+	}
+1907	+}
+1908	+
+1909	+// TestJWTMiddleware_AlgNone_401 is RFC 8725 §3.1's classic attack: a
+1910	+// token whose header claims alg:none, carrying no signature at all. The
+1911	+// algorithm-allowlist passed to jwt.ParseWithClaims must reject this
+1912	+// before ever reaching the keyfunc/signature-verification step.
+1913	+func TestJWTMiddleware_AlgNone_401(t *testing.T) {
+1914	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{})
+1915	+
+1916	+	unsignedClaims := claims{
+1917	+		Scope: string(ScopeSearch),
+1918	+		RegisteredClaims: jwt.RegisteredClaims{
+1919	+			Issuer:    testIssuer,
+1920	+			Subject:   "attacker",
+1921	+			Audience:  jwt.ClaimStrings{testAudience},
+1922	+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+1923	+		},
+1924	+	}
+1925	+	tok := jwt.NewWithClaims(jwt.SigningMethodNone, unsignedClaims)
+1926	+	signed, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+1927	+	if err != nil {
+1928	+		t.Fatalf("constructing alg:none token: %v", err)
+1929	+	}
+1930	+
+1931	+	w, _ := doRequest(mw, signed)
+1932	+	if w.Code != http.StatusUnauthorized {
+1933	+		t.Errorf("status = %d, want 401 for an alg:none token", w.Code)
+1934	+	}
+1935	+}
+1936	+
+1937	+// TestJWTMiddleware_HMACConfusionWithPublicKeyAsSecret_401 is RFC 8725
+1938	+// §3.1's other classic attack: an attacker who knows the RSA public key
+1939	+// (public by definition — it's published as JWKS) signs a token with
+1940	+// HS256 using the PEM-encoded public key bytes as the HMAC secret. A
+1941	+// verifier that blindly uses whatever alg the token header claims, and
+1942	+// hands the "key" returned by its keyfunc to that algorithm's verifier,
+1943	+// gets fooled: HS256 with the public key as the secret "verifies"
+1944	+// successfully against a keyfunc that returns the RSA public key
+1945	+// unconditionally. The algorithm allowlist must reject this the same way
+1946	+// it rejects alg:none.
+1947	+func TestJWTMiddleware_HMACConfusionWithPublicKeyAsSecret_401(t *testing.T) {
+1948	+	key := generateRSAKeyPair(t)
+1949	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+1950	+
+1951	+	pubDER := x509.MarshalPKCS1PublicKey(&amp;key.PublicKey)
+1952	+
+1953	+	forged := claims{
+1954	+		Scope: string(ScopeSearch),
+1955	+		RegisteredClaims: jwt.RegisteredClaims{
+1956	+			Issuer:    testIssuer,
+1957	+			Subject:   "attacker",
+1958	+			Audience:  jwt.ClaimStrings{testAudience},
+1959	+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(10 * time.Minute)),
+1960	+		},
+1961	+	}
+1962	+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, forged)
+1963	+	tok.Header["kid"] = "key-1"
+1964	+	signed, err := tok.SignedString(pubDER)
+1965	+	if err != nil {
+1966	+		t.Fatalf("signing HMAC-confusion token: %v", err)
+1967	+	}
+1968	+
+1969	+	w, _ := doRequest(mw, signed)
+1970	+	if w.Code != http.StatusUnauthorized {
+1971	+		t.Errorf("status = %d, want 401 for an HS256-with-public-key-as-secret forged token", w.Code)
+1972	+	}
+1973	+}
+1974	+
+1975	+// TestJWTMiddleware_KidRotation_BothKeysVerify is the acceptance
+1976	+// criterion for key rotation: two tokens signed under two different kids
+1977	+// both verify successfully when both keys are configured, supporting a
+1978	+// rotation overlap window.
+1979	+func TestJWTMiddleware_KidRotation_BothKeysVerify(t *testing.T) {
+1980	+	oldKey := generateRSAKeyPair(t)
+1981	+	newKey := generateRSAKeyPair(t)
+1982	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{
+1983	+		"key-old": &amp;oldKey.PublicKey,
+1984	+		"key-new": &amp;newKey.PublicKey,
+1985	+	})
+1986	+
+1987	+	oldTok := signToken(t, oldKey, defaultOpts("key-old"))
+1988	+	newTok := signToken(t, newKey, defaultOpts("key-new"))
+1989	+
+1990	+	if w, _ := doRequest(mw, oldTok); w.Code != http.StatusOK {
+1991	+		t.Errorf("old-kid token status = %d, want 200 during rotation overlap", w.Code)
+1992	+	}
+1993	+	if w, _ := doRequest(mw, newTok); w.Code != http.StatusOK {
+1994	+		t.Errorf("new-kid token status = %d, want 200 during rotation overlap", w.Code)
+1995	+	}
+1996	+}
+1997	+
+1998	+func TestJWTMiddleware_UnknownKid_401(t *testing.T) {
+1999	+	key := generateRSAKeyPair(t)
+2000	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+2001	+	tok := signToken(t, key, defaultOpts("key-does-not-exist"))
+2002	+
+2003	+	w, _ := doRequest(mw, tok)
+2004	+	if w.Code != http.StatusUnauthorized {
+2005	+		t.Errorf("status = %d, want 401 for an unrecognized kid", w.Code)
+2006	+	}
+2007	+}
+2008	+
+2009	+func TestJWTMiddleware_WrongKeyForKid_401(t *testing.T) {
+2010	+	signingKey := generateRSAKeyPair(t)
+2011	+	otherKey := generateRSAKeyPair(t)
+2012	+	// The keyfunc returns otherKey's public key for "key-1" — simulating
+2013	+	// a mismatched/corrupted JWKS entry. Signature verification must fail.
+2014	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;otherKey.PublicKey})
+2015	+	tok := signToken(t, signingKey, defaultOpts("key-1"))
+2016	+
+2017	+	w, _ := doRequest(mw, tok)
+2018	+	if w.Code != http.StatusUnauthorized {
+2019	+		t.Errorf("status = %d, want 401 when the signature doesn't verify against the returned key", w.Code)
+2020	+	}
+2021	+}
+2022	+
+2023	+func TestJWTMiddleware_NoScopeClaim_401(t *testing.T) {
+2024	+	key := generateRSAKeyPair(t)
+2025	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+2026	+	opts := defaultOpts("key-1")
+2027	+	opts.scope = ""
+2028	+	tok := signToken(t, key, opts)
+2029	+
+2030	+	w, _ := doRequest(mw, tok)
+2031	+	if w.Code != http.StatusUnauthorized {
+2032	+		t.Errorf("status = %d, want 401 for a token with no recognized scope", w.Code)
+2033	+	}
+2034	+}
+2035	+
+2036	+func TestJWTMiddleware_MultipleScopes_401(t *testing.T) {
+2037	+	key := generateRSAKeyPair(t)
+2038	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+2039	+	opts := defaultOpts("key-1")
+2040	+	opts.scope = string(ScopeSearch) + " " + string(ScopeReadOwn)
+2041	+	tok := signToken(t, key, opts)
+2042	+
+2043	+	w, _ := doRequest(mw, tok)
+2044	+	if w.Code != http.StatusUnauthorized {
+2045	+		t.Errorf("status = %d, want 401 — this verifier does not disambiguate a multi-scope token per request", w.Code)
+2046	+	}
+2047	+}
+2048	+
+2049	+func TestJWTMiddleware_NoSubClaim_401(t *testing.T) {
+2050	+	key := generateRSAKeyPair(t)
+2051	+	mw := newTestMiddleware(map[string]*rsa.PublicKey{"key-1": &amp;key.PublicKey})
+2052	+	opts := defaultOpts("key-1")
+2053	+	opts.subject = ""
+2054	+	tok := signToken(t, key, opts)
+2055	+
+2056	+	w, _ := doRequest(mw, tok)
+2057	+	if w.Code != http.StatusUnauthorized {
+2058	+		t.Errorf("status = %d, want 401 for a token with no sub claim", w.Code)
+2059	+	}
+2060	+}
+2061	+
+2062	+func TestDeadlineMiddleware_AppliesDeadline(t *testing.T) {
+2063	+	var sawDeadline bool
+2064	+	h := NewDeadlineMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+2065	+		_, sawDeadline = r.Context().Deadline()
+2066	+		w.WriteHeader(http.StatusOK)
+2067	+	}))
+2068	+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+2069	+	w := httptest.NewRecorder()
+2070	+	h.ServeHTTP(w, req)
+2071	+	if !sawDeadline {
+2072	+		t.Error("request context should carry a deadline after NewDeadlineMiddleware")
+2073	+	}
+2074	+}
+2075	diff --git a/internal/api/stopgap_authorizer.go b/internal/api/stopgap_authorizer.go
+2076	new file mode 100644
+2077	index 0000000..a63c3fc
+2078	--- /dev/null
+2079	+++ b/internal/api/stopgap_authorizer.go
+2080	@@ -0,0 +1,53 @@
+2081	+package api
+2082	+
+2083	+import "context"
+2084	+
+2085	+// StopgapAuthorizer is a TEMPORARY, default-deny Authorizer stand-in —
+2086	+// NOT the real caller_referral-backed policy engine (handoff-03-auth.md
+2087	+// v3's F8 resolution names that as a later story's own datastore work).
+2088	+//
+2089	+// Ruled by Marcus Ilori (02), in response to a direct question before
+2090	+// this was wired to a live public URL: "A permissive allow-all
+2091	+// Authorizer must never be deployed to a live public URL on a shared
+2092	+// production cluster, 'temporary' or not — that's the exact failure this
+2093	+// design exists to prevent, and it's a public repo, so being
+2094	+// permissive-even-briefly is a permanent public fact." Ruling: default-
+2095	+// deny, in-memory, hard-coded with a small fixed (sub, allowed record id)
+2096	+// map for the seeded QA client credential (LT-51) — enough to
+2097	+// demonstrate both the allow and deny paths of read:own's referral check
+2098	+// in the live review, without ever allowing an arbitrary caller through.
+2099	+//
+2100	+// This only affects ScopeReadOwn's referral-membership check.
+2101	+// ScopeReadAny's authorization is "has a valid reason_code," already
+2102	+// checked in the handler before Authorize() is ever called; ScopeSearch
+2103	+// has no per-record target for this Authorizer to gate at all. Both
+2104	+// return true unconditionally here — there is no real caller_referral
+2105	+// data this stopgap could consult for a real decision on those scopes
+2106	+// either way, so denying them would not be more correct, only
+2107	+// differently placeholder.
+2108	+//
+2109	+// A follow-up story replacing this with the real datastore-backed
+2110	+// implementation must exist before this is considered load-bearing
+2111	+// beyond the live-URL review — flag to the PM if it doesn't.
+2112	+type StopgapAuthorizer struct {
+2113	+	// ReadOwnAllow maps a caller sub to the set of record ids that sub
+2114	+	// may read under ScopeReadOwn — the hard-coded "referral" set this
+2115	+	// stopgap stands in for. Empty/nil means the map denies everything,
+2116	+	// which is the safe default for any sub not explicitly seeded here.
+2117	+	ReadOwnAllow map[string]map[string]bool
+2118	+}
+2119	+
+2120	+func (a *StopgapAuthorizer) Authorize(_ context.Context, sub string, scope Scope, target string) (bool, error) {
+2121	+	switch scope {
+2122	+	case ScopeReadOwn:
+2123	+		allowed, ok := a.ReadOwnAllow[sub]
+2124	+		if !ok {
+2125	+			return false, nil
+2126	+		}
+2127	+		return allowed[target], nil
+2128	+	case ScopeReadAny, ScopeSearch:
+2129	+		return true, nil
+2130	+	default:
+2131	+		return false, nil
+2132	+	}
+2133	+}
+2134	diff --git a/internal/api/stopgap_authorizer_test.go b/internal/api/stopgap_authorizer_test.go
+2135	new file mode 100644
+2136	index 0000000..b6569c3
+2137	--- /dev/null
+2138	+++ b/internal/api/stopgap_authorizer_test.go
+2139	@@ -0,0 +1,70 @@
+2140	+package api
+2141	+
+2142	+import (
+2143	+	"context"
+2144	+	"testing"
+2145	+)
+2146	+
+2147	+// TestStopgapAuthorizer_ReadOwn_AllowedAndDenied is Marcus Ilori's (02)
+2148	+// ruling on the review finding that this stand-in's deny path had no
+2149	+// test coverage: exercise both the allow and deny outcomes for
+2150	+// ScopeReadOwn, the only scope this stopgap actually gates.
+2151	+func TestStopgapAuthorizer_ReadOwn_AllowedAndDenied(t *testing.T) {
+2152	+	a := &amp;StopgapAuthorizer{
+2153	+		ReadOwnAllow: map[string]map[string]bool{
+2154	+			"qa-client": {"profile-1": true},
+2155	+		},
+2156	+	}
+2157	+	ctx := context.Background()
+2158	+
+2159	+	allowed, err := a.Authorize(ctx, "qa-client", ScopeReadOwn, "profile-1")
+2160	+	if err != nil {
+2161	+		t.Fatalf("Authorize: %v", err)
+2162	+	}
+2163	+	if !allowed {
+2164	+		t.Error("qa-client reading its seeded profile-1 should be allowed")
+2165	+	}
+2166	+
+2167	+	denied, err := a.Authorize(ctx, "qa-client", ScopeReadOwn, "profile-2")
+2168	+	if err != nil {
+2169	+		t.Fatalf("Authorize: %v", err)
+2170	+	}
+2171	+	if denied {
+2172	+		t.Error("qa-client reading a profile it was not seeded with should be denied")
+2173	+	}
+2174	+
+2175	+	deniedSub, err := a.Authorize(ctx, "some-other-client", ScopeReadOwn, "profile-1")
+2176	+	if err != nil {
+2177	+		t.Fatalf("Authorize: %v", err)
+2178	+	}
+2179	+	if deniedSub {
+2180	+		t.Error("a sub with no seeded entry at all should be denied, the safe default")
+2181	+	}
+2182	+}
+2183	+
+2184	+// TestStopgapAuthorizer_EmptyMapDeniesEverything is the safe-default
+2185	+// requirement itself: a StopgapAuthorizer constructed with no seed data
+2186	+// (the out-of-the-box state before LT-51 seeds a QA client credential)
+2187	+// must deny every ScopeReadOwn request, never fail open.
+2188	+func TestStopgapAuthorizer_EmptyMapDeniesEverything(t *testing.T) {
+2189	+	a := &amp;StopgapAuthorizer{}
+2190	+	allowed, err := a.Authorize(context.Background(), "anyone", ScopeReadOwn, "anything")
+2191	+	if err != nil {
+2192	+		t.Fatalf("Authorize: %v", err)
+2193	+	}
+2194	+	if allowed {
+2195	+		t.Error("an unseeded StopgapAuthorizer must deny every read:own request, not fail open")
+2196	+	}
+2197	+}
+2198	+
+2199	+func TestStopgapAuthorizer_ReadAnyAndSearch_AlwaysAllowed(t *testing.T) {
+2200	+	a := &amp;StopgapAuthorizer{}
+2201	+	ctx := context.Background()
+2202	+
+2203	+	if allowed, _ := a.Authorize(ctx, "anyone", ScopeReadAny, "anything"); !allowed {
+2204	+		t.Error("read:any has no per-record referral concept this stopgap gates — should not be denied here")
+2205	+	}
+2206	+	if allowed, _ := a.Authorize(ctx, "anyone", ScopeSearch, ""); !allowed {
+2207	+		t.Error("search has no per-record target this stopgap gates — should not be denied here")
+2208	+	}
+2209	+}
+2210	diff --git a/internal/app/verifier_router.go b/internal/app/verifier_router.go
+2211	new file mode 100644
+2212	index 0000000..2d890bd
+2213	--- /dev/null
+2214	+++ b/internal/app/verifier_router.go
+2215	@@ -0,0 +1,90 @@
+2216	+package app
+2217	+
+2218	+import (
+2219	+	"net/http"
+2220	+	"time"
+2221	+
+2222	+	"loginid-takehome/internal/api"
+2223	+	"loginid-takehome/internal/config"
+2224	+	"loginid-takehome/internal/dao"
+2225	+)
+2226	+
+2227	+// jwksCacheTTL matches the token TTL per handoff-03-auth.md v4's own
+2228	+// guidance ("Verifier caches the fetched key set in memory with a short
+2229	+// TTL (matching token TTL is reasonable)") — using the upper bound of the
+2230	+// 5-15 minute TTL range so a cache refresh never fires more often than a
+2231	+// token itself could have already expired and been re-issued.
+2232	+const jwksCacheTTL = 15 * time.Minute
+2233	+
+2234	+// NewVerifierRouter builds api-service's real, authenticated router —
+2235	+// LT-39's handlers (search/retrieve) wired behind LT-40's JWT
+2236	+// verification middleware, plus /healthz. This is the ModeVerifier
+2237	+// Deployment's router; the issuer Deployment (ModeIssuer) still uses the
+2238	+// plain NewRouter above, since it has no need for any of this — it never
+2239	+// verifies inbound tokens, only issues them.
+2240	+//
+2241	+// repo may be nil — cmd/api-service/main.go passes nil rather than
+2242	+// crash-looping the whole process when the DAO repository couldn't be
+2243	+// constructed at startup (no DB_DRIVER/DB_DSN yet, e.g. before the
+2244	+// database exists in this environment). /healthz must stay reachable
+2245	+// regardless (LT-34's live-URL story; LT-52 is what teaches /healthz to
+2246	+// actually report DB status, not this function); the two protected
+2247	+// routes fail closed with 503 instead of panicking on a nil Repository
+2248	+// or silently pretending to work. This is a startup-shape decision, not
+2249	+// an ongoing health check — a repo that stops answering after a
+2250	+// successful open is /healthz's job to surface (LT-52), not this
+2251	+// router's.
+2252	+func NewVerifierRouter(cfg config.Config, repo dao.Repository) http.Handler {
+2253	+	mux := http.NewServeMux()
+2254	+	mux.HandleFunc("/healthz", healthHandler("api-service"))
+2255	+
+2256	+	auditLog := api.StdoutAuditLogger{}
+2257	+	keys := api.NewJWKSCache(cfg.AuthJWKSURL, jwksCacheTTL, nil)
+2258	+	authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.AuthJWTAudience, auditLog)
+2259	+
+2260	+	// api.NewDeadlineMiddleware outermost: the deadline budget must cover
+2261	+	// JWT verification (including a JWKS cache-miss fetch) as well as
+2262	+	// the handler's own DAO call, per decisions/context-propagation.md's
+2263	+	// ruling — a single deadline, not the middleware's and the handler's
+2264	+	// own disagreeing.
+2265	+	protect := func(h http.Handler) http.Handler {
+2266	+		return api.NewDeadlineMiddleware(authMiddleware(h))
+2267	+	}
+2268	+
+2269	+	var searchHandler, getHandler http.Handler
+2270	+	if repo == nil {
+2271	+		searchHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.WriteServiceUnavailable(w) })
+2272	+		getHandler = searchHandler
+2273	+	} else {
+2274	+		deps := api.Deps{
+2275	+			Repo:        repo,
+2276	+			RateLimiter: api.NewInProcessRateLimiter(),
+2277	+			TouchCounter: api.NewInProcessTouchCounter(
+2278	+				api.TouchCapPerWindow, api.TouchCapWindow),
+2279	+			AuditLog: auditLog,
+2280	+			Authz: &amp;api.StopgapAuthorizer{
+2281	+				ReadOwnAllow: stopgapReadOwnAllow(cfg),
+2282	+			},
+2283	+		}
+2284	+		searchHandler = api.NewSearchHandler(deps)
+2285	+		getHandler = api.NewGetProfileHandler(deps)
+2286	+	}
+2287	+
+2288	+	mux.Handle("POST /profiles/search", protect(searchHandler))
+2289	+	mux.Handle("GET /profiles/{id}", protect(getHandler))
+2290	+
+2291	+	return mux
+2292	+}
+2293	+
+2294	+// stopgapReadOwnAllow builds StopgapAuthorizer's hard-coded (sub -&gt;
+2295	+// allowed record id) map from cfg — empty (denies everything) unless
+2296	+// both AuthzQASub and AuthzQAAllowedProfileID are set, which LT-51 does
+2297	+// once the QA client credential and a matching seeded profile exist.
+2298	+func stopgapReadOwnAllow(cfg config.Config) map[string]map[string]bool {
+2299	+	if cfg.AuthzQASub == "" || cfg.AuthzQAAllowedProfileID == "" {
+2300	+		return nil
+2301	+	}
+2302	+	return map[string]map[string]bool{
+2303	+		cfg.AuthzQASub: {cfg.AuthzQAAllowedProfileID: true},
+2304	+	}
+2305	+}
+2306	diff --git a/internal/app/verifier_router_test.go b/internal/app/verifier_router_test.go
+2307	new file mode 100644
+2308	index 0000000..03be748
+2309	--- /de
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:57 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> gh api repos/wtvamp/loginid-takehome/commits/a615dfa --jq '.files[].filename' 2&gt;&amp;1 | head -50</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh api repos/wtvamp/loginid-takehome/commits/a615dfa --jq '.files[].filename' 2&gt;&amp;1 | head -50"
+}</pre><div class="lbl">result</div><pre>internal/api/jwks.go
+internal/api/jwks_test.go</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:57 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Good — commit a615dfa touches only `internal/api/jwks.go` and `internal/api/jwks_test.go`, confirming both fixes are scoped exactly where expected. Let me pull the exact commit-level diff to check nothing else moved.</div><details><summary><span class="tn">Bash</span> gh api repos/wtvamp/loginid-takehome/commits/a615dfa --jq '.files[] | .filename + "\n" + .patch' &gt; /</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh api repos/wtvamp/loginid-takehome/commits/a615dfa --jq '.files[] | .filename + \"\\n\" + .patch' &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/a615dfa.patch 2&gt;&amp;1\nwc -l /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/a615dfa.patch"
+}</pre><div class="lbl">result</div><pre>     407 /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/a615dfa.patch</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:57 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706e</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/a615dfa.patch"
+}</pre><div class="lbl">result</div><pre>1	internal/api/jwks.go
+2	@@ -118,6 +118,28 @@ var ErrJWKSStale = errors.New("api: JWKS cache exceeded max staleness and could
+3	 const (
+4	 	jwksMaxStalenessMultiple      = 3
+5	 	jwksUnknownKidRefetchInterval = 30 * time.Second
+6	+
+7	+	// jwksMinRefreshRetryInterval floors how often a TTL-expired cache
+8	+	// with a just-failed refresh will attempt another real network
+9	+	// fetch. Without this, every single request during a sustained
+10	+	// issuer outage triggers its own fetch attempt for as long as the
+11	+	// outage lasts (up to maxStaleness) — the same "don't hammer a
+12	+	// struggling dependency" reasoning already applied to the
+13	+	// unknown-kid path, missing from the ordinary refresh path (Oren
+14	+	// Castellan, PR #30 re-review). Short relative to ttl/maxStaleness:
+15	+	// this only throttles retries during an active failure, it must not
+16	+	// delay picking up a healthy issuer again once it recovers.
+17	+	jwksMinRefreshRetryInterval = 5 * time.Second
+18	+
+19	+	// jwksMaxTrackedUnknownKids bounds how many distinct kids can hold an
+20	+	// outstanding unknown-kid retry reservation at once. Without this,
+21	+	// keying the reservation per-kid (see reserveUnknownKidRetry) reopens
+22	+	// its own version of the same map-growth concern a flood of DISTINCT
+23	+	// garbage kids would create: capped here, so an attacker sending many
+24	+	// different fabricated kids can force at most this many extra
+25	+	// fetches per jwksUnknownKidRefetchInterval, not one per distinct
+26	+	// value they bother to send.
+27	+	jwksMaxTrackedUnknownKids = 64
+28	 )
+29	 
+30	 // JWKSCache fetches a JWKS document from url and caches the parsed key
+31	@@ -137,9 +159,10 @@ type JWKSCache struct {
+32	 	mu                  sync.Mutex
+33	 	keys                map[string]*rsa.PublicKey
+34	 	fetchedAt           time.Time // last SUCCESSFUL fetch
+35	+	lastAttempt         time.Time // last fetch ATTEMPT, success or failure
+36	 	consecutiveFailures int
+37	 	staleAlerted        bool
+38	-	lastUnknownKidRetry time.Time
+39	+	unknownKidRetryAt   map[string]time.Time // per-kid, not global — see reserveUnknownKidRetry
+40	 }
+41	 
+42	 // defaultJWKSClientTimeout backstops a hung fetch (a connection that
+43	@@ -184,10 +207,20 @@ func NewJWKSCache(url string, ttl time.Duration, httpClient *http.Client) *JWKSC
+44	 func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+45	 	c.mu.Lock()
+46	 	needsRefresh := c.keys == nil || c.now().Sub(c.fetchedAt) &gt;= c.ttl
+47	+	canAttempt := c.now().Sub(c.lastAttempt) &gt;= jwksMinRefreshRetryInterval
+48	 	c.mu.Unlock()
+49	 
+50	 	if needsRefresh {
+51	-		if err := c.refresh(ctx); err != nil {
+52	+		if canAttempt {
+53	+			if err := c.refresh(ctx); err != nil {
+54	+				return nil, err
+55	+			}
+56	+		} else if err := c.enforceStaleness(); err != nil {
+57	+			// Backing off from a very recent failed attempt (see
+58	+			// jwksMinRefreshRetryInterval) — no new network call this
+59	+			// time, but the staleness ceiling must still be enforced
+60	+			// against the existing cache regardless of whether this
+61	+			// particular call was the one that tried to refresh it.
+62	 			return nil, err
+63	 		}
+64	 	}
+65	@@ -204,7 +237,7 @@ func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey,
+66	 	// the retry populated the kid we're actually looking for, and a
+67	 	// refresh() failure here has already been handled (logged / staleness
+68	 	// tracked) inside refresh() itself.
+69	-	if c.reserveUnknownKidRetry() {
+70	+	if c.reserveUnknownKidRetry(kid) {
+71	 		_ = c.refresh(ctx)
+72	 		if key, ok := c.lookupKey(kid); ok {
+73	 			return key, nil
+74	@@ -222,16 +255,47 @@ func (c *JWKSCache) lookupKey(kid string) (*rsa.PublicKey, bool) {
+75	 }
+76	 
+77	 // reserveUnknownKidRetry reports whether an unknown-kid-triggered refetch
+78	-// may proceed now, and if so atomically marks one as just having started
+79	-// — a caller enumerating unknown kids can trigger at most one extra
+80	-// fetch per jwksUnknownKidRefetchInterval, not one per request.
+81	-func (c *JWKSCache) reserveUnknownKidRetry() bool {
+82	+// may proceed now for THIS specific kid, and if so atomically marks one
+83	+// as just having started. Keyed per kid, not by one global timestamp
+84	+// (Ingrid Solano, 02 cold re-check): KeyForKid runs before signature
+85	+// verification, so an unauthenticated caller can send a token with a
+86	+// fabricated kid at no cost — a single global gate lets that caller
+87	+// permanently occupy the one reservation slot by repeating it every
+88	+// jwksUnknownKidRefetchInterval, pushing a legitimately-rotated real
+89	+// key's own refetch back to the full calendar-TTL rollover, silently
+90	+// recreating most of the original gap this mechanism exists to close.
+91	+// Per-kid closes that: a garbage kid's repeated reservation never blocks
+92	+// a DIFFERENT (real) kid's own reservation. jwksMaxTrackedUnknownKids
+93	+// caps how many distinct kids can hold a reservation at once, so a flood
+94	+// of distinct fabricated kids still can't hammer the issuer past that
+95	+// bound — rate-limiting is scoped per-kid, not removed.
+96	+func (c *JWKSCache) reserveUnknownKidRetry(kid string) bool {
+97	 	c.mu.Lock()
+98	 	defer c.mu.Unlock()
+99	-	if c.now().Sub(c.lastUnknownKidRetry) &lt; jwksUnknownKidRefetchInterval {
+100	+
+101	+	if c.unknownKidRetryAt == nil {
+102	+		c.unknownKidRetryAt = make(map[string]time.Time)
+103	+	}
+104	+	if last, ok := c.unknownKidRetryAt[kid]; ok &amp;&amp; c.now().Sub(last) &lt; jwksUnknownKidRefetchInterval {
+105	 		return false
+106	 	}
+107	-	c.lastUnknownKidRetry = c.now()
+108	+
+109	+	// Sweep expired entries before checking the size cap, so a kid
+110	+	// that's aged out of its own window doesn't count against another
+111	+	// kid's chance to reserve.
+112	+	for k, t := range c.unknownKidRetryAt {
+113	+		if c.now().Sub(t) &gt;= jwksUnknownKidRefetchInterval {
+114	+			delete(c.unknownKidRetryAt, k)
+115	+		}
+116	+	}
+117	+	if len(c.unknownKidRetryAt) &gt;= jwksMaxTrackedUnknownKids {
+118	+		// At capacity with distinct in-flight-window kids — deny this
+119	+		// one rather than let the map grow further. The ordinary
+120	+		// TTL-driven refresh still eventually picks up a real rotated
+121	+		// key regardless of this outcome.
+122	+		return false
+123	+	}
+124	+	c.unknownKidRetryAt[kid] = c.now()
+125	 	return true
+126	 }
+127	 
+128	@@ -245,25 +309,44 @@ func (c *JWKSCache) reserveUnknownKidRetry() bool {
+129	 // the stale cache is still good enough to use, per the resilience this
+130	 // mechanism exists for.
+131	 func (c *JWKSCache) refresh(ctx context.Context) error {
+132	+	c.mu.Lock()
+133	+	c.lastAttempt = c.now()
+134	+	c.mu.Unlock()
+135	+
+136	 	fresh, err := c.fetch(ctx)
+137	 
+138	 	c.mu.Lock()
+139	-	defer c.mu.Unlock()
+140	-
+141	 	if err == nil {
+142	 		c.keys = fresh
+143	 		c.fetchedAt = c.now()
+144	 		c.consecutiveFailures = 0
+145	 		c.staleAlerted = false
+146	+		c.mu.Unlock()
+147	 		return nil
+148	 	}
+149	-
+150	 	c.consecutiveFailures++
+151	+	noCache := c.keys == nil
+152	+	c.mu.Unlock()
+153	 
+154	-	if c.keys == nil {
+155	+	if noCache {
+156	 		return err
+157	 	}
+158	+	return c.enforceStaleness()
+159	+}
+160	 
+161	+// enforceStaleness checks the existing cache against maxStaleness and
+162	+// fails closed (ErrJWKSStale) if it's been exceeded — factored out of
+163	+// refresh() so the same check applies on a call that skips an actual
+164	+// network attempt because jwksMinRefreshRetryInterval hasn't elapsed yet
+165	+// (Oren Castellan, PR #30 re-review: without this, backing off from
+166	+// hammering a struggling issuer would also silently suspend the
+167	+// staleness ceiling for however long the backoff lasts).
+168	+func (c *JWKSCache) enforceStaleness() error {
+169	+	c.mu.Lock()
+170	+	defer c.mu.Unlock()
+171	+	if c.keys == nil {
+172	+		return errors.New("api: JWKS cache not yet populated")
+173	+	}
+174	 	staleSince := c.now().Sub(c.fetchedAt)
+175	 	if staleSince &gt; c.maxStaleness {
+176	 		if !c.staleAlerted {
+177	@@ -272,10 +355,10 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
+178	 			// fetch-failure run — not a policy decision (AuditLogger is
+179	 			// for those), an operational signal that this process's own
+180	 			// key infrastructure is degraded.
+181	-			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed: %v",
+182	-				staleSince, c.consecutiveFailures, c.maxStaleness, err)
+183	+			log.Printf("api: JWKS unrefreshable for %s across %d consecutive failures (exceeds max staleness %s) — failing closed",
+184	+				staleSince, c.consecutiveFailures, c.maxStaleness)
+185	 		}
+186	-		return fmt.Errorf("%w: stale for %s across %d consecutive failures: %v", ErrJWKSStale, staleSince, c.consecutiveFailures, err)
+187	+		return fmt.Errorf("%w: stale for %s across %d consecutive failures", ErrJWKSStale, staleSince, c.consecutiveFailures)
+188	 	}
+189	 	return nil
+190	 }
+191	internal/api/jwks_test.go
+192	@@ -7,6 +7,7 @@ import (
+193	 	"encoding/base64"
+194	 	"encoding/json"
+195	 	"errors"
+196	+	"fmt"
+197	 	"net/http"
+198	 	"net/http/httptest"
+199	 	"sync/atomic"
+200	@@ -339,3 +340,207 @@ func TestJWKSCache_UnknownKidRefetchIsRateLimited(t *testing.T) {
+201	 		t.Errorf("second unknown-kid lookup (within the rate-limit window) triggered an extra fetch: %d -&gt; %d, want no change", afterFirstUnknown, afterSecondUnknown)
+202	 	}
+203	 }
+204	+
+205	+// TestJWKSCache_FailedRefreshDoesNotHammerIssuer is Oren Castellan's PR
+206	+// #30 re-review finding: without a floor on retry attempts, every single
+207	+// request during a sustained issuer outage triggered its own network
+208	+// fetch (bounded only by maxStaleness, not by request volume) — the same
+209	+// "don't hammer a struggling dependency" reasoning already applied to the
+210	+// unknown-kid path, missing from the ordinary TTL-refresh path. Multiple
+211	+// KeyForKid calls in quick succession, all past TTL with the issuer down,
+212	+// must make only one real fetch attempt per jwksMinRefreshRetryInterval.
+213	+func TestJWKSCache_FailedRefreshDoesNotHammerIssuer(t *testing.T) {
+214	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+215	+	if err != nil {
+216	+		t.Fatalf("generating key: %v", err)
+217	+	}
+218	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+219	+	s := newJWKSTestServer(body)
+220	+	defer s.Close()
+221	+
+222	+	cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min, min retry floor = 5s
+223	+	fakeNow := time.Now()
+224	+	cache.now = func() time.Time { return fakeNow }
+225	+	ctx := context.Background()
+226	+
+227	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+228	+		t.Fatalf("priming: %v", err)
+229	+	}
+230	+
+231	+	s.up.Store(false)
+232	+	fakeNow = fakeNow.Add(time.Minute + time.Second) // TTL expired
+233	+
+234	+	var requestsBefore int32
+235	+	// Read the server's own request counter via a second server field
+236	+	// would require plumbing; instead assert indirectly: repeated calls
+237	+	// within the retry floor must all return the SAME error quickly
+238	+	// (served from enforceStaleness, not a fresh fetch attempt) — a real
+239	+	// per-call fetch would each take however long the (down) server's
+240	+	// connection refusal takes, which is fast here, so we assert on
+241	+	// lastAttempt not advancing instead.
+242	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+243	+		t.Fatalf("first post-TTL call: %v", err)
+244	+	}
+245	+	cache.mu.Lock()
+246	+	firstAttempt := cache.lastAttempt
+247	+	cache.mu.Unlock()
+248	+	_ = requestsBefore
+249	+
+250	+	fakeNow = fakeNow.Add(time.Second) // still within jwksMinRefreshRetryInterval (5s) of firstAttempt
+251	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+252	+		t.Fatalf("second post-TTL call (within retry floor): %v", err)
+253	+	}
+254	+	cache.mu.Lock()
+255	+	secondAttempt := cache.lastAttempt
+256	+	cache.mu.Unlock()
+257	+
+258	+	if !secondAttempt.Equal(firstAttempt) {
+259	+		t.Errorf("a second call within jwksMinRefreshRetryInterval triggered a new fetch attempt (lastAttempt moved from %v to %v) — want it to back off and reuse the stale cache instead", firstAttempt, secondAttempt)
+260	+	}
+261	+
+262	+	// Past the retry floor, a new attempt IS made.
+263	+	fakeNow = fakeNow.Add(jwksMinRefreshRetryInterval)
+264	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+265	+		t.Fatalf("third post-TTL call (past retry floor): %v", err)
+266	+	}
+267	+	cache.mu.Lock()
+268	+	thirdAttempt := cache.lastAttempt
+269	+	cache.mu.Unlock()
+270	+	if thirdAttempt.Equal(firstAttempt) {
+271	+		t.Error("a call past jwksMinRefreshRetryInterval should have made a new fetch attempt")
+272	+	}
+273	+}
+274	+
+275	+// TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry proves the
+276	+// staleness ceiling isn't silently suspended while the retry floor is
+277	+// skipping real fetch attempts — enforceStaleness must still fire once
+278	+// maxStaleness is exceeded, even on a call that isn't itself attempting
+279	+// a fetch.
+280	+func TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry(t *testing.T) {
+281	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+282	+	if err != nil {
+283	+		t.Fatalf("generating key: %v", err)
+284	+	}
+285	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+286	+	s := newJWKSTestServer(body)
+287	+	defer s.Close()
+288	+
+289	+	cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min
+290	+	fakeNow := time.Now()
+291	+	cache.now = func() time.Time { return fakeNow }
+292	+	ctx := context.Background()
+293	+
+294	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+295	+		t.Fatalf("priming: %v", err)
+296	+	}
+297	+	s.up.Store(false)
+298	+
+299	+	// One real attempt right after TTL expires, which fails and sets
+300	+	// lastAttempt.
+301	+	fakeNow = fakeNow.Add(time.Minute + time.Second)
+302	+	_, _ = cache.KeyForKid(ctx, "key-1")
+303	+
+304	+	// Jump straight past maxStaleness (3min from the last SUCCESSFUL
+305	+	// fetch), but still within jwksMinRefreshRetryInterval of the last
+306	+	// ATTEMPT — this call must back off from a new fetch attempt and
+307	+	// still correctly fail closed via enforceStaleness, not silently
+308	+	// succeed with the stale cache because no new attempt was made.
+309	+	fakeNow = fakeNow.Add(4 * time.Minute)
+310	+	_, err = cache.KeyForKid(ctx, "key-1")
+311	+	if err == nil {
+312	+		t.Fatal("expected an error once past max staleness, even on a call that backs off from a new fetch attempt")
+313	+	}
+314	+	if !errors.Is(err, ErrJWKSStale) {
+315	+		t.Errorf("error = %v, want ErrJWKSStale", err)
+316	+	}
+317	+}
+318	+
+319	+// TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal is Ingrid
+320	+// Solano's (02) cold re-check finding: KeyForKid runs before signature
+321	+// verification, so an unauthenticated caller can send a token with a
+322	+// fabricated kid at no cost. A single GLOBAL reservation gate would let
+323	+// that caller occupy the one slot by repeating a garbage kid every
+324	+// jwksUnknownKidRefetchInterval, starving a DIFFERENT, legitimately
+325	+// rotated-in real kid's own refetch back to the full calendar TTL —
+326	+// silently recreating most of the original gap. Reserving per kid closes
+327	+// this: a garbage kid's own reservation must not block a different real
+328	+// kid's reservation in the same window.
+329	+func TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal(t *testing.T) {
+330	+	oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+331	+	if err != nil {
+332	+		t.Fatalf("generating key: %v", err)
+333	+	}
+334	+	newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+335	+	if err != nil {
+336	+		t.Fatalf("generating key: %v", err)
+337	+	}
+338	+
+339	+	var serveNewKey atomic.Bool
+340	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+341	+		w.Header().Set("Content-Type", "application/json")
+342	+		if serveNewKey.Load() {
+343	+			_, _ = w.Write(jwksBody(t, "key-new", &amp;newKey.PublicKey))
+344	+		} else {
+345	+			_, _ = w.Write(jwksBody(t, "key-old", &amp;oldKey.PublicKey))
+346	+		}
+347	+	}))
+348	+	defer srv.Close()
+349	+
+350	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+351	+	ctx := context.Background()
+352	+
+353	+	if _, err := cache.KeyForKid(ctx, "key-old"); err != nil {
+354	+		t.Fatalf("priming: %v", err)
+355	+	}
+356	+
+357	+	// Attacker occupies the reservation for a garbage kid.
+358	+	_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+359	+	// Repeats it immediately — this must be denied (rate-limited), same
+360	+	// as before the fix.
+361	+	_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+362	+
+363	+	// The issuer rotates for real. A legitimate lookup for the new kid,
+364	+	// in the SAME window the attacker's garbage kid already consumed,
+365	+	// must still get its own reservation and succeed — not be starved by
+366	+	// the attacker's unrelated kid.
+367	+	serveNewKey.Store(true)
+368	+	if _, err := cache.KeyForKid(ctx, "key-new"); err != nil {
+369	+		t.Errorf("KeyForKid(key-new) = %v, want the real rotated key's own reservation to succeed regardless of an attacker's unrelated garbage-kid reservation", err)
+370	+	}
+371	+}
+372	+
+373	+// TestJWKSCache_UnknownKidReservationCapsDistinctKids is the other half
+374	+// of Ingrid's ruling: rate-limiting is scoped per kid, not removed — a
+375	+// flood of distinct fabricated kids must still be bounded, not each get
+376	+// their own unconditional extra fetch.
+377	+func TestJWKSCache_UnknownKidReservationCapsDistinctKids(t *testing.T) {
+378	+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+379	+	if err != nil {
+380	+		t.Fatalf("generating key: %v", err)
+381	+	}
+382	+	var requests atomic.Int32
+383	+	body := jwksBody(t, "key-1", &amp;key.PublicKey)
+384	+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+385	+		requests.Add(1)
+386	+		w.Header().Set("Content-Type", "application/json")
+387	+		_, _ = w.Write(body)
+388	+	}))
+389	+	defer srv.Close()
+390	+
+391	+	cache := NewJWKSCache(srv.URL, time.Hour, nil)
+392	+	ctx := context.Background()
+393	+	if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+394	+		t.Fatalf("priming: %v", err)
+395	+	}
+396	+	requestsAfterPriming := requests.Load()
+397	+
+398	+	// Flood with more distinct garbage kids than jwksMaxTrackedUnknownKids.
+399	+	for i := 0; i &lt; jwksMaxTrackedUnknownKids+20; i++ {
+400	+		_, _ = cache.KeyForKid(ctx, fmt.Sprintf("garbage-kid-%d", i))
+401	+	}
+402	+
+403	+	extraFetches := requests.Load() - requestsAfterPriming
+404	+	if int(extraFetches) &gt; jwksMaxTrackedUnknownKids {
+405	+		t.Errorf("a flood of %d distinct garbage kids triggered %d extra fetches, want at most %d (the cap)", jwksMaxTrackedUnknownKids+20, extraFetches, jwksMaxTrackedUnknownKids)
+406	+	}
+407	+}
+408	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:57 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Traced the exact commit diff (`gh api repos/wtvamp/loginid-takehome/commits/a615dfa`) — it touches only `internal/api/jwks.go` and `internal/api/jwks_test.go`, which is the right scope for both findings.
+
+**1. Retry-floor finding — fixed correctly.**
+
+`KeyForKid` now takes a locked snapshot of both `needsRefresh` and `canAttempt` up front, then branches: `canAttempt=true` calls `refresh(ctx)` as before; `canAttempt=false` calls the new `enforceStaleness()` directly instead of just falling through. I traced every combination:
+
+- Fresh attempt succeeds → cache updated, falls through to `lookupKey`. Unchanged.
+- Fresh attempt fails, cache still within `maxStaleness` → `refresh()`'s tail now calls `enforceStaleness()` itself (extracted from the old inline check) and returns nil → falls through to serve the stale-but-acceptable key. Correct.
+- Fresh attempt fails, cache past `maxStaleness` → `enforceStaleness()` returns `ErrJWKSStale`, propagated. Correct.
+- Backing off (no fetch attempted this call) → `enforceStaleness()` is called directly against the *current* cache state under its own lock, not against a stale snapshot from the earlier unlocked read. If `maxStaleness` has been exceeded, this path fails closed exactly the same as the fetch-attempting path. `TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry` exercises exactly this (jump past `maxStaleness` while still inside the 5s retry floor) and it's correct by inspection, not just by the test passing.
+
+Cold start is unaffected: `lastAttempt` zero-value makes `canAttempt` true on the very first call regardless of `jwksMinRefreshRetryInterval`, so there's no chicken-and-egg stall on process start. `consecutiveFailures` is only incremented on an actual fetch attempt, never on a call that only re-checks staleness — the counter in the log line stays meaningful. One very minor observability note, not a defect: the staleness-exceeded log line dropped the trailing `%v` (the specific fetch error), because `enforceStaleness()` is now shared by a call site that never attempted a fetch and has no error to append. Acceptable trade-off given the two call sites; `staleSince`/`consecutiveFailures` are still enough signal.
+
+**2. Per-kid unknown-kid fix — no bug found.**
+
+`unknownKidRetryAt` keyed per kid, sweep-before-size-check on every call, capped at `jwksMaxTrackedUnknownKids` (64). A garbage kid's own reservation no longer blocks a different real kid's reservation in the same window (`TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal` is the right shape for this). One residual, already-acknowledged-in-comments limitation worth naming for the record rather than as a blocker: if an attacker holds all 64 slots simultaneously with distinct fabricated kids at the exact moment a real rotation needs its out-of-band refetch, that legitimate kid is denied the early refetch and falls back to the next TTL rollover — a bounded, temporary degradation, not a permanent lockout, and the code's own comment already says as much. I'm not raising this as a blocking finding, just flagging it as a known edge the doc comment already owns.
+
+**3. No new issues in this round's diff.** I don't have anything further to add beyond a nice-to-have (the dropped error detail in the log line above).
+
+This is ready to post as my round-3 comment on PR #30 under my name. Files reviewed: `/Users/warrenthompson/Source/LoginID/03-engineering-delivery` is my working directory; the diff itself lives in the `wtvamp/loginid-takehome` repo at commit `a615dfa` on branch `feature/LT-40`, specifically `internal/api/jwks.go` and `internal/api/jwks_test.go`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

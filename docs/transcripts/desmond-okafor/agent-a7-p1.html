@@ -1,0 +1,460 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desmond Okafor — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Desmond Okafor</h1><div class="sub">Hire (track 01) · session 4 of 6 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 10:48 AM PDT – Sep 13, 2026 10:48 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Lead</span><div class="body">Naomi (PO) just drafted `04-infra-devops/refinement/LT-49.md` for story LT-49 (observability: logging, metrics, never-log enforcement, retention-sweep alerting). Read it, then claims-check it against its cited sources:
+
+1. `04-infra-devops/observability.md` — confirm every mechanism the refinement doc attributes to this design doc (lint check, ingress redaction, audit-log RBAC, the alert formula `oldest_surviving_row_age_seconds{class} &gt; retention_window + sweep_interval`, the Drained-only emission gating, the 11-item-vs-"operationalized"-mapping claim) is actually stated there, not invented or misquoted.
+2. `02-ai-security-architecture/handoff-04-secrets.md`'s never-log list — count the items. The refinement doc says 11 items; verify that count and that items 10/11 (driver-error detail, username) are really in the list as the refinement doc describes.
+3. `03-engineering-delivery/refinement/LT-44.md` — confirm the refinement doc's claims about LT-44 (the three metric names, the class label values `direct`/`idp_cache`/`idp_cache_orphan`, the `Drained==true`-gating requirement, `concurrencyPolicy: Forbid`) match what LT-44.md actually says, since LT-49 builds directly on it.
+4. `04-infra-devops/backlog.md` Story 5 — confirm the acceptance criteria the refinement doc restates match the backlog's actual criteria (it should already match closely, but check for drift).
+
+Report PASS or specific discrepancies (quote the refinement doc's claim and the source text that contradicts it) for each of the 4 areas. Under 400 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-49 refinement — S5: observability (logging, metrics, never-log enforcement, retention-sweep alerting)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Theo Bergman (04, lint check, ingress redaction, RBAC, sink, alert rule), Renata Cole (03, metrics exposure at the sweep-invocation layer, never-log test at the application layer). **Design inputs:** Marcus Ilori (02, never-log-list completeness confirmation), Priya Nandakumar (05, retention-alert-threshold seat). **Source:** `04-infra-devops/backlog.md` Story 5 (LT-49), design already done in `04-infra-devops/observability.md`.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: LT-44's sweep wiring (merged, #55) exists but its metrics have nowhere to land and no alert watches them — `oldest_surviving_row_age_seconds` is worthless as a dead-sweep detector if nothing scrapes or alerts on it. `observability.md` is fully designed already (this is a build story against an existing design, not a fresh design pass), so this is genuinely ready to refine now rather than re-litigated.
+10	
+11	## What this story actually is
+12	
+13	Not a redesign — `observability.md` already specifies every mechanism this story builds:
+14	1. **Logging discipline + lint check** (04): explicit-field `slog` logging, a CI lint rule flagging never-log-list field names/whole-struct log calls.
+15	2. **Ingress-level redaction** (04): search-endpoint `name`/`phone` query fragments never reach an ingress access log.
+16	3. **Audit-log RBAC** (04): a distinct `Role` for audit-log read access, separate from any Secret-read grant.
+17	4. **Retention-sweep metrics + alert** (03 exposes, 04 sinks/alerts): `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class}` per LT-44's sweep, only from `Drained == true` results (LT-44's own criterion, unaffected here — this story is the metrics *sink and alert rule*, not re-deriving the emission-gating logic LT-44 already built).
+18	5. **Never-log-list completeness confirmation** (02, Marcus): a sign-off that all 11 items in `handoff-04-secrets.md`'s list map to a named enforcement site, not just a policy statement — the mapping already exists in `observability.md`'s "operationalized" section; this is Marcus confirming it, not this story inventing new coverage.
+19	
+20	This is genuinely two-track work, per team-lead's framing: 04 builds the sink, alert rule, ingress redaction, RBAC, and lint check; 03 adds/confirms the metrics-exposure code path at the sweep-invocation layer (LT-44's own code) and a never-log-list enforcement test at the application layer (the lint check's *complement* — a test asserting specific known-sensitive values never appear in captured log output, catching what a static lint rule can miss).
+21	
+22	## Acceptance criteria (restated from `backlog.md` S5, split by side)
+23	
+24	**04 side:**
+25	- [ ] The CI lint check (a `golangci-lint` custom rule or CI-run grep) flags any log call passing a whole request/response struct, an `*http.Request` body, or a variable named/typed to match the never-log list's field names (`password`, `token`, `secret`, `dsn`, `client_secret`) — enforcement site: the lint rule itself, run in CI, not a design-doc statement.
+26	- [ ] Ingress-level log-format override or redaction ensures `name`/`phone` query-string fragments on `POST /profiles/search` never appear in ingress access logs — enforcement site: the ingress `ConfigMap`'s log-format setting.
+27	- [ ] Audit-log read access (the log stream carrying `sub`/scope/record-id/timestamp) has its own RBAC `Role`, bound to an incident-review group, distinct from any ServiceAccount's Secret-read grant (LT-46's Vault roles or any residual Kubernetes Secret access) — enforcement site: the log sink's own RBAC/auth layer (Loki or equivalent), not reused from cluster Secret RBAC.
+28	- [ ] `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class="direct"|"idp_cache"|"idp_cache_orphan"}` (LT-44's metrics, exposed via 03's code, per criterion below) reach a real Prometheus-compatible sink 04 already operates — enforcement site: the scrape config or push-gateway wiring, not just "the metric exists in code."
+29	- [ ] The alert rule `oldest_surviving_row_age_seconds{class="X"} &gt; (retention_window_seconds + sweep_interval_seconds)` is configured per class in 04's actual alerting stack (not just theoretically derivable from the metric) — enforcement site: the alert-rule config file/CRD, with the real numeric retention windows (24 months/`direct`, 30 days/`idp_cache`, 7 days/`idp_cache_orphan`, per LT-44/`pii-governance.md`) and the real `sweep_interval_seconds` (the CronJob's own schedule, LT-44's manifest) substituted in, not left as placeholders.
+30	
+31	**03 side:**
+32	- [ ] LT-44's sweep-invocation code exposes `rows_examined`/`rows_deleted`/`oldest_surviving_row_age_seconds` as real Prometheus client-library metrics with the `class` label values above — confirming/completing LT-44's own metrics-emission code path (LT-44's refinement already required emission gated on `Drained == true`; this criterion is that the values reach an actual `prometheus.Client` registration, not just a `log.Printf` or an internal struct field).
+33	- [ ] A never-log-list enforcement **test** exists at the application layer — asserting that a representative sample of never-log-list values (a password, a token, a DSN, a raw vendor error body) passed through the real logging path never appears in captured log output — the lint check's complement, catching what a static grep-style rule can miss (e.g., a value passed through an intermediate variable the lint rule's pattern doesn't match). Enforcement site: a test in `internal/api`/`internal/connector` that captures `slog` output and asserts absence of seeded sensitive values.
+34	
+35	**02 side:**
+36	- [ ] Marcus (02) confirms in writing that `handoff-04-secrets.md`'s 11-item never-log list is fully covered by a named enforcement site (the mapping table in `observability.md`'s "operationalized" section, cross-checked item-by-item) — not a re-derivation, a confirmation that the existing mapping is actually complete.
+37	
+38	## Priya's seat — retention-alert threshold
+39	
+40	**Added per team-lead's routing:** Priya Nandakumar (05) has a seat specifically on whether the alert formula's two terms are the right ones, since she owns the retention-window numbers and the sweep-invocation cadence assumption. Question for her turn: does `retention_window_seconds + sweep_interval_seconds` need a third term — a slack/grace factor for a sweep run that's merely running slow (not dead), given LT-44's `concurrencyPolicy: Forbid` means a slow run causes the *next* scheduled run to be skipped rather than overlapped, which could itself push `oldest_surviving_row_age` past the naive threshold on a run that's behind schedule but not actually broken? Her ruling on whether the two-term formula from `observability.md` already accounts for this (worth checking: `observability.md`'s own text doesn't address the Forbid-causes-skip interaction) is this story's own genuinely open, not-yet-refined question — recorded here rather than assumed either way.
+41	
+42	## Non-goals
+43	
+44	- No new retention windows or data-class definitions — those are `pii-governance.md`'s numbers, already final per LT-44.
+45	- No tracing/OpenTelemetry — explicitly out per `observability.md`'s own "what's deliberately not here."
+46	- No general SLO/error-budget policy or alert catalog beyond the one retention-sweep alert rule this story requires.
+47	- No re-derivation of the never-log list's 11 items or their categorization — that's `handoff-04-secrets.md`'s inventory, already final; this story only confirms and enforces it.
+48	
+49	## PO review script
+50	
+51	1. Read the CI lint-check config/rule directly; confirm it actually flags the named patterns (whole-struct log calls, never-log-list field names) rather than being a no-op placeholder.
+52	2. Confirm the ingress `ConfigMap`'s log-format override is applied to the live ingress (not just committed in a manifest never deployed) and that a live search request's `name`/`phone` query params don't appear in the ingress access log.
+53	3. Confirm the audit-log RBAC `Role` is genuinely distinct from Secret-read RBAC — read both role definitions, confirm no overlap, confirm the incident-review group binding.
+54	4. Confirm the three sweep metrics reach the real sink (query the sink directly for `oldest_surviving_row_age_seconds`, don't just trust the code emits it) and that the alert rule is configured with the real numeric retention windows and real sweep interval substituted in, not placeholders.
+55	5. Confirm 03's never-log-list enforcement test exists, runs in CI, and genuinely fails if a seeded sensitive value leaks into captured log output (mutate the test locally to confirm it can fail, not just that it currently passes).
+56	6. Confirm Marcus's never-log-list completeness confirmation is recorded, and read it against the 11-item list directly rather than trusting a summary.
+57	7. Confirm Priya's ruling on the alert-formula question above is recorded, and that the alert rule matches whatever she rules (two-term formula as-is, or a third grace term).
+58	8. Once deployed: deliberately stop the sweep `CronJob` (suspend it) and confirm the alert fires within one sweep interval of the retention window being exceeded — the one live-tested proof this story's core reasoning ("a dead sweep produces no other symptom") actually holds.
+59	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md"
+}</pre><div class="lbl">result</div><pre>1	# Observability + Never-Log Enforcement
+2	
+3	Design-only. Covers logging, metrics, and tracing for both services, and — the harder half — how `handoff-04-secrets.md`'s never-log list gets enforced as a mechanism, not just stated as a policy.
+4	
+5	## Logging
+6	
+7	Structured logging (`slog`, Go stdlib — no third-party logging library needed for two services this size), JSON output, one line per event. Every log line that touches a request carries `sub` (caller identity), the endpoint, status, and a request id — never the request or response body wholesale. This is the pattern the never-log list requires (hand-off item 8: "full request bodies of `POST /auth` and `POST /identity`... both contain items above by construction") — the enforcement mechanism is that handlers log a small, explicit field set assembled by hand, never `log.Printf("%+v", req)` or equivalent reflection-based dumps of a request/response struct. A struct that contains a password field can't leak through a log statement that never receives the struct.
+8	
+9	**Enforcement beyond "write it carefully":**
+10	- A lint rule (a `golangci-lint` custom check, or a simple `go vet`-style grep in CI) that flags any log call passing a whole request/response struct, a `*http.Request` body, or any variable named/typed to match the never-log list's fields (`password`, `token`, `secret`, `dsn`, `client_secret`). Not foolproof — a determined developer can rename around it — but it catches the accidental case, which is the common one.
+11	- Error-path discipline: wrapped errors are logged with `err.Error()` truncated/sanitized where the error type is known to carry sensitive detail (a DB driver error can echo the DSN; a vendor HTTP client error can echo the response body per hand-off item 4) — the wrapping layer strips those before the error reaches a log call, not the log call itself deciding case-by-case.
+12	
+13	## Metrics
+14	
+15	Standard RED metrics (rate, errors, duration) per endpoint, via Prometheus client library, scraped by whatever the lab cluster already runs (not stood up new for this take-home). Labels: method, route, status class — never a label with cardinality tied to user data (no `sub` or phone number as a metric label; that turns a metrics backend into an accidental PII store with no access control at all, which is a worse leak than a log line since metrics systems are typically more widely readable).
+16	
+17	## Tracing
+18	
+19	Not built out here — a two-service take-home with no running collector doesn't get more credible by naming OpenTelemetry. If ever added, it follows the same field discipline as logging.
+20	
+21	## The never-log list, operationalized
+22	
+23	Hand-off's nine items map to two enforcement surfaces, not nine separate mechanisms:
+24	
+25	1. **Application-level:** the structured-logging discipline above (explicit field sets, the lint check, error-wrapping sanitization) covers items 1, 2, 5, 6, 7 (password, tokens, JWTs, client secrets, DSN) — these never enter a Go `log`/`slog` call in the first place.
+26	2. **Proxy/ingress-level:** item 9 ("search query parameters containing a name or phone fragment... redact or hash before any access log, including proxy and ingress logs 04 controls") is the one item application code can't fully own, since ingress access logs are written by the ingress controller, not the service. Mechanism: an ingress-level log-format override that logs the request path with query string stripped (or a regex redaction on the `phone`/`name` query params specifically) rather than the default full-URL access log format. This is a one-time ingress ConfigMap change, not a per-request code path.
+27	3. Item 3 (PII field values from `/identity` or `user_profile`) and item 4 (raw vendor error bodies) are the same discipline as #1 applied to the connector specifically — the connector logs "called vendor X, got status Y," never the response body.
+28	
+29	## Audit-log access is a separate grant from Secret access
+30	
+31	Per the hand-off's Kubernetes-specific requirements: the log stream carrying `sub`/scope/record-id/timestamp (the "fact of access" the never-log list still permits) is itself sensitive enough to reconstruct who looked up whom, so it gets its own RBAC — a distinct, narrower `Role` bound to an incident-review group, separate from any ServiceAccount's `Secret`-read grant (`./secrets-delivery.md`). Mechanism: if logs go to a cluster-local sink (e.g., Loki), that sink's read API gets its own RBAC/auth in front of it, not the same one guarding `kubectl get secrets`; if logs go to an external platform, the equivalent is a scoped read-only role in that platform, provisioned separately from any cluster credential.
+32	
+33	## Retention-sweep observability (05's S5 requirement, final)
+34	
+35	Per `../05-data-ops/pii-governance.md`: the retention sweep must emit, per data class per run, three metrics — rows examined, rows deleted, and **the age of the oldest surviving row in that class**. An alert fires when that age exceeds the class's stated retention window plus one sweep interval. This is the one metric in this document tied to a specific reasoning worth repeating: a sweep job that silently stops running produces no error and no symptom on its own — "rows deleted" can't tell a broken sweep from a legitimately empty one, since both report zero. Oldest-surviving-row age is the one number that keeps climbing when the job is dead and holds steady when it's healthy, which is why it's the alerting signal, not just a nice-to-have metric alongside the other two.
+36	
+37	Mechanism: the sweep job (whatever invokes it — a CronJob against the lab cluster, per 05's mechanism-agnostic requirement) emits these as Prometheus metrics with a `class` label matching 05's actual retention classes — `source="direct"`, `source="idp_cache"`, and `idp_cache_orphan` for an orphaned `idp_cache` row (`../05-data-ops/pii-governance.md`), never a label carrying the PII itself, same discipline as the RED-metrics rule above. (An earlier draft of this section invented `vendor_token_cache`/`idp_identity_cache` as class names — those don't correspond to anything 05 tracks and described a connector token cache the S3 ruling never adopted; corrected here.) The alert rule is `oldest_surviving_row_age_seconds{class="X"} &gt; (retention_window_seconds + sweep_interval_seconds)`, evaluated per class.
+38	
+39	**Batched sweeps: only a drained result feeds the metric.** 05's `DeleteExpired` is batched (a bounded `maxRows` per call, `SweepResult.Drained` marking the last batch of a sweep) — `OldestSurvivingAt` is meaningful only on a `Drained == true` result, since mid-sweep the oldest deletable row is still present by construction and would read as stale on every batch but the last. The sweep job emits `oldest_surviving_row_age_seconds` only from drained results, never from an intermediate batch; the alert rule above already only ever sees what's published, so this is a constraint on what the job emits, not an extra filter the alert needs to apply. Getting this wrong means the alert fires on every sweep and gets muted, which is worse than not having it.
+40	
+41	## Log-sink retention: the deletion-gap enforcement site
+42	
+43	Application logs, metrics, and traces have no `source` column, no clock tied to a `user_profile` row, and no key a subject-deletion request could reach by cascade — a deleted profile's data can still exist in a log line indefinitely. 05's never-log list (`handoff-04-secrets.md`) and this document's enforcement mechanism (above) are the upstream control — if PII never enters a log, there's nothing in a log to expire — but that only holds for the fields on the list. What's left (chiefly the audit trail: `sub`, scope, opaque record id, timestamp — permitted by design, pseudonymous rather than PII-free) still needs a retention window: `pii-governance.md` § "Retention windows (S5)", the "Audit-log stream" row (clock: the entry's own timestamp; window: proposed, pending a legal ruling; disposal: **expiry at the sink**) names this document's log-sink retention policy as its enforcement site — the citation resolves in both directions. Not a deletion job 04 writes — a retention setting on infrastructure 04 already operates.
+44	
+45	**Not the same object as the `deletion_log` table.** 05's `deletion_log` (rows written transactionally by `DeleteExpired`/`DeleteProfile`) is a separate thing from the audit-log stream above — it's PII-free by construction, carries no `RetentionClass`, and isn't in 05's retention table at all; nothing here applies to it, and no metric from a `SweepResult` does either. If a retention window is ever wanted for that table, it's a DAO contract change (05's to make), not a sink-retention config value (04's).
+46	
+47	## What's deliberately not here
+48	
+49	No SLOs/error-budget policy, no alerting-rule catalog beyond the retention-sweep alert above. A take-home needs the shape of an observability approach and a credible enforcement mechanism for the one hard requirement (never-log); it doesn't need a full SRE runbook.
+50	
+51	---
+52	*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2's never-log list. Bree's (capability-case) and Callum's (scope-cut) per-deliverable notes reviewed and folded in inline above, per PLAN.md §3.*
+53	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/handoff-04-secrets.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/02-ai-security-architecture/handoff-04-secrets.md"
+}</pre><div class="lbl">result</div><pre>1	# Hand-off 02 → 04: Secrets inventory and never-log list
+2	
+3	Status: **v3.1** — corrects v3's own reasoning on `postgres-superuser` (below): it does *not* stay a Kubernetes Secret after all, since the "bootstrap before Vault exists" argument doesn't hold once Vault is already running independently of Postgres — Theo's finding. Three named exceptions remain, not four. v3 (delivery mechanism changes from raw Kubernetes `Secret` mounts to **Vault Agent Injector, per-ServiceAccount Vault roles**, Warren's ruling, LT-46, 2026-09-13) and everything else are otherwise unchanged. v2's S7 objection turn, F12/F13/F15/F50 fixes still hold — this revision changes *delivery mechanism*, not the inventory or the never-log list. Receiver: Theo Bergman, `../04-infra-devops/`. Written to the project's hand-off standard: 04 should be able to act on this without re-deriving the reasoning in `threat-model.md`, `api-auth-design.md`, or `connector-security.md`.
+4	
+5	## Assumptions this hand-off makes
+6	
+7	1. Deployment target is 04's **real Kubernetes cluster, reachable via a plain nginx Ingress + cert-manager on the cluster's shared LoadBalancer** (DNS CNAME to `uplifttech.ddns.net`, public at `https://loginid-takehome.uplifttech.org` — no tunnel; Warren's implementation go-ahead, 2026-09-12, updated from a design-only reference). **Delivery mechanism (updated 2026-09-13, LT-46): the Vault Agent Injector, not raw Kubernetes `Secret` mounts, for every application-level secret in the inventory below** — a Vault Agent sidecar, added via pod annotation, authenticates to Vault using the pod's own Kubernetes ServiceAccount token (Vault's Kubernetes auth method) and renders each secret to a file on an in-memory (`emptyDir`, `medium: Memory`) volume shared with the application container; nothing application-level is written to a Kubernetes `Secret` object, and therefore nothing application-level reaches etcd's base64-not-encrypted-by-default storage at all — this closes the etcd requirement below by removing the object from etcd entirely, not by enabling etcd encryption at rest. Amber (Vault operator) provisions the KV paths, Vault policies, and Kubernetes-auth roles that make this work; names only are visible in any transcript, never values. Every requirement below is written so it still holds regardless of mechanism; this is the mechanism 04 actually builds to now. **The repository is now public** (`https://github.com/wtvamp/loginid-takehome`) — every requirement in this document that says "never in source or committed config" is now categorical, with no private-repo safety net.
+8	
+9	**`postgres-superuser` is Vault-delivered after all — v3's reasoning here was wrong, corrected rather than quietly patched over.** v3 argued a Vault Agent sidecar "doesn't help a database's own first-init bootstrap" because it's a pattern for pods already running and authenticating to Vault themselves. That's true of the *sidecar* pattern specifically, but conflates two different things: whether *Vault itself* exists yet (it does — an independent HA Vault, already running on this cluster, not something Postgres hosts or depends on existing) versus whether *this specific pod* has started yet. Vault Agent supports an **init-container** mode for exactly this shape of problem: it runs to completion *before* the main container starts, authenticates via the pod's own ServiceAccount token the same as the sidecar pattern, and renders the credential to a shared volume the main container then reads at its own startup — Postgres's official image already supports `POSTGRES_PASSWORD_FILE` (a file path) as an alternative to `POSTGRES_PASSWORD` (a literal value), so the init script reading from a Vault-rendered file instead of a `secretKeyRef` env var is a small, well-supported change, not a redesign. There was no actual chicken-and-egg here once Vault's own existence is independent of Postgres's — v3 treated "the database is bootstrapping" and "Vault needs bootstrapping" as the same problem when they aren't.
+10	
+11	**Postgres gets its own Vault role, `loginid-takehome-postgres`**, reading `postgres-superuser` plus the four existing DB-credential paths (`db-migrator-credential`, `db-runtime-credential`, `issuer-db-migrator-credential`, `issuer-db-runtime-credential`) — five paths, the widest of any role in this system, since the Postgres StatefulSet's init script is what seeds all of them. This is the role deserving the closest look in Helena's policy review, precisely because it's the widest.
+12	
+13	**Three named exceptions remain Kubernetes Secrets, not Vault-delivered:**
+14	
+15	- **`postgres-server-tls`** — cert-manager's own `Certificate`/`Secret` mechanism (`threat-model.md` Assumption 9), consumed directly by the Postgres StatefulSet's TLS startup args. cert-manager already *is* a secure, automated, rotation-aware delivery mechanism purpose-built for exactly this (a server needing a TLS keypair) — routing it through Vault instead would duplicate a solved problem, not close a gap.
+16	- **`loginid-takehome-tls`** — same reasoning, one level up: the public Ingress's cert-manager-issued certificate, consumed by the Ingress controller directly. Same native, already-secure mechanism; no benefit to re-routing through Vault.
+17	- **The ARC GitHub App auth credential** (in the runner namespace, not this application's namespace) — a platform/CI-infrastructure secret belonging to the runner controller itself, not to `api-service`/`idp-connector`/the issuer. It authenticates GitHub's App to provision self-hosted runners; it's outside this application's own trust boundary and namespace, and this hand-off's scope is this application's secrets, not the CI platform's own.
+18	
+19	The common thread across all three: each is either an already-native, already-secure Kubernetes-integrated mechanism (cert-manager) that Vault would only duplicate, or a platform-level secret outside this application's own namespace/trust boundary — not an ad hoc carve-out, and not "hasn't gotten to it yet."
+20	
+21	**A fourth item, `qa-client-credential`, is a different category from the three above and stays a Kubernetes Secret for a different reason (ruled 2026-09-13, jointly with Theo Bergman): it's an ops/review-tooling artifact, not an application secret, and structurally cannot use the Vault Agent Injector pattern at all.** The Vault Agent mechanism delivers a secret into a *running pod's filesystem at startup* — `qa-client-credential` is never consumed that way; its only consumption pattern is a human running `kubectl get secret qa-client-credential -o jsonpath=...` directly to manually mint a review token, with no pod in between. There's nothing to inject into. Moving it to Vault would only relocate where a human types a fetch command (`kubectl` → `vault` CLI); it wouldn't close any actual exposure, since the exposure surface either way is "whoever can authenticate as a cluster operator." **Least-privilege confirmation, not just deferred:** checked against `deploy/rbac.yaml` directly — the CI deployer's Role has no `secrets` verbs at all, and no application ServiceAccount (api-service, issuer, idp-connector) has any Secrets-API grant either, since Vault handles their application secrets now. `qa-client-credential`'s actual access boundary is therefore "human operators with direct cluster access," which is Assumption 7's existing operator trust boundary — not a new, unstated exposure this migration should have closed and didn't.
+22	2. Service topology is 03's published boundary (`../PLANNING.md`, Service boundaries): two binaries, `cmd/api-service` (Q1 DAO + Q2 REST API) and `cmd/idp-connector` (Q3), env-var configuration only. Variable names below are 03's; two are marked as pending this track's final scheme. **The token-issuing authorization-server function is a mode of `api-service`, not a third binary** — this take-home's scope doesn't justify a standalone authz server, and 03 has published no third `cmd/` entrypoint. **Corrected by the cross-track consistency pass (F13):** "a mode of the same binary" is not "the same Kubernetes Deployment," and the earlier text here was wrong to imply RBAC alone separates them — a Kubernetes Role restricting `get` on a Secret has no effect on a volume already mounted into a container, so if `api-service`'s one Deployment mounted the signing key, every replica (verification path included) would have it on disk regardless of RBAC. **The fix: the issuer runs as a second Deployment of the same `api-service` image**, selected by an environment variable 03 adds to the config surface (e.g. `APP_MODE=issuer` vs. the default, consistent with the surface's env-var-only, no-flags rule), with **its own ServiceAccount that alone mounts the signing-key Secret** (row #2) — the `api-service` Deployment serving verification/search mounts nothing from row #2. This is a request into 03's Deployment/mode surface, not a unilateral change on my part; flag to me if the mode-selection mechanism needs to differ.
+23	3. An **external operator agent** — a human or automated actor outside this project, holding cluster-admin or namespace-admin rights on 04's real lab cluster, who applies Kubernetes manifests to it — is a privileged actor outside this service: anyone who can apply a manifest can read any Secret it mounts. Consequence for 04: manifests reference Secrets by name and never carry values; values are set out-of-band. This is a named trust boundary in `threat-model.md` Assumption 7, not a silent assumption; nothing further about who that operator is needs to be re-derived from 04's own files to act on this hand-off. As of this update, 04 has not yet made contact with that operator or deployed anything — `threat-model.md` carries the dated status.
+24	4. **Updated 2026-09-12:** with Warren's implementation go-ahead, 04's build stories will deploy to and contact the operator of the real cluster named in Assumption 1 — this is no longer a hypothetical the document describes in the abstract. As of this update, that contact hasn't happened yet; `threat-model.md` Assumption 7 carries the current, dated status and gets updated the moment it changes.
+25	
+26	## Secrets inventory
+27	
+28	| # | Secret | Used by | Injection requirement (02 sets it) | Rotation expectation | Delivery mechanism (04's, updated v3: Vault Agent unless named otherwise) | Never-log |
+29	|---|---|---|---|---|---|---|
+30	| 1 | Database credentials, carried inside `DB_DSN` | `api-service` | Runtime-injected; never in source, image, or committed config. **Required, not preferred: file mount via a `DB_DSN_FILE` convention** (03 to add alongside `DB_DSN`), because a DSN's embedded password is exposed by `kubectl describe`, crash dumps, and child-process environment exactly as much as any other secret in this table — there is no citation that makes `DB_DSN` a lesser case, so this track is not treating it as one | On credential rotation; service restart or reload acceptable | **Vault Agent sidecar**, rendered to the path `DB_DSN_FILE` reads, on an in-memory volume; `api-service`'s Vault role reads exactly this KV path and nothing else. Env-var `DB_DSN` remains a fallback only until 03 ships the file-based convention | Yes — the DSN contains the password; log the driver name and host at most |
+31	| 2 | JWT signing **private** key (RS256/ES256), per `api-auth-design.md` | The issuer Deployment (`api-service` image, `APP_MODE=issuer`) only — **not** the `api-service` Deployment that verifies with the public key; these are two Deployments of one image, not one Deployment doing both (F13 fix) | Runtime-injected as a **file**, never an env var; asymmetric so the verifying Deployment never holds it | Key rotation with a `kid` claim; publish old and new public keys together during overlap; TTL of tokens (5–15 min) bounds the overlap window | **Vault Agent sidecar, only on the issuer Deployment's pod spec** — the verifying Deployment's Vault role has no policy path granting this secret at all (least-privilege at the Vault-policy layer now, in addition to the pod-spec-absence and CI-deployer-Role controls below, which still hold independently of the delivery mechanism): (a) the verifying Deployment's pod spec contains no reference to this secret at all; (b) the CI deployer's Role has no `secrets` verbs on Kubernetes Secrets, and (new) no Vault policy grants it read on this KV path either; (c) provisioned into Vault out-of-band, never through the CI-managed manifest set | Yes |
+32	| 3 | JWT **public** key / JWKS | `api-service` middleware | Not a secret; may ship in config or be fetched from the issuer | Follows #2 | Plain `ConfigMap` or fetched URL; listed here so 04 does not over-protect it — not secret, not Vault-delivered | No (but never log full tokens — see below) |
+33	| 4 | API caller `client_secret`s (OAuth2 client-credentials) | Authorization server (verifies); callers hold their own copy | **Stored hashed** (Argon2id, same floor as `threat-model.md` Asset 1), never plaintext at rest; issued once at provisioning and not recoverable | Per-client rotation on demand; revoke by deleting the hash | Lives in the issuer's own Postgres database (`oauth_client` table), not a Kubernetes Secret or Vault KV path; 04 delivers only that database's own connection credential (Vault-delivered, same shape as row #1) | Yes |
+34	| 5 | Connector's own vendor registration: `IDP_ABC_CLIENT_ID`, `IDP_ABC_CLIENT_SECRET` (and the XYZ pair if a second vendor is configured) | `idp-connector` | Runtime-injected; never in source or committed config; `client_id` is low-sensitivity but travels with the secret and gets the same handling | Per vendor's policy; expect manual rotation | **Vault Agent sidecar**, one KV path per vendor so rotating ABC never touches XYZ; `idp-connector`'s Vault role reads exactly its own vendor paths | Yes for the secret; keep the id out of logs too |
+35	| 6 | Vendor `access_token` (returned by our own `/auth` to its authenticated caller, presented as a header on our own `/identity` — updated for F3's caller-holds-the-token model, seam re-run regression fix) | `api-service` holds it briefly between the two calls; `idp-connector` only ever sees it as a caller-presented header on a single `/identity` request, never fetches or holds it between calls itself | **Not a deployed secret** — transient on both sides, never cached, never persisted. Neither `api-service` nor `idp-connector` writes it to a datastore (S3's no-cache ruling, restated for the two-party model in `connector-security.md` §1) | Expires on its own; never persisted across restarts by either party | No `Secret` object and no Vault KV path anywhere in this flow — there is nothing here for 04 to provision | Yes — never, including error paths, on both sides of the exchange |
+36	| 7 | Data-encryption key (KEK) for envelope encryption of any TOTP shared secrets | `api-service` (TOTP) only — **not a committed feature of this submission**; `user_credential.method` is modeled as an extensible lookup table (`../05-data-ops/multi-db-strategy.md`) that supports TOTP as a *possible* value, but no TOTP implementation is planned unless 03 builds one. **The vendor-token-cache use case for this row no longer exists**: S3's red/blue on the connector token lifecycle is closed (`decisions/connector-token-lifecycle-redblue.md`) — no cache by default, and the token is never held by the connector between calls at all under F3's model (row 6), so there is no vendor-token cache for a KEK to encrypt. This row is provisioned only if TOTP materializes — it is a contingency the inventory names in advance, not a live requirement for 04 to build now | Runtime-injected as a file; the KEK never leaves the process that decrypts | Rotation by re-wrapping DEKs; never requires re-hashing passwords (those are hashed, not encrypted) | If this row is ever provisioned: Vault's own Transit engine is a more natural fit than a static KEK on a KV path (Vault already does envelope encryption as a first-class feature) — 04's call if this materializes, the requirement is only that the key exists, is not in source, and isn't a plain KV secret if Transit is available | Yes |
+37	| 7a | Credential to reach the external KMS, **only if 04 exercises a non-Vault-Transit KMS alternative in row #7** (a role, API key, or client cert — whichever the chosen KMS uses) | Whichever binary holds the KEK reference (#7) | Same discipline as every other row here: runtime-injected, never in source, never provisioned ad hoc outside this table | Per the KMS provider's own rotation mechanism | Cloud-KMS access is typically workload-identity-based (no static credential to store); if the chosen KMS instead requires a static credential, it's Vault-delivered the same as every other row, kept out of the CI deployer's access the same way row #2's is | Yes |
+38	| 8 | TLS serving private keys for `api-service` and `idp-connector` | Ingress / each binary, per 04's termination choice | Runtime-injected; TLS 1.2+ only; certificate validation never disabled in any environment (`connector-security.md` §2) | Per certificate lifetime; automated issuance preferred | **Named exception, stays a Kubernetes `Secret` (`kubernetes.io/tls`), not Vault-delivered** — cert-manager's native mechanism, same reasoning as `loginid-takehome-tls`/`postgres-server-tls` above: Vault would only duplicate a problem cert-manager already solves | Yes |
+39	| 9 | End-user's vendor password (`POST /auth` request body) | `idp-connector`, transient | Never persisted, never cached, held only for the vendor call | n/a | Nothing for 04 to deliver; listed so nobody creates a place for it | **Yes — under no circumstance, including stack traces** |
+40	| 10 | `api-service`'s own client credential (`client_id`/`client_secret`) toward the issuer, scoped `connector:identity-lookup`/`aud: idp-connector-service` — required for `api-service` to call `idp-connector`'s own authenticated `/auth`/`/identity` (`connector-security.md` §5) | `api-service` (the Deployment serving question 2's API, acting as a caller of the connector on a user's behalf) | Runtime-injected; never in source or committed config — same discipline as row 5's vendor registration, added by the cross-track consistency pass (F15), which found this credential asserted as a requirement in `connector-security.md`/`handoff-03-auth.md` with no inventory row | Same per-client rotation as row 4 (revoke by deleting the issuer-side hash) | **Vault Agent sidecar**, `api-service`'s Vault role reads this path in addition to row #1's — the two are separate KV paths under the same role, not merged, so a policy review can still see them as distinct grants | Yes |
+41	| 11 | Postgres bootstrap superuser credential (`postgres-superuser`), plus the four DB-credential paths the same init script seeds (`db-migrator-credential`, `db-runtime-credential`, `issuer-db-migrator-credential`, `issuer-db-runtime-credential`) | Postgres StatefulSet's `initdb` scripts, at first container init | `POSTGRES_PASSWORD_FILE` (file path, not a literal env var) for the superuser; the init script reads the other four the same way | Manual, rare (bootstrap-only credentials) | **Vault-delivered via init-container mode (corrected, v3.1) — not the sidecar pattern, and not a Kubernetes Secret.** A Vault Agent init container runs to completion before the main Postgres container starts, authenticates via the StatefulSet's own ServiceAccount, and renders all five paths to a shared volume the main container reads at its own startup. Dedicated role `loginid-takehome-postgres`, the widest role in this system (five paths) — the one deserving the closest look in policy review | Yes |
+42	
+43	Names marked pending in 03's boundary: `AUTH_JWT_ISSUER` / `AUTH_JWT_AUDIENCE` are configuration, not secrets; this track will confirm their final values in `handoff-03-auth.md`. They are listed here only so 04 does not classify them as secrets.
+44	
+45	## Kubernetes-specific requirements (04 implements
+… truncated (20 KB cap)</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-44 refinement — S11: retention sweep, `DeleteExpired`/`DeleteProfile` wiring
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03, sweep-invocation code), Theo Bergman (04, `CronJob` manifest + metrics sink); design inputs: Priya Nandakumar (05, retention windows/clocks/classes), Marcus Ilori (02, seat on subject-deletion audit trail if any).
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist.
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: without this, the README (LT-43, correctly deferred to write last) would have to list PII retention as stubbed — at a company whose own product framing is PII minimization, that's a real, visible gap in the submission, not a cosmetic one. Desmond's LT-43 finding made the case concretely: `DeleteExpired`/`DeleteProfile` exist and are tested on the DAO composite, but nothing schedules or calls either method — a designed-but-not-operational control. This is roughly a half-day story (a `CronJob` calling a `--sweep` mode of the existing `api-service` image, bounded by the already-built `maxRows`, audited) that turns a stub line into a delivered one.
+10	
+11	## What this story actually is
+12	
+13	Not new DAO methods — `DeleteExpired`/`DeleteProfile` already exist on the composite (05's `multi-db-strategy.md` §3c) and are already tested (LT-38's conformance suite: `TestConformance_DeleteExpired_*`, `TestConformance_OldestSurvivingAt_*`, `TestConformance_Drained_*`, `TestConformance_DeleteWritesExactlyOneDeletionLogRow`, `TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing` — all confirmed present during LT-42's full completeness sweep). This story is the **caller**: a scheduled invocation that loops per `RetentionClass` until drained, plus a subject-deletion request path, plus the health metric that tells 04 whether it's actually running.
+14	
+15	**Mechanism (team-lead's recommendation, adopted):** a `CronJob` in `04-infra-devops`'s manifests invoking `cmd/api-service`'s existing image in a new `--sweep` mode (or a distinct small entrypoint, `03`'s call) — not a new binary, not a new image build, reusing what's already deployed.
+16	
+17	## The three retention classes and windows this sweep must implement (from `pii-governance.md`, cited so this story doesn't re-derive them)
+18	
+19	| `RetentionClass` | Clock | Window | Why this clock specifically |
+20	|---|---|---|---|
+21	| `direct` | `updated_at` | 24 months | Proposed POC default, engineering basis only — explicitly **not** a legal ruling (`pii-governance.md`'s own "unknown, needs product/legal ruling" status). This story implements the number as configured, doesn't treat it as settled policy. |
+22	| `idp_cache` | `updated_at` | 30 days | A cache, not a record — re-hydration costs one `/identity` call, so the window trades staleness against re-fetch cost. |
+23	| `idp_cache_orphan` | `created_at`, **deliberately not `updated_at`** | 7 days | Using `updated_at` would let an orphan's own read/re-hydration path reset its expiry indefinitely — the entire reason this class exists as `created_at`-clocked, not a stylistic choice. |
+24	
+25	**These are stated as "Proposed" in `pii-governance.md`, not "Ruled," except `user_credential`'s no-independent-window rule.** This story implements the configured numbers; it is not this story's job to decide whether 24 months/30 days/7 days are the right numbers — that's Priya's/legal's call, already flagged as open in the source document.
+26	
+27	## Acceptance criteria (restated from `backlog.md` S11)
+28	
+29	- [ ] Implements 05's addendum without re-deriving the transaction-boundary or batching reasoning (each `DeleteExpired` call is already one transaction per batch, per the DAO's own implementation).
+30	- [ ] Loops `DeleteExpired` per `RetentionClass` until `Drained` is true, one class at a time, never a mixed/shared predicate — enforcement site: the sweep invocation loop's own structure.
+31	- [ ] `DeleteExpired` is never called with a request-scoped context — the sweep's own job/scheduler context governs it. Enforcement site: the sweep invocation's context construction (the `CronJob`'s own pod lifecycle, not an inbound HTTP request), plus a test asserting an already-cancelled context returns before deleting anything (the DAO layer already has this test per LT-38; this story's own test confirms the *caller* doesn't accidentally pass a request-scoped one).
+32	- [ ] `SweepResult.OldestSurvivingAt` is published to 04's observability **only from a `Drained == true` result** — a non-drained batch reports progress, not health, per `observability.md`'s explicit warning that getting this wrong "means the alert fires on every sweep and gets muted, which is worse than not having it." Enforcement site: the metrics-emission code path, gated on `Drained`.
+33	- [ ] Metrics emitted per class per run: `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class="direct"|"idp_cache"|"idp_cache_orphan"}` — matching `observability.md`'s exact label values (not the earlier-corrected, invented `vendor_token_cache`/`idp_identity_cache` names that document itself flagged and fixed).
+34	- [ ] `DeleteProfile` is the only path used for a subject-deletion request; ordinary application deletes still go through `Profiles().Delete` (no log row) — this distinction is preserved, not collapsed for convenience.
+35	- [ ] The `Drained`/`OldestSurvivingAt` coupling gets a one-line doc comment at the field declaration (Oren's note) — already present in the DAO's own code per LT-42's completeness sweep; this story doesn't need to add it again, just not remove or contradict it.
+36	- [ ] **The `CronJob` runs against `api-service`'s existing image** (a `--sweep` mode or distinct entrypoint), not a new image build — matching team-lead's stated "half-day story" framing; a new image/Dockerfile would be disproportionate scope for what this needs.
+37	- [ ] **Bounded by the existing `maxRows` per call** — the sweep doesn't invent a new batching parameter; it uses the DAO's own already-validated `1..10_000` bound.
+38	- [ ] **Audited** — every deletion this sweep performs writes exactly one `deletion_log` row via the DAO's own transaction (already guaranteed by the DAO layer per LT-38's test); this story's job is only to confirm it doesn't bypass that path.
+39	- [ ] **Added per Tobias's objection:** the sweep `CronJob` sets `concurrencyPolicy: Forbid` — Kubernetes' default (`Allow`) would let a slow-running sweep (plausible on the *first* real run, with no prior sweep history and a possible real backlog across all three classes) overlap with its own next scheduled invocation, matching the exact "two schedulers hit the same tables concurrently" risk this project already solved once for the migration `Job` in LT-45 ("only one migration run can reach the migrate stage at a time... enforced by the pipeline's own concurrency group/mutex"), but never carried forward to this `CronJob`. Beyond wasted DB load, two overlapping sweeps for the same class could each independently reach `Drained == true` and each emit `oldest_surviving_row_age_seconds` for that class in the same window — a confusing, duplicate signal undermining the one metric criterion 5's alert rule depends on. `Forbid` silently skips an overlapping run rather than overlapping it — a skipped run must itself be visible in observability (a metric or log line noting the previous run was still active), so a sweep that's perpetually behind schedule doesn't fail silently either.
+40	
+41	## Non-goals
+42	
+43	- No new DAO methods, no schema changes — `DeleteExpired`/`DeleteProfile` and `deletion_log` already exist and are tested.
+44	- No change to the retention windows themselves (24 months/30 days/7 days) — those are Priya's/legal's numbers, implemented as configured, not re-litigated here.
+45	- No new container image — reuses `api-service`'s existing image in a new invocation mode.
+46	- No subject-deletion-request *API endpoint* — `backlog.md`'s S11 wires the DAO-level `DeleteProfile` path; whether/how an external caller triggers a subject-deletion request (a support-tool button, an API route) is a separate, unscoped question not raised by this story's own criteria.
+47	
+48	## PO review script
+49	
+50	1. Confirm the `CronJob` manifest invokes `api-service`'s existing image, not a new one.
+51	2. Confirm the sweep loop calls `DeleteExpired` per class until `Drained`, never a mixed predicate — read the invocation code directly.
+52	3. Confirm the sweep's context is the job's own, not request-scoped — read the code, confirm the cancelled-context test exists at this layer too (not just the DAO's own, already-covered test).
+53	4. Confirm metrics are emitted with the correct label values (`direct`/`idp_cache`/`idp_cache_orphan`), only from `Drained == true` results.
+54	5. Confirm the alert rule (`oldest_surviving_row_age_seconds{class="X"} &gt; retention_window + sweep_interval`) is actually configured in 04's monitoring, not just theoretically possible from the emitted metric.
+55	5a. **Added per Tobias's objection:** read the `CronJob` manifest directly and confirm `concurrencyPolicy: Forbid` is set, not the Kubernetes default `Allow`; confirm a skipped-due-to-overlap run is itself visible in observability (a metric or log line), not silently invisible.
+56	6. Once deployed: confirm the `CronJob` actually runs on schedule (check its last-run status via `kubectl get cronjob`/`kubectl get jobs`) and that at least one run reports real `rows_examined`/`rows_deleted` numbers, not zero-across-the-board from day one (which would be consistent with either a genuinely empty table or a broken sweep — the seeded demo profiles, if old enough, are one way to get a non-trivial signal; otherwise this criterion is "ran without erroring," not "deleted something").
+57	
+58	## Research team review
+59	
+60	**Desmond Okafor — claims check:** Verified the full retention-class/window/clock table and every metrics/label requirement word-for-word against `pii-governance.md` and `observability.md` directly — all accurate. Independently re-checked the DAO-level test claims (rather than trusting his own earlier LT-42 sweep, which hadn't actually named this specific package) — found every cited test present in `internal/dao/conformance/conformance_test.go`, plus the `Drained`/`OldestSurvivingAt` doc comment in `retention.go`. No corrections needed.
+61	
+62	**Tobias Lindqvist — objection:** The `CronJob` had no stated `concurrencyPolicy`, leaving Kubernetes' default `Allow` in place — a slow first-ever sweep run (plausible, given no prior sweep history and a possible real backlog) could overlap with its own next scheduled invocation, recreating the exact "two schedulers hit the same tables concurrently" risk this project already solved once for the migration `Job` in LT-45, never carried forward here. Beyond wasted load, overlapping sweeps could each independently emit `oldest_surviving_row_age_seconds` for the same class, undermining the one metric the alert rule depends on being trustworthy. Counter-proposal accepted: `concurrencyPolicy: Forbid`, plus a requirement that a skipped-due-to-overlap run be itself visible in observability, not silently invisible.
+63	
+64	**Naomi Voss — ruling:** Fix applied. This refinement is accepted and ready to hand off. This is the fourth story in this chain where a pattern already established elsewhere in the project (single-in-flight discipline on the migration `Job`) wasn't carried forward to a structurally identical new component — worth naming as its own recurring category, alongside the NetworkPolicy-scoping pattern Tobias already flagged on LT-52.
+65	
+66	## Update — implementation (Renata Cole, 03), entrypoint/args agreed with Theo (04) first
+67	
+68	**Entrypoint, agreed with Theo before opening the PR:** `APP_MODE=sweep`, a third value alongside `verifier`/`issuer` on the SAME `api-service` binary/image — not a `--sweep` CLI flag, and not a distinct `cmd/sweep-worker` binary. Theo's own reasoning, adopted: `config.Load`/`cmd/api-service/main.go` already dispatch on `APP_MODE`, so a third value keeps one mode-selection mechanism instead of introducing a second (env var + CLI flag) in the same binary. The `CronJob`'s container just sets `APP_MODE: sweep` plus `DB_DRIVER`/`DB_DSN_FILE` (same as every other Deployment) — no `command`/`args` override needed. `internal/app.ModeSweep` is the new typed constant; `config.Load` accepts it; `config.RequiredAuthEnvVars("api-service", "sweep")` returns `(nil, true)` — recognized, requiring nothing, since sweep mode never verifies or issues a JWT.
+69	
+70	**Config:** reuses `DB_DRIVER`/`DB_DSN` as-is, no new DB env vars. Retention windows (24 months/30 days/7 days) and `maxRowsPerBatch` (1000, inside the DAO's own validated 1..10,000 range) are hardcoded constants in `internal/sweep`, not new env vars — per this story's own "not this story's job to decide the numbers" framing, confirmed with Theo.
+71	
+72	**Metrics, agreed with Theo:** stdout lines in a `metric_name{label="value"} value` shape (`internal/sweep.StdoutMetricEmitter`) are the complete, final answer for this project's scope — not a placeholder. Checked against the real cluster: `kube-prometheus-stack` is deployed but there's no Pushgateway, which is the actually-correct tool for a short-lived batch job's metrics (a CronJob pod is typically gone before Prometheus's own scrape interval could catch it), and standing one up is new infrastructure disproportionate to this story's "half-day" framing. Theo is documenting Pushgateway as the named production next step in a decisions doc, so this is a stated scope limit, not a silent gap. `oldest_surviving_row_age_seconds` is emitted only from a `Drained == true` batch, per `internal/sweep.runClass`'s own gating — verified by a dedicated test (`TestRun_MetricsOnlyEmittedOnDrained`) asserting a non-drained intermediate batch never triggers a metrics call.
+73	
+74	**`internal/sweep.Run`** loops `DeleteExpired` per `RetentionClass` until `Drained`, one class at a time (never a mixed predicate, verified by `TestRun_EveryClassCalledOnceEachWithItsOwnPredicate`), summing `RowsExamined`/`RowsDeleted` across every batch a class takes to drain. A cancelled context stops before any class calls `DeleteExpired` at all (`TestRun_AlreadyCancelledContextDeletesNothing`) — `cmd/api-service`'s own `runSweepMode` derives its context from `signal.NotifyContext` (SIGTERM/SIGINT), never a request-scoped one, since there is no HTTP request anywhere in this invocation. One class's error doesn't block the other two (`TestRun_OneClassErrorDoesNotBlockTheOthers`) — a database hiccup on one class shouldn't waste a full sweep of the other two, and a failed class's metrics are never emitted (would be misleadingly partial).
+75	
+76	**Live-verified, not just unit-tested:** ran the actual `api-service` binary with `APP_MODE=sweep` against a real throwaway Postgres container, seeded with rows spanning all three classes (some stale, some fresh). Confirmed: only the stale rows were deleted, the fresh rows survived, `deletion_log` recorded exactly 3 rows with `reason=retention_sweep`, and the emitted metric lines matched the actual examined/deleted counts.
+77	
+78	`DeleteProfile` (subject-deletion path) is untouched by this story, per its own non-goal — no subject-deletion-request endpoint exists to wire it to.
+79	
+80	Full `go build`/`go vet`/`go test`/`staticcheck`/`gofmt`/`gitleaks` clean.
+81	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/backlog.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/backlog.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 04 — Infra &amp; DevOps Backlog
+2	
+3	Track: 04-infra-devops. Lead: Theo Bergman. Epic: "Infra &amp; DevOps: Containerization, CI/CD, and Operations" (key: LT-4).
+4	
+5	Authored now per Phase 4; will be re-checked against the consistency pass's cross-cutting findings (`PLAN.md` §"Cross-cutting — enforcement sites") once that report lands, particularly for Story 6 below. All stories carry `no-code-yet` — Warren's Phase 4 go covers backlog authoring, not implementation; a separate, explicit code go-ahead is still required before any `.go`, Dockerfile, CI config, or compose file is written for real.
+6	
+7	## Story 1 — Containerize `api-service` and `idp-connector` (LT-45)
+8	
+9	**Description:** Build the two multi-stage Go images (distroless final stage, non-root, read-only root filesystem) and the Deployment/Service/NetworkPolicy manifests targeting the lab cluster, per `./containerization-design.md`. Covers both binaries' Dockerfiles, resource requests/limits sized per service (CPU-bound `api-service` vs. I/O-bound `idp-connector`), the migration `Job` (parallelism 1, gated by the CI pipeline's exclusivity mechanism, not Kubernetes ordering alone), a default-deny `NetworkPolicy` on `idp-connector` so its "no inbound Service" isolation claim actually holds against the namespace's default-allow network, and — per the consistency pass's F13 finding — a **third manifest**: `api-service-issuer`, a second Deployment of the same `api-service` image (`APP_MODE=issuer`) whose own ServiceAccount is the only one that mounts the JWT signing key, since RBAC on the `Secret` verb does nothing once it's volume-mounted into the verifying Deployment's replicas.
+10	
+11	**Acceptance criteria:**
+12	- [ ] The receiving track (whoever implements/reviews this) can act on the manifests without re-deriving the reasoning in `containerization-design.md`.
+13	- [ ] Both images build from a pinned Go version, produce a static binary, and contain nothing but the binary (+ CA certs for `idp-connector`) — enforcement site: multi-stage Dockerfile's final `COPY` list.
+14	- [ ] Neither Pod can write to its own root filesystem at runtime — enforcement site: `securityContext.readOnlyRootFilesystem: true`.
+15	- [ ] `idp-connector` is unreachable except from `api-service` — enforcement site: the `NetworkPolicy` ingress rule scoped to `api-service`'s pod selector.
+16	- [ ] A stuck `idp-connector` cannot starve `api-service` if colocated on one node — enforcement site: `resources.limits` on both Pod specs.
+17	- [ ] The migration `Job` cannot start a second concurrent run — enforcement site: the CI pipeline's concurrency-gated deploy stage (Story 3), not a database lock.
+18	- [ ] The JWT signing private key is mounted into `api-service-issuer` only, never into `api-service`'s own Deployment — enforcement site: `api-service`'s manifest carries no volume/mount referencing that `Secret` at all, verified by manifest inspection, not RBAC.
+19	
+20	**Depends on:** 03 — `cmd/api-service` and `cmd/idp-connector` build as real binaries (service boundaries already stable, per `PLANNING.md`); 05 — final migration tooling name for the `Job`'s invocation (already final, `05-data-ops/migration-approach.md`).
+21	
+22	**Model/effort:** Sonnet, medium.
+23	
+24	**Type:** Story.
+25	
+26	**Labels:** `track-04`, `no-code-yet`.
+27	
+28	## Story 2 — Deliver secrets to both services per 02's inventory (LT-46)
+29	
+30	**Description:** Implement the Kubernetes-native `Secret` delivery mechanism in `./secrets-delivery.md`: file-mounted secrets keyed by name only in manifests, RBAC scoped per-service (and, for the JWT signing key, scoped to the issuing code path specifically, not `api-service`'s verification path), cluster-level encryption-at-rest for the `Secret` resource type, and the migration-runner credential's backend-specific provisioning (`CREATE EXTENSION pg_trgm` rights on PostgreSQL only, nothing extra on CockroachDB, no privilege model on SQLite) kept distinct from the runtime service credential (DML-only, no DDL, per 05's R4).
+31	
+32	**Acceptance criteria:**
+33	- [ ] 02 (the hand-off's author) confirms this implementation matches `handoff-04-secrets.md` v2's inventory without needing to re-explain any row.
+34	- [ ] No `Secret` value appears in a manifest, image layer, build arg, or CI log — enforcement site: manifests reference names only; CI's `gitleaks` stage (Story 3).
+35	- [ ] No ServiceAccount can `get`/`list` a `Secret` it doesn't mount — enforcement site: per-service `Role`/`RoleBinding` scoped to named `Secret`s.
+36	- [ ] The migration-runner credential and the runtime service credential are provisioned as two distinct `Secret`s, never one — enforcement site: separate `Secret` objects, separate `Role`s, per 05's R4.
+37	- [ ] **Re-scoped per Warren's ruling (2026-09-13), replacing the original etcd-encryption criterion — see `refinement/LT-46.md` for the full record:** application secret material is not stored in etcd; delivered by Vault Agent with per-`ServiceAccount` Vault roles — enforcement site: Vault policy per role, plus a namespace check that none of the six application `Secret`s exist. Accepted platform exceptions stay as Kubernetes `Secret`s and are named explicitly, not silently grandfathered.
+38	
+39	**Depends on:** 02 — `handoff-04-secrets.md` (received, v2, final); 05 — `migration-approach.md` R4 (final).
+40	
+41	**Model/effort:** Sonnet, medium.
+42	
+43	**Type:** Story.
+44	
+45	**Labels:** `track-04`, `security-graded`, `no-code-yet`.
+46	
+47	## Story 3 — CI/CD pipeline: build, lint, test, scan, migrate, describe-only deploy (LT-47)
+48	
+49	**Description:** Stand up the pipeline in `./ci-pipeline.md`: build/lint/test(`-race`, three DB targets: SQLite, Postgres, CockroachDB)/security-scan/image-build on every PR; push-images/migration-job/describe-only-deploy on merge. The migration-job stage is where 05's R2 exclusivity requirement is actually enforced — a concurrency-gated pipeline stage, not a database lock, since no single lock mechanism covers both the right scope (session, to span `goose`'s per-file transactions) and the right engine (CockroachDB supports transaction-scope only).
+50	
+51	**Acceptance criteria:**
+52	- [ ] A developer or reviewer can act on this pipeline description without re-deriving why each stage exists.
+53	- [ ] A lint or test failure blocks merge — enforcement site: required-status-check on the PR, not advisory.
+54	- [ ] A CockroachDB-specific SQL incompatibility surfaces at PR time, not deploy time — enforcement site: the dedicated CockroachDB testcontainer job.
+55	- [ ] Only one migration run can reach the migrate stage at a time, across concurrent deploys — enforcement site: the pipeline's own concurrency group/mutex on the deploy environment.
+56	- [ ] No secret enters a build log or image layer — enforcement site: `gitleaks` stage plus the Dockerfile's minimal `COPY` list (Story 1).
+57	- [ ] The final deploy stage is documented (which manifests, which namespace, which credential) but not invoked — enforcement site: stage exists as a named, non-executing step until a separate real-deploy decision is made.
+58	
+59	**Depends on:** 03 — test-strategy outline for `go test ./...` to run against; 05 — `migration-approach.md` (final).
+60	
+61	**Model/effort:** Sonnet, medium.
+62	
+63	**Type:** Story.
+64	
+65	**Labels:** `track-04`, `no-code-yet`.
+66	
+67	## Story 4 — Local dev-loop: compose profiles for SQLite and Postgres (LT-48)
+68	
+69	**Description:** Build the `docker-compose.yml` in `./local-dev-loop.md`: `sqlite` and `postgres` profiles matching 03's `DB_DRIVER` env var, a mock/local `idp-connector` target, hot-reload (`air`) for `api-service` in dev profiles only, and local-only dev credentials clearly distinguished from the real secrets mechanism (Story 2).
+70	
+71	**Acceptance criteria:**
+72	- [ ] A new developer can run either profile from this file alone, without asking what `DB_DRIVER` values are valid.
+73	- [ ] The `postgres` profile exercises the shared `postgres`-package code path (Postgres + CockroachDB) — enforcement site: compose service definition wiring `DB_DRIVER=postgres`.
+74	- [ ] Dev credentials never appear in `./secrets-delivery.md`'s mechanism or in any real manifest — enforcement site: explicit statement in the file plus separate variable naming (`dev`/`dev`, hardcoded client id/secret).
+75	- [ ] Hot-reload has zero effect on the production image build — enforcement site: `air` target scoped to compose dev profiles only, never `./containerization-design.md`'s Dockerfile.
+76	
+77	**Depends on:** 03 — `DB_DRIVER`/config-surface env vars (already stable, per `PLANNING.md`).
+78	
+79	**Model/effort:** Sonnet, low.
+80	
+81	**Type:** Story.
+82	
+83	**Labels:** `track-04`, `no-code-yet`.
+84	
+85	## Story 5 — Observability: logging, metrics, never-log enforcement, retention-sweep alerting (LT-49)
+86	
+87	**Description:** Implement `./observability.md`: structured `slog` logging with an explicit-field discipline (never a whole request/response struct through a log call), a lint check flagging never-log-list field names, RED metrics with no PII-cardinality labels, ingress-level query-string redaction for search endpoints, RBAC-separated audit-log read access, and 05's S5 retention-sweep requirement — rows-examined/rows-deleted/oldest-surviving-row-age metrics per data class, with an alert when oldest-row-age exceeds retention-window-plus-sweep-interval, since a dead sweep job produces zero rows-deleted either way and gives no other symptom.
+88	
+89	**Acceptance criteria:**
+90	- [ ] 02 confirms the never-log list (`handoff-04-secrets.md`'s nine items) is fully covered by a named enforcement site, not just a policy statement.
+91	- [ ] No password, token, JWT, client secret, or DSN reaches a log call — enforcement site: explicit-field logging discipline plus the CI lint check.
+92	- [ ] Search-endpoint name/phone query fragments never appear in ingress access logs — enforcement site: ingress log-format override / redaction.
+93	- [ ] Audit-log read access is a distinct RBAC grant from Secret-read access — enforcement site: separate `Role` bound to an incident-review group.
+94	- [ ] A stopped retention-sweep job triggers an alert within one sweep interval of its window being exceeded — enforcement site: the `oldest_surviving_row_age_seconds` alert rule, per data class.
+95	
+96	**Depends on:** 02 — `handoff-04-secrets.md`'s never-log list (final); 05 — `pii-governance.md` S5 retention numbers and data-class names (final).
+97	
+98	**Model/effort:** Sonnet, medium.
+99	
+100	**Type:** Story.
+101	
+102	**Labels:** `track-04`, `security-graded`, `no-code-yet`.
+103	
+104	## Story 6 — Configure log-sink retention for the audit trail (LT-20)
+105	
+106	**Description:** The consistency pass (`../decisions/cross-track-consistency.md`, "Deletion gap") ruled the enforcement site: a subject-deletion request reaches `user_profile`/`user_credential` by cascade but not application logs, metrics, or the audit trail, none of which has a `source` column or a deletion hook. 02's never-log list is the upstream control (PII values never enter a log in the first place, per `./observability.md`'s enforcement mechanism), which leaves exactly one remaining artifact needing a retention window: the audit trail itself (`sub`, scope, opaque record id, timestamp) — pseudonymous, not PII-free, and after a profile deletion the only remaining record that a given record id was looked up by a given caller. The enforcement site for its expiry is a retention policy on the log sink 04 already operates (Loki or equivalent, per `./observability.md`'s "Audit-log access" section) — not a deletion job, not a DAO method. 05 adds one row to `pii-governance.md`'s retention table for the audit-log window (basis: unknown, pending legal); 02 adds the two vocabulary/list fixes the pass identified for the never-log list (driver-error detail, `username`). This story configures the sink's retention setting to that window once it's a number.
+107	
+108	**Acceptance criteria:**
+109	- [ ] The hand-off standard: 02 and 05 can each confirm their half (never-log list scope; retention-table row) without needing this story rewritten.
+110	- [ ] The audit-log stream expires no later than 05's stated window — enforcement site: the log sink's retention configuration (a Loki `retention_period` or equivalent for the chosen sink), not application code.
+111	- [ ] The retention configuration is separate from, and does not touch, any other log stream's retention or any Secret-access RBAC (`./secrets-delivery.md`) — enforcement site: sink-level retention is scoped per log stream/index, not global.
+112	- [ ] Confirmed this is a configuration value, not a deletion job: no new DAO method, no new `cmd/` entrypoint, no scheduled job beyond what `./observability.md`'s retention-sweep story (Story 5) already covers for `user_profile`/`user_credential`-derived data.
+113	
+114	**Depends on:** 02 — never-log list additions (driver-error detail, `username`) confirmed; 05 — `pii-governance.md` audit-log retention-window row (basis: unknown, pending legal, per the pass).
+115	
+116	**Model/effort:** Sonnet, low.
+117	
+118	**Type:** Story.
+119	
+120	**Labels:** `track-04`, `from-consistency-pass`, `no-code-yet`.
+121	
+122	---
+123	
+124	## Story 7 — Database provisioning in-namespace: Postgres, DB credentials Secret, migration Job, DB_DSN_FILE wiring (LT-52)
+125	
+126	**Status: new** — created from a gap found during 01's LT-40 refinement (`03-engineering-delivery/refinement/LT-40.md`): none of this track's existing stories (LT-45/46/47/48/49/LT-20) actually deploy a running database instance into `loginid-takehome` — they all assume a DB target already exists. Without it, LT-39's handlers have nothing real behind the DAO, and LT-34/LT-39/LT-40/LT-51's joint live-URL review can't exercise a genuine data path. Full refinement: `04-infra-devops/refinement/postgres-in-namespace.md`.
+127	
+128	**Description:** A single-replica PostgreSQL `StatefulSet` (with a `PersistentVolumeClaim`) in `loginid-takehome` — a managed instance would be disproportionate infra/cost for this take-home's scale, and a single `StatefulSet` matches this project's existing "small, isolated, no HA beyond what's needed" pattern (Theo's call, confirmed). Plus: a DB credential `Secret` provisioned out-of-band per the pattern already established for the JWT signing key (`deploy/issuer-secret-bootstrap.yaml`); the two-invocation goose migration `Job` in the corrected order (backend directory first, then `shared/`, per `05-data-ops/migration-approach.md`'s own corrected ordering); and `DB_DSN_FILE` wiring so `api-service` actually connects. **CockroachDB is explicitly out of scope for deployment** — it's exercised in CI only (LT-47's testcontainer job), never deployed live in this cluster; stated here so a reviewer doesn't expect to find it running.
+129	
+130	**Acceptance criteria:**
+131	- [ ] Single-replica PostgreSQL `StatefulSet` + `PersistentVolumeClaim` running in `loginid-takehome`.
+132	- [ ] A default-deny `NetworkPolicy` scopes Postgres's ingress to `api-service` (and the migration `Job`'s pod) only — matching `idp-connector-default-deny`'s existing shape, not the namespace's default-allow.
+133	- [ ] DB credential `Secret` provisioned out-of-band, never through the CI-applied manifest set — same discipline as the JWT signing key.
+134	- [ ] Migration-runner credential (DDL rights) and runtime service credential (DML-only, cannot run DDL) are two distinct `Secret`s — enforcement site: the runtime role's Postgres grants exclude `CREATE`/`ALTER`/`DROP`, verified by a failed DDL attempt under that role.
+135	- [ ] Migration `Job` runs goose in the corrected order — backend directory (`postgres/`) first, `shared/` second — each against its own version table (`goose_db_version_postgres`, `goose_db_version_shared`); both invocations must succeed for the `Job` to count as successful.
+136	- [ ] The migration `Job` is idempotent — a re-run against an already-migrated database applies zero new versions and exits successfully, not an error.
+137	- [ ] The migration `Job` completes before `api-service`'s rollout — deploy pipeline ordering, not assumed Kubernetes scheduling.
+138	- [ ] `DB_DSN_FILE` (not `DB_DSN`) is set in `api-service`'s live Deployment, pointing at the mounted runtime credential — precedence exercised in the running pod, not only in `internal/config`'s existing unit test.
+139	- [ ] `/healthz` reflects real DB connectivity as a boolean/enum field only (consistent with 02's existing ruling on the endpoint's response shape) — never a connection string, host, port, or driver `DETAIL` text, even when the DB is unreachable.
+140	- [ ] `deploy/manifests.yaml`'s header comment (currently: "no migration Job, no DB_DSN secret") is updated to match reality.
+141	- [ ] `ResourceQuota` headroom for the new `StatefulSet` pod confirmed and adjusted in the same PR if needed — shown in the PR description, not discovered as a second `FailedCreate` (per the `api-service-issuer` incident).
+142	
+143	**Depends on:** 03 — `api-service`'s `DB_DSN_FILE` config surface (already stable); 05 — `migration-approach.md` (final, corrected ordering).
+144	**Blocks:** LT-39's live-URL review (joint with LT-40/LT-51).
+145	**Model/effort:** Sonnet, medium.
+146	**Type:** Story.
+147	**Labels:** `track-04`, `security-graded`.
+148	
+149	---
+150	
+151	## Story 8 — Small hardening: wait for Postgres Service DNS before the migration Job connects (follow-up to LT-52)
+152	
+153	**Status: new** — not blocking, flagged by team-lead after the first real deploy. The migration `Job`'s first attempt hit `lookup postgres.loginid-takehome.svc ... no such host` — Postgres's `StatefulSet` rollout reported Ready before its headless `Service`'s DNS record had actually propagated. The `Job`'s own `backoffLimit: 2` retry absorbed it cleanly (second attempt succeeded), so this didn't block the deploy — but it's a race worth closing rather than relying on retry luck indefinitely.
+154	
+155	**Description:** Add an `initContainer` (or a small wait loop in the main container's command) to the migration `Job` that polls DNS resolution of `postgres.loginid-takehome.svc` (or a TCP connect to `postgres:5432`) before invoking `goose`, so the first real attempt doesn't depend on winning a race against Service registration.
+156	
+157	**Acceptance criteria:**
+158	- [ ] Migration `Job` waits for Postgres to be reachable (DNS + TCP) before running goose, not just for the `StatefulSet`'s own readiness probe.
+159	- [ ] No change to `backoffLimit` or the goose invocation order/logic — this is additive, not a replacement for existing retry behavior.
+160	
+161	**Depends on:** none — small, self-contained follow-up to LT-52.
+162	**Model/effort:** Sonnet, low.
+163	**Type:** Task.
+164	**Labels:** `track-04`.
+165	
+166	---
+167	
+168	## Story 9 — Scope gitleaks to PR commits, add a separate scheduled full-history scan
+169	
+170	**Status: new** — flagged during PR #34's review. `pr-check.yml`'s gitleaks job scans full history (`fetch-depth: 0`, needed for the tool to work at all) — meaning a leaked-pattern match in *any* commit on a branch fails the PR even after a later commit rewrites/removes it, and would fail every subsequent PR on main forever if such a commit were ever merged. Not currently a live incident (Renata is rewriting the offending commit on her own unmerged branch), but the CI design itself has this sharp edge regardless of whether any specific finding is real or a false positive.
+171	
+172	**Description:** Two changes, per team-lead's leaning (adopted here, not just recorded neutrally):
+173	1. Scope the PR-check gitleaks scan to only the PR's own commits (`--log-opts="origin/${{ github.base_ref }}..HEAD"`), so history already on `main` isn't rescanned on every subsequent PR.
+174	2. Add a separate, scheduled (e.g. nightly or on-push-to-main) full-history gitleaks scan as its own workflow, so the full-history safety net isn't lost — it just stops being a per-P
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">## Claims audit — LT-49 refinement vs. cited sources
+
+**1. `observability.md` mechanism claims — 4 of 5 PASS, 1 DISCREPANCY**
+
+- Lint check, ingress redaction, audit-log RBAC, alert formula, Drained-only gating: all verified verbatim (lines 10, 26, 29–31, 37, 39 of `observability.md`).
+- **Discrepancy:** LT-49.md §4 claims "all 11 items in `handoff-04-secrets.md`'s list map to a named enforcement site... the mapping already exists in `observability.md`'s 'operationalized' section." But `observability.md` line 23 literally reads **"Hand-off's nine items map to two enforcement surfaces"** and enumerates only items 1–9. Items 10 (driver-error `DETAIL` text) and 11 (username) — added to the hand-off later by the F50 consistency-pass fix — are **not named anywhere** in the operationalized section. `observability.md`'s error-path paragraph (line 11) touches DSN-in-driver-error but never states item 10's constraint-`DETAIL` case or item 11's username case as mapped. The document is stale relative to the hand-off it cites; the refinement doc's "already exists" claim overstates what's actually written. **Recommend softening:** "the mapping exists for items 1–9; Marcus's confirmation must additionally supply the missing mapping for items 10–11, which `observability.md` does not yet name."
+
+**2. `handoff-04-secrets.md` never-log list count — PASS**
+
+Counted lines 67–77: 11 items, confirmed. Item 10 = "Database driver error messages and `DETAIL`/`Key (...)=(...)` text" — matches refinement's "driver-error detail." Item 11 = "Username" — matches. Both correctly quoted.
+
+**3. `LT-44.md` cross-check — PASS, all four claims verified**
+
+Three metric names (line 33), class labels `direct`/`idp_cache`/`idp_cache_orphan` (line 33), `Drained == true` gating requirement (line 32), `concurrencyPolicy: Forbid` (line 39, added per Tobias's objection). All match exactly.
+
+**4. `backlog.md` Story 5 acceptance criteria — DRIFT, not a LT-49 authoring error**
+
+Backlog line 90 itself says **"handoff-04-secrets.md's nine items"** — stale, predating the F50 pass that brought the list to 11. LT-49.md restates the criterion using 11 (the correct, current count) without flagging that this silently departs from `backlog.md`'s own written text. Not wrong on the merits, but `backlog.md` Story 5 needs its own correction (nine → eleven) so the two documents don't visibly disagree if read side by side.
+
+**Summary:** Areas 2 and 3 pass clean. Areas 1 and 4 both trace to the same root cause — the F50 never-log-list expansion (9→11 items) was never back-propagated into `observability.md`'s "operationalized" section or `backlog.md`'s Story 5 text. Recommend Naomi route both fixes to source docs (04's `observability.md`, 04's `backlog.md`) rather than treating LT-49.md's restatement as the error.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

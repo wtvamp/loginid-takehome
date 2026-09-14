@@ -1,0 +1,1797 @@
+[
+  {
+    "persona": "Dana Whitfield",
+    "slug": "dana-whitfield",
+    "role": "Project manager (PM)",
+    "track": "PM",
+    "group": "pm",
+    "model": "claude-fable-5-1",
+    "turns": 1273,
+    "tool_calls": 1733,
+    "sessions": [
+      {
+        "id": "e179bddc-bee5-4165-90cf-dc54e411a7d6",
+        "label": "session",
+        "pages": [
+          "dana-whitfield/e179bddc-p1.html",
+          "dana-whitfield/e179bddc-p2.html",
+          "dana-whitfield/e179bddc-p3.html",
+          "dana-whitfield/e179bddc-p4.html",
+          "dana-whitfield/e179bddc-p5.html",
+          "dana-whitfield/e179bddc-p6.html",
+          "dana-whitfield/e179bddc-p7.html",
+          "dana-whitfield/e179bddc-p8.html",
+          "dana-whitfield/e179bddc-p9.html",
+          "dana-whitfield/e179bddc-p10.html",
+          "dana-whitfield/e179bddc-p11.html"
+        ],
+        "start": "2026-09-12T16:16:54.643000+00:00",
+        "end": "2026-09-14T03:28:33.931000+00:00",
+        "turns": 1273,
+        "tool_calls": 1733,
+        "model": "claude-fable-5-1"
+      }
+    ]
+  },
+  {
+    "persona": "Naomi Voss",
+    "slug": "naomi-voss",
+    "role": "Product Owner, lead 01",
+    "track": "01",
+    "group": "lead",
+    "model": "claude-sonnet-5",
+    "turns": 1182,
+    "tool_calls": 1130,
+    "sessions": [
+      {
+        "id": "8be33b92-9eef-4d3d-8954-a05aa11d204d",
+        "label": "session",
+        "pages": [
+          "naomi-voss/8be33b92-p1.html",
+          "naomi-voss/8be33b92-p2.html",
+          "naomi-voss/8be33b92-p3.html",
+          "naomi-voss/8be33b92-p4.html",
+          "naomi-voss/8be33b92-p5.html",
+          "naomi-voss/8be33b92-p6.html",
+          "naomi-voss/8be33b92-p7.html",
+          "naomi-voss/8be33b92-p8.html",
+          "naomi-voss/8be33b92-p9.html",
+          "naomi-voss/8be33b92-p10.html"
+        ],
+        "start": "2026-09-12T18:20:44.383000+00:00",
+        "end": "2026-09-14T02:23:46.123000+00:00",
+        "turns": 1182,
+        "tool_calls": 1130,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Marcus Ilori",
+    "slug": "marcus-ilori",
+    "role": "Security & AI architecture lead",
+    "track": "02",
+    "group": "lead",
+    "model": "claude-sonnet-5",
+    "turns": 520,
+    "tool_calls": 479,
+    "sessions": [
+      {
+        "id": "7a0f5ae1-ba72-4d28-b027-fc8930055b96",
+        "label": "session",
+        "pages": [
+          "marcus-ilori/7a0f5ae1-p1.html",
+          "marcus-ilori/7a0f5ae1-p2.html",
+          "marcus-ilori/7a0f5ae1-p3.html",
+          "marcus-ilori/7a0f5ae1-p4.html",
+          "marcus-ilori/7a0f5ae1-p5.html"
+        ],
+        "start": "2026-09-12T18:18:42.237000+00:00",
+        "end": "2026-09-14T02:23:38.709000+00:00",
+        "turns": 520,
+        "tool_calls": 479,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Renata Cole",
+    "slug": "renata-cole",
+    "role": "Engineering lead",
+    "track": "03",
+    "group": "lead",
+    "model": "claude-sonnet-5",
+    "turns": 3183,
+    "tool_calls": 3128,
+    "sessions": [
+      {
+        "id": "35c20edc-753d-4d96-b512-7114684706eb",
+        "label": "session",
+        "pages": [
+          "renata-cole/35c20edc-p1.html",
+          "renata-cole/35c20edc-p2.html",
+          "renata-cole/35c20edc-p3.html",
+          "renata-cole/35c20edc-p4.html",
+          "renata-cole/35c20edc-p5.html",
+          "renata-cole/35c20edc-p6.html",
+          "renata-cole/35c20edc-p7.html",
+          "renata-cole/35c20edc-p8.html",
+          "renata-cole/35c20edc-p9.html",
+          "renata-cole/35c20edc-p10.html",
+          "renata-cole/35c20edc-p11.html",
+          "renata-cole/35c20edc-p12.html",
+          "renata-cole/35c20edc-p13.html",
+          "renata-cole/35c20edc-p14.html",
+          "renata-cole/35c20edc-p15.html",
+          "renata-cole/35c20edc-p16.html",
+          "renata-cole/35c20edc-p17.html",
+          "renata-cole/35c20edc-p18.html",
+          "renata-cole/35c20edc-p19.html",
+          "renata-cole/35c20edc-p20.html",
+          "renata-cole/35c20edc-p21.html",
+          "renata-cole/35c20edc-p22.html",
+          "renata-cole/35c20edc-p23.html",
+          "renata-cole/35c20edc-p24.html",
+          "renata-cole/35c20edc-p25.html",
+          "renata-cole/35c20edc-p26.html",
+          "renata-cole/35c20edc-p27.html"
+        ],
+        "start": "2026-09-12T18:19:12.746000+00:00",
+        "end": "2026-09-14T02:23:46.769000+00:00",
+        "turns": 3183,
+        "tool_calls": 3128,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Theo Bergman",
+    "slug": "theo-bergman",
+    "role": "Infra & DevOps lead",
+    "track": "04",
+    "group": "lead",
+    "model": "claude-sonnet-5",
+    "turns": 1783,
+    "tool_calls": 1642,
+    "sessions": [
+      {
+        "id": "08e23ae6-bd90-4c6f-b843-d23dad22d213",
+        "label": "session",
+        "pages": [
+          "theo-bergman/08e23ae6-p1.html",
+          "theo-bergman/08e23ae6-p2.html",
+          "theo-bergman/08e23ae6-p3.html",
+          "theo-bergman/08e23ae6-p4.html",
+          "theo-bergman/08e23ae6-p5.html",
+          "theo-bergman/08e23ae6-p6.html",
+          "theo-bergman/08e23ae6-p7.html",
+          "theo-bergman/08e23ae6-p8.html",
+          "theo-bergman/08e23ae6-p9.html",
+          "theo-bergman/08e23ae6-p10.html",
+          "theo-bergman/08e23ae6-p11.html",
+          "theo-bergman/08e23ae6-p12.html",
+          "theo-bergman/08e23ae6-p13.html",
+          "theo-bergman/08e23ae6-p14.html",
+          "theo-bergman/08e23ae6-p15.html"
+        ],
+        "start": "2026-09-12T18:16:46.977000+00:00",
+        "end": "2026-09-14T02:23:40.647000+00:00",
+        "turns": 1783,
+        "tool_calls": 1642,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Priya Nandakumar",
+    "slug": "priya-nandakumar",
+    "role": "Data ops lead",
+    "track": "05",
+    "group": "lead",
+    "model": "claude-opus-5",
+    "turns": 379,
+    "tool_calls": 324,
+    "sessions": [
+      {
+        "id": "f8e0a327-e519-4025-8628-4a6e7eb7df64",
+        "label": "session",
+        "pages": [
+          "priya-nandakumar/f8e0a327-p1.html",
+          "priya-nandakumar/f8e0a327-p2.html",
+          "priya-nandakumar/f8e0a327-p3.html",
+          "priya-nandakumar/f8e0a327-p4.html"
+        ],
+        "start": "2026-09-12T18:21:20.547000+00:00",
+        "end": "2026-09-14T02:23:43.417000+00:00",
+        "turns": 379,
+        "tool_calls": 324,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "Desmond Okafor",
+    "slug": "desmond-okafor",
+    "role": "Hire (track 01)",
+    "track": "01",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 178,
+    "tool_calls": 193,
+    "sessions": [
+      {
+        "id": "agent-ac6dd52d8b2d906a7",
+        "label": "session 1 of 6",
+        "pages": [
+          "desmond-okafor/agent-ac-p1.html"
+        ],
+        "start": "2026-09-12T18:13:58.607000+00:00",
+        "end": "2026-09-12T18:15:55.231000+00:00",
+        "turns": 6,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "9f72a7fe-5fe0-4320-96cc-449f87d8107b",
+        "label": "session 2 of 6",
+        "pages": [
+          "desmond-okafor/9f72a7fe-p1.html",
+          "desmond-okafor/9f72a7fe-p2.html"
+        ],
+        "start": "2026-09-12T18:21:15.776000+00:00",
+        "end": "2026-09-13T16:55:33.386000+00:00",
+        "turns": 149,
+        "tool_calls": 144,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a427513d0300dd1ed",
+        "label": "session 3 of 6",
+        "pages": [
+          "desmond-okafor/agent-a4-p1.html"
+        ],
+        "start": "2026-09-13T17:19:03.046000+00:00",
+        "end": "2026-09-13T17:20:04.609000+00:00",
+        "turns": 12,
+        "tool_calls": 20,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a783cb1d19a8293d9",
+        "label": "session 4 of 6",
+        "pages": [
+          "desmond-okafor/agent-a7-p1.html"
+        ],
+        "start": "2026-09-13T17:48:15.905000+00:00",
+        "end": "2026-09-13T17:48:59.165000+00:00",
+        "turns": 3,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a59bfbc94dd024a50",
+        "label": "session 5 of 6",
+        "pages": [
+          "desmond-okafor/agent-a5-p1.html"
+        ],
+        "start": "2026-09-13T18:44:52.425000+00:00",
+        "end": "2026-09-13T18:45:35.939000+00:00",
+        "turns": 5,
+        "tool_calls": 7,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ac364bd574c8bb053",
+        "label": "session 6 of 6",
+        "pages": [
+          "desmond-okafor/agent-ac-p1.html"
+        ],
+        "start": "2026-09-13T18:58:56.365000+00:00",
+        "end": "2026-09-13T19:00:16.905000+00:00",
+        "turns": 3,
+        "tool_calls": 4,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Imogen Hale",
+    "slug": "imogen-hale",
+    "role": "Hire (track 01)",
+    "track": "01",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 20,
+    "tool_calls": 18,
+    "sessions": [
+      {
+        "id": "agent-a9528aa7dc6db61d8",
+        "label": "session 1 of 3",
+        "pages": [
+          "imogen-hale/agent-a9-p1.html"
+        ],
+        "start": "2026-09-12T18:13:43.384000+00:00",
+        "end": "2026-09-12T18:13:59.970000+00:00",
+        "turns": 4,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "41d14649-375c-4c80-bdec-03bef7755e88",
+        "label": "session 2 of 3",
+        "pages": [
+          "imogen-hale/41d14649-p1.html"
+        ],
+        "start": "2026-09-12T18:21:13.672000+00:00",
+        "end": "2026-09-13T04:31:13.624000+00:00",
+        "turns": 14,
+        "tool_calls": 11,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ae6ee738b8d8cc0c6",
+        "label": "session 3 of 3",
+        "pages": [
+          "imogen-hale/agent-ae-p1.html"
+        ],
+        "start": "2026-09-14T01:17:56.458000+00:00",
+        "end": "2026-09-14T01:18:06.559000+00:00",
+        "turns": 2,
+        "tool_calls": 2,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Research subagent (Naomi Voss's session)",
+    "slug": "research-subagent-naomi-voss",
+    "role": "Unnamed research / consistency subagent",
+    "track": "01",
+    "group": "hire",
+    "model": "claude-haiku-4-5-20251001",
+    "turns": 15,
+    "tool_calls": 19,
+    "sessions": [
+      {
+        "id": "agent-a13dd1bd225ce9db2",
+        "label": "session",
+        "pages": [
+          "research-subagent-naomi-voss/agent-a1-p1.html"
+        ],
+        "start": "2026-09-12T18:15:29.703000+00:00",
+        "end": "2026-09-12T18:17:38.910000+00:00",
+        "turns": 15,
+        "tool_calls": 19,
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ]
+  },
+  {
+    "persona": "Tobias Lindqvist",
+    "slug": "tobias-lindqvist",
+    "role": "Hire (track 01)",
+    "track": "01",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 74,
+    "tool_calls": 51,
+    "sessions": [
+      {
+        "id": "agent-adc29dd7a5fbfafc5",
+        "label": "session 1 of 6",
+        "pages": [
+          "tobias-lindqvist/agent-ad-p1.html"
+        ],
+        "start": "2026-09-12T18:14:12.744000+00:00",
+        "end": "2026-09-12T18:14:28.473000+00:00",
+        "turns": 4,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "854bb034-7201-4112-9872-74d4365e7719",
+        "label": "session 2 of 6",
+        "pages": [
+          "tobias-lindqvist/854bb034-p1.html"
+        ],
+        "start": "2026-09-12T18:21:17.736000+00:00",
+        "end": "2026-09-13T16:55:54.300000+00:00",
+        "turns": 57,
+        "tool_calls": 30,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a87948dcbe5b5a82a",
+        "label": "session 3 of 6",
+        "pages": [
+          "tobias-lindqvist/agent-a8-p1.html"
+        ],
+        "start": "2026-09-13T17:48:24.469000+00:00",
+        "end": "2026-09-13T17:49:02.824000+00:00",
+        "turns": 3,
+        "tool_calls": 4,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a5271e8f249117b58",
+        "label": "session 4 of 6",
+        "pages": [
+          "tobias-lindqvist/agent-a5-p1.html"
+        ],
+        "start": "2026-09-13T18:44:58.190000+00:00",
+        "end": "2026-09-13T18:45:47.061000+00:00",
+        "turns": 5,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a986a1f4cbec741f2",
+        "label": "session 5 of 6",
+        "pages": [
+          "tobias-lindqvist/agent-a9-p1.html"
+        ],
+        "start": "2026-09-13T18:59:07.322000+00:00",
+        "end": "2026-09-13T18:59:57.872000+00:00",
+        "turns": 3,
+        "tool_calls": 4,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a5846744d580268a0",
+        "label": "session 6 of 6",
+        "pages": [
+          "tobias-lindqvist/agent-a5-p1.html"
+        ],
+        "start": "2026-09-14T01:18:06.054000+00:00",
+        "end": "2026-09-14T01:18:20.764000+00:00",
+        "turns": 2,
+        "tool_calls": 2,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Felix Adebayo",
+    "slug": "felix-adebayo",
+    "role": "Hire (track 02)",
+    "track": "02",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 14,
+    "tool_calls": 12,
+    "sessions": [
+      {
+        "id": "33fc1f5e-a6bc-4393-a745-1549dc35b623",
+        "label": "session",
+        "pages": [
+          "felix-adebayo/33fc1f5e-p1.html"
+        ],
+        "start": "2026-09-12T18:19:12.109000+00:00",
+        "end": "2026-09-13T04:31:16.202000+00:00",
+        "turns": 14,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Helena Marsh",
+    "slug": "helena-marsh",
+    "role": "Hire (track 02)",
+    "track": "02",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 41,
+    "tool_calls": 24,
+    "sessions": [
+      {
+        "id": "01db5ea7-33b3-444b-8eae-57a267d4ed1b",
+        "label": "session",
+        "pages": [
+          "helena-marsh/01db5ea7-p1.html"
+        ],
+        "start": "2026-09-12T18:19:09.685000+00:00",
+        "end": "2026-09-13T17:33:09.867000+00:00",
+        "turns": 41,
+        "tool_calls": 24,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Ingrid Solano",
+    "slug": "ingrid-solano",
+    "role": "Hire (track 02)",
+    "track": "02",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 45,
+    "tool_calls": 38,
+    "sessions": [
+      {
+        "id": "85dbc0f6-04bb-4f99-a24d-158a68a2fd50",
+        "label": "session 1 of 2",
+        "pages": [
+          "ingrid-solano/85dbc0f6-p1.html"
+        ],
+        "start": "2026-09-12T18:19:13.595000+00:00",
+        "end": "2026-09-13T04:55:37.084000+00:00",
+        "turns": 40,
+        "tool_calls": 33,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a9b3827af033dc6bd",
+        "label": "session 2 of 2",
+        "pages": [
+          "ingrid-solano/agent-a9-p1.html"
+        ],
+        "start": "2026-09-13T16:37:19.991000+00:00",
+        "end": "2026-09-13T16:37:57.140000+00:00",
+        "turns": 5,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Tomasz Wrede",
+    "slug": "tomasz-wrede",
+    "role": "Hire (track 02)",
+    "track": "02",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 64,
+    "tool_calls": 55,
+    "sessions": [
+      {
+        "id": "24287bc9-e284-45c4-9fca-81a6a4212461",
+        "label": "session",
+        "pages": [
+          "tomasz-wrede/24287bc9-p1.html"
+        ],
+        "start": "2026-09-12T18:19:08.045000+00:00",
+        "end": "2026-09-13T14:01:07.042000+00:00",
+        "turns": 64,
+        "tool_calls": 55,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Ines Dabrowski",
+    "slug": "ines-dabrowski",
+    "role": "Hire (track 03)",
+    "track": "03",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 18,
+    "tool_calls": 19,
+    "sessions": [
+      {
+        "id": "agent-ab4101c30017199ae",
+        "label": "session 1 of 2",
+        "pages": [
+          "ines-dabrowski/agent-ab-p1.html"
+        ],
+        "start": "2026-09-12T18:12:23.931000+00:00",
+        "end": "2026-09-12T18:12:36.421000+00:00",
+        "turns": 4,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "869b9789-35de-4ef8-a7e1-480358503a54",
+        "label": "session 2 of 2",
+        "pages": [
+          "ines-dabrowski/869b9789-p1.html"
+        ],
+        "start": "2026-09-12T18:20:05.925000+00:00",
+        "end": "2026-09-13T04:31:41.101000+00:00",
+        "turns": 14,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Marisol Ferran",
+    "slug": "marisol-ferran",
+    "role": "Hire (track 03)",
+    "track": "03",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 15,
+    "tool_calls": 15,
+    "sessions": [
+      {
+        "id": "agent-a31343ad99e081fce",
+        "label": "session 1 of 2",
+        "pages": [
+          "marisol-ferran/agent-a3-p1.html"
+        ],
+        "start": "2026-09-12T18:12:14.401000+00:00",
+        "end": "2026-09-12T18:12:25.136000+00:00",
+        "turns": 3,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "20ace06e-0070-4bf6-9062-bcc73a7c0fd0",
+        "label": "session 2 of 2",
+        "pages": [
+          "marisol-ferran/20ace06e-p1.html"
+        ],
+        "start": "2026-09-12T18:20:04.595000+00:00",
+        "end": "2026-09-13T04:31:37.069000+00:00",
+        "turns": 12,
+        "tool_calls": 9,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Nolan Reyes",
+    "slug": "nolan-reyes",
+    "role": "Hire (track 03)",
+    "track": "03",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 158,
+    "tool_calls": 224,
+    "sessions": [
+      {
+        "id": "agent-a0866375305c49eee",
+        "label": "session 1 of 15",
+        "pages": [
+          "nolan-reyes/agent-a0-p1.html"
+        ],
+        "start": "2026-09-12T18:12:05.406000+00:00",
+        "end": "2026-09-12T18:12:17.440000+00:00",
+        "turns": 4,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "e22e8822-3ddd-467b-abb8-f31d23defa7e",
+        "label": "session 2 of 15",
+        "pages": [
+          "nolan-reyes/e22e8822-p1.html"
+        ],
+        "start": "2026-09-12T18:20:03.228000+00:00",
+        "end": "2026-09-13T04:48:55.931000+00:00",
+        "turns": 27,
+        "tool_calls": 21,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a91969062bae43632",
+        "label": "session 3 of 15",
+        "pages": [
+          "nolan-reyes/agent-a9-p1.html"
+        ],
+        "start": "2026-09-13T04:02:03.247000+00:00",
+        "end": "2026-09-13T04:03:16.789000+00:00",
+        "turns": 5,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a7075893ca4a4e223",
+        "label": "session 4 of 15",
+        "pages": [
+          "nolan-reyes/agent-a7-p1.html"
+        ],
+        "start": "2026-09-13T04:06:59.096000+00:00",
+        "end": "2026-09-13T04:08:04.269000+00:00",
+        "turns": 4,
+        "tool_calls": 9,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-af9754d881add4616",
+        "label": "session 5 of 15",
+        "pages": [
+          "nolan-reyes/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T04:37:39.774000+00:00",
+        "end": "2026-09-13T04:39:47.688000+00:00",
+        "turns": 9,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-aeb689e27dd96f9d0",
+        "label": "session 6 of 15",
+        "pages": [
+          "nolan-reyes/agent-ae-p1.html"
+        ],
+        "start": "2026-09-13T04:52:01.908000+00:00",
+        "end": "2026-09-13T04:53:15.848000+00:00",
+        "turns": 4,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a7d2b81ab8e131243",
+        "label": "session 7 of 15",
+        "pages": [
+          "nolan-reyes/agent-a7-p1.html"
+        ],
+        "start": "2026-09-13T11:14:48.657000+00:00",
+        "end": "2026-09-13T11:16:12.124000+00:00",
+        "turns": 10,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-afcc8457fa3bc1613",
+        "label": "session 8 of 15",
+        "pages": [
+          "nolan-reyes/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T11:35:13.868000+00:00",
+        "end": "2026-09-13T11:36:48.373000+00:00",
+        "turns": 7,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-aae51e56deb585c1c",
+        "label": "session 9 of 15",
+        "pages": [
+          "nolan-reyes/agent-aa-p1.html"
+        ],
+        "start": "2026-09-13T11:47:18.985000+00:00",
+        "end": "2026-09-13T11:48:32.525000+00:00",
+        "turns": 11,
+        "tool_calls": 14,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ade8fccc402416645",
+        "label": "session 10 of 15",
+        "pages": [
+          "nolan-reyes/agent-ad-p1.html"
+        ],
+        "start": "2026-09-13T11:56:34.901000+00:00",
+        "end": "2026-09-13T11:58:38.300000+00:00",
+        "turns": 16,
+        "tool_calls": 18,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a4d8df4cad0580c2e",
+        "label": "session 11 of 15",
+        "pages": [
+          "nolan-reyes/agent-a4-p1.html"
+        ],
+        "start": "2026-09-13T12:30:33.035000+00:00",
+        "end": "2026-09-13T12:32:05.227000+00:00",
+        "turns": 11,
+        "tool_calls": 17,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a2d5a859fdac79e2b",
+        "label": "session 12 of 15",
+        "pages": [
+          "nolan-reyes/agent-a2-p1.html"
+        ],
+        "start": "2026-09-13T13:16:23.379000+00:00",
+        "end": "2026-09-13T13:19:08.720000+00:00",
+        "turns": 14,
+        "tool_calls": 27,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ae766a815188af431",
+        "label": "session 13 of 15",
+        "pages": [
+          "nolan-reyes/agent-ae-p1.html"
+        ],
+        "start": "2026-09-13T13:28:48.972000+00:00",
+        "end": "2026-09-13T13:30:37.441000+00:00",
+        "turns": 15,
+        "tool_calls": 25,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a6fc8ab46e877b765",
+        "label": "session 14 of 15",
+        "pages": [
+          "nolan-reyes/agent-a6-p1.html"
+        ],
+        "start": "2026-09-13T13:36:41.171000+00:00",
+        "end": "2026-09-13T13:38:57.399000+00:00",
+        "turns": 14,
+        "tool_calls": 20,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a6112d0ac3ea87953",
+        "label": "session 15 of 15",
+        "pages": [
+          "nolan-reyes/agent-a6-p1.html"
+        ],
+        "start": "2026-09-13T13:56:27.286000+00:00",
+        "end": "2026-09-13T13:58:17.577000+00:00",
+        "turns": 7,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Oren Castellan",
+    "slug": "oren-castellan",
+    "role": "Hire (track 03)",
+    "track": "03",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 315,
+    "tool_calls": 421,
+    "sessions": [
+      {
+        "id": "agent-ad30d5086ad96fb8b",
+        "label": "session 1 of 26",
+        "pages": [
+          "oren-castellan/agent-ad-p1.html"
+        ],
+        "start": "2026-09-12T18:11:55.924000+00:00",
+        "end": "2026-09-12T18:12:08.296000+00:00",
+        "turns": 4,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "f6c3b8ee-3ce3-44bc-8a19-50c585d93da3",
+        "label": "session 2 of 26",
+        "pages": [
+          "oren-castellan/f6c3b8ee-p1.html"
+        ],
+        "start": "2026-09-12T18:19:59.447000+00:00",
+        "end": "2026-09-14T00:20:01.265000+00:00",
+        "turns": 66,
+        "tool_calls": 75,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a3dd917c111a5047f",
+        "label": "session 3 of 26",
+        "pages": [
+          "oren-castellan/agent-a3-p1.html"
+        ],
+        "start": "2026-09-13T04:01:56.627000+00:00",
+        "end": "2026-09-13T04:03:29.103000+00:00",
+        "turns": 4,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ad432d95b7442b26f",
+        "label": "session 4 of 26",
+        "pages": [
+          "oren-castellan/agent-ad-p1.html"
+        ],
+        "start": "2026-09-13T04:06:51.447000+00:00",
+        "end": "2026-09-13T04:08:03.051000+00:00",
+        "turns": 3,
+        "tool_calls": 7,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-adcfd62d69d0be2a5",
+        "label": "session 5 of 26",
+        "pages": [
+          "oren-castellan/agent-ad-p1.html"
+        ],
+        "start": "2026-09-13T04:31:15.388000+00:00",
+        "end": "2026-09-13T04:31:25.026000+00:00",
+        "turns": 4,
+        "tool_calls": 3,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-afc29f9cb44db726a",
+        "label": "session 6 of 26",
+        "pages": [
+          "oren-castellan/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T04:37:31.905000+00:00",
+        "end": "2026-09-13T04:38:48.400000+00:00",
+        "turns": 9,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a8d4b435df5eb0b0b",
+        "label": "session 7 of 26",
+        "pages": [
+          "oren-castellan/agent-a8-p1.html"
+        ],
+        "start": "2026-09-13T04:51:52.501000+00:00",
+        "end": "2026-09-13T04:54:30.417000+00:00",
+        "turns": 4,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-acf8bd8a118f6e7dd",
+        "label": "session 8 of 26",
+        "pages": [
+          "oren-castellan/agent-ac-p1.html"
+        ],
+        "start": "2026-09-13T11:14:36.588000+00:00",
+        "end": "2026-09-13T11:15:58.976000+00:00",
+        "turns": 6,
+        "tool_calls": 9,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a4a906f636edab99a",
+        "label": "session 9 of 26",
+        "pages": [
+          "oren-castellan/agent-a4-p1.html"
+        ],
+        "start": "2026-09-13T11:35:02.541000+00:00",
+        "end": "2026-09-13T11:36:45.457000+00:00",
+        "turns": 5,
+        "tool_calls": 7,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a836f692f3648b776",
+        "label": "session 10 of 26",
+        "pages": [
+          "oren-castellan/agent-a8-p1.html"
+        ],
+        "start": "2026-09-13T11:47:05.332000+00:00",
+        "end": "2026-09-13T11:48:05.134000+00:00",
+        "turns": 6,
+        "tool_calls": 9,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a66abb500a3bb1ef6",
+        "label": "session 11 of 26",
+        "pages": [
+          "oren-castellan/agent-a6-p1.html"
+        ],
+        "start": "2026-09-13T11:56:21.705000+00:00",
+        "end": "2026-09-13T11:58:01.843000+00:00",
+        "turns": 8,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a7556024d75b0c5e5",
+        "label": "session 12 of 26",
+        "pages": [
+          "oren-castellan/agent-a7-p1.html"
+        ],
+        "start": "2026-09-13T12:15:51.718000+00:00",
+        "end": "2026-09-13T12:17:06.956000+00:00",
+        "turns": 8,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-aa63c0ce7b1ea5d53",
+        "label": "session 13 of 26",
+        "pages": [
+          "oren-castellan/agent-aa-p1.html"
+        ],
+        "start": "2026-09-13T12:30:04.469000+00:00",
+        "end": "2026-09-13T12:32:28.065000+00:00",
+        "turns": 14,
+        "tool_calls": 23,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ab5cf9cd1a4d04692",
+        "label": "session 14 of 26",
+        "pages": [
+          "oren-castellan/agent-ab-p1.html"
+        ],
+        "start": "2026-09-13T13:06:55.978000+00:00",
+        "end": "2026-09-13T13:09:02.025000+00:00",
+        "turns": 21,
+        "tool_calls": 26,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-aa1d0df0ae9c53815",
+        "label": "session 15 of 26",
+        "pages": [
+          "oren-castellan/agent-aa-p1.html"
+        ],
+        "start": "2026-09-13T13:15:57.882000+00:00",
+        "end": "2026-09-13T13:17:53.220000+00:00",
+        "turns": 16,
+        "tool_calls": 27,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ab87b770cb9a7b9da",
+        "label": "session 16 of 26",
+        "pages": [
+          "oren-castellan/agent-ab-p1.html"
+        ],
+        "start": "2026-09-13T13:37:15.077000+00:00",
+        "end": "2026-09-13T13:39:23.886000+00:00",
+        "turns": 23,
+        "tool_calls": 26,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-af0c770ab2e1c77d7",
+        "label": "session 17 of 26",
+        "pages": [
+          "oren-castellan/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T13:47:30.733000+00:00",
+        "end": "2026-09-13T13:48:56.024000+00:00",
+        "turns": 13,
+        "tool_calls": 20,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ad8a76b6636197ef2",
+        "label": "session 18 of 26",
+        "pages": [
+          "oren-castellan/agent-ad-p1.html"
+        ],
+        "start": "2026-09-13T14:08:16.833000+00:00",
+        "end": "2026-09-13T14:09:55.998000+00:00",
+        "turns": 15,
+        "tool_calls": 23,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a55eda8315aeafbe1",
+        "label": "session 19 of 26",
+        "pages": [
+          "oren-castellan/agent-a5-p1.html"
+        ],
+        "start": "2026-09-13T14:31:50.695000+00:00",
+        "end": "2026-09-13T14:35:24.024000+00:00",
+        "turns": 27,
+        "tool_calls": 36,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a553de6ab59c21094",
+        "label": "session 20 of 26",
+        "pages": [
+          "oren-castellan/agent-a5-p1.html"
+        ],
+        "start": "2026-09-13T16:37:01.708000+00:00",
+        "end": "2026-09-13T16:37:51.416000+00:00",
+        "turns": 7,
+        "tool_calls": 8,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-af97cf9c083c9f0e6",
+        "label": "session 21 of 26",
+        "pages": [
+          "oren-castellan/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T17:02:31.257000+00:00",
+        "end": "2026-09-13T17:03:29.050000+00:00",
+        "turns": 6,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a47bc0e87097f967b",
+        "label": "session 22 of 26",
+        "pages": [
+          "oren-castellan/agent-a4-p1.html"
+        ],
+        "start": "2026-09-13T17:28:38.915000+00:00",
+        "end": "2026-09-13T17:29:15.933000+00:00",
+        "turns": 3,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-afd4d28125819d266",
+        "label": "session 23 of 26",
+        "pages": [
+          "oren-castellan/agent-af-p1.html"
+        ],
+        "start": "2026-09-13T18:08:35.837000+00:00",
+        "end": "2026-09-13T18:09:41.627000+00:00",
+        "turns": 10,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ae1d392be22151b3c",
+        "label": "session 24 of 26",
+        "pages": [
+          "oren-castellan/agent-ae-p1.html"
+        ],
+        "start": "2026-09-13T18:33:49.734000+00:00",
+        "end": "2026-09-13T18:34:26.426000+00:00",
+        "turns": 6,
+        "tool_calls": 6,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a16327d40b21b026e",
+        "label": "session 25 of 26",
+        "pages": [
+          "oren-castellan/agent-a1-p1.html"
+        ],
+        "start": "2026-09-13T19:35:42.229000+00:00",
+        "end": "2026-09-13T19:38:03.256000+00:00",
+        "turns": 12,
+        "tool_calls": 18,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a47b149761bec5712",
+        "label": "session 26 of 26",
+        "pages": [
+          "oren-castellan/agent-a4-p1.html"
+        ],
+        "start": "2026-09-14T01:37:12.974000+00:00",
+        "end": "2026-09-14T02:04:25.153000+00:00",
+        "turns": 15,
+        "tool_calls": 18,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Bree Sandoval",
+    "slug": "bree-sandoval",
+    "role": "Hire (track 04)",
+    "track": "04",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 15,
+    "tool_calls": 17,
+    "sessions": [
+      {
+        "id": "908b085f-e11a-4afe-9c93-e1b759bb828d",
+        "label": "session 1 of 2",
+        "pages": [
+          "bree-sandoval/908b085f-p1.html"
+        ],
+        "start": "2026-09-12T18:16:01.430000+00:00",
+        "end": "2026-09-12T18:18:44.210000+00:00",
+        "turns": 3,
+        "tool_calls": 1,
+        "model": "claude-fable-5-1"
+      },
+      {
+        "id": "ad50da82-9675-4537-ad91-90da30e39e68",
+        "label": "session 2 of 2",
+        "pages": [
+          "bree-sandoval/ad50da82-p1.html"
+        ],
+        "start": "2026-09-12T18:17:08.032000+00:00",
+        "end": "2026-09-13T04:31:20.565000+00:00",
+        "turns": 12,
+        "tool_calls": 16,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Callum Ferreira",
+    "slug": "callum-ferreira",
+    "role": "Hire (track 04)",
+    "track": "04",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 12,
+    "tool_calls": 14,
+    "sessions": [
+      {
+        "id": "830f8543-8bc4-49b6-9d4e-9526395a5099",
+        "label": "session 1 of 2",
+        "pages": [
+          "callum-ferreira/830f8543-p1.html"
+        ],
+        "start": "2026-09-12T18:15:59.451000+00:00",
+        "end": "2026-09-12T18:18:44.444000+00:00",
+        "turns": 3,
+        "tool_calls": 1,
+        "model": "claude-fable-5-1"
+      },
+      {
+        "id": "379397c0-73d8-47a2-9e2a-137b570ba278",
+        "label": "session 2 of 2",
+        "pages": [
+          "callum-ferreira/379397c0-p1.html"
+        ],
+        "start": "2026-09-12T18:17:10.252000+00:00",
+        "end": "2026-09-13T04:31:22.809000+00:00",
+        "turns": 9,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Wesley Okonkwo",
+    "slug": "wesley-okonkwo",
+    "role": "Hire (track 04)",
+    "track": "04",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 23,
+    "tool_calls": 18,
+    "sessions": [
+      {
+        "id": "1b1e09b5-ac8d-47ef-8995-e5c757c7224d",
+        "label": "session 1 of 3",
+        "pages": [
+          "wesley-okonkwo/1b1e09b5-p1.html"
+        ],
+        "start": "2026-09-12T18:16:04.451000+00:00",
+        "end": "2026-09-12T18:18:42.832000+00:00",
+        "turns": 3,
+        "tool_calls": 1,
+        "model": "claude-fable-5-1"
+      },
+      {
+        "id": "a20ee55d-7e67-423b-b258-38a94a150190",
+        "label": "session 2 of 3",
+        "pages": [
+          "wesley-okonkwo/a20ee55d-p1.html"
+        ],
+        "start": "2026-09-12T18:17:04.462000+00:00",
+        "end": "2026-09-13T04:31:18.538000+00:00",
+        "turns": 18,
+        "tool_calls": 15,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a0536124cc52673be",
+        "label": "session 3 of 3",
+        "pages": [
+          "wesley-okonkwo/agent-a0-p1.html"
+        ],
+        "start": "2026-09-13T17:19:35.059000+00:00",
+        "end": "2026-09-13T17:20:03.856000+00:00",
+        "turns": 2,
+        "tool_calls": 2,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Anders Vogel",
+    "slug": "anders-vogel",
+    "role": "Hire (track 05)",
+    "track": "05",
+    "group": "hire",
+    "model": "claude-opus-5",
+    "turns": 13,
+    "tool_calls": 9,
+    "sessions": [
+      {
+        "id": "67a60962-eff2-49cc-9233-44371ccc59f1",
+        "label": "session",
+        "pages": [
+          "anders-vogel/67a60962-p1.html"
+        ],
+        "start": "2026-09-12T18:28:49.093000+00:00",
+        "end": "2026-09-13T04:31:49.911000+00:00",
+        "turns": 13,
+        "tool_calls": 9,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "Beatriz Achterberg",
+    "slug": "beatriz-achterberg",
+    "role": "Hire (track 05)",
+    "track": "05",
+    "group": "hire",
+    "model": "claude-opus-5",
+    "turns": 15,
+    "tool_calls": 11,
+    "sessions": [
+      {
+        "id": "9be53911-7fa1-4230-8c01-eb33f7974726",
+        "label": "session",
+        "pages": [
+          "beatriz-achterberg/9be53911-p1.html"
+        ],
+        "start": "2026-09-12T18:29:01.759000+00:00",
+        "end": "2026-09-13T04:32:06.744000+00:00",
+        "turns": 15,
+        "tool_calls": 11,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "Research subagent (Priya Nandakumar's session)",
+    "slug": "research-subagent-priya-nandakumar",
+    "role": "Unnamed research / consistency subagent",
+    "track": "05",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 10,
+    "tool_calls": 19,
+    "sessions": [
+      {
+        "id": "agent-ad0d48b54bb63c039",
+        "label": "session 1 of 2",
+        "pages": [
+          "research-subagent-priya-nandakumar/agent-ad-p1.html"
+        ],
+        "start": "2026-09-12T18:32:21.275000+00:00",
+        "end": "2026-09-12T18:32:34.429000+00:00",
+        "turns": 3,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a617f06562693dca4",
+        "label": "session 2 of 2",
+        "pages": [
+          "research-subagent-priya-nandakumar/agent-a6-p1.html"
+        ],
+        "start": "2026-09-12T21:22:05.561000+00:00",
+        "end": "2026-09-12T21:23:34.970000+00:00",
+        "turns": 7,
+        "tool_calls": 14,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Saoirse Byrne",
+    "slug": "saoirse-byrne",
+    "role": "Hire (track 05)",
+    "track": "05",
+    "group": "hire",
+    "model": "claude-opus-5",
+    "turns": 11,
+    "tool_calls": 9,
+    "sessions": [
+      {
+        "id": "ad848190-ef97-4f31-8120-b45071b9a86d",
+        "label": "session",
+        "pages": [
+          "saoirse-byrne/ad848190-p1.html"
+        ],
+        "start": "2026-09-12T18:29:09.327000+00:00",
+        "end": "2026-09-13T04:32:08.808000+00:00",
+        "turns": 11,
+        "tool_calls": 9,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "Yusuf Karadag",
+    "slug": "yusuf-karadag",
+    "role": "Hire (track 05)",
+    "track": "05",
+    "group": "hire",
+    "model": "claude-opus-5",
+    "turns": 13,
+    "tool_calls": 11,
+    "sessions": [
+      {
+        "id": "670307da-1341-488d-809c-bb274bfbd82b",
+        "label": "session",
+        "pages": [
+          "yusuf-karadag/670307da-p1.html"
+        ],
+        "start": "2026-09-12T18:28:54.873000+00:00",
+        "end": "2026-09-13T04:32:01.841000+00:00",
+        "turns": 13,
+        "tool_calls": 11,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "Research subagent (Dana Whitfield's session)",
+    "slug": "research-subagent-dana-whitfield",
+    "role": "Unnamed research / consistency subagent",
+    "track": "PM",
+    "group": "hire",
+    "model": "claude-sonnet-5",
+    "turns": 74,
+    "tool_calls": 136,
+    "sessions": [
+      {
+        "id": "agent-a0a6ff9d13a216a91",
+        "label": "session 1 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a0-p1.html"
+        ],
+        "start": "2026-09-12T16:23:33.995000+00:00",
+        "end": "2026-09-12T16:25:21.998000+00:00",
+        "turns": 7,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a9b6f96647dc36dc5",
+        "label": "session 2 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a9-p1.html"
+        ],
+        "start": "2026-09-12T16:23:42.748000+00:00",
+        "end": "2026-09-12T16:26:17.567000+00:00",
+        "turns": 8,
+        "tool_calls": 18,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-aa34e463c0eb26bda",
+        "label": "session 3 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-aa-p1.html"
+        ],
+        "start": "2026-09-12T16:24:57.025000+00:00",
+        "end": "2026-09-12T16:26:17.921000+00:00",
+        "turns": 6,
+        "tool_calls": 15,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-af75077bb94f40343",
+        "label": "session 4 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-af-p1.html"
+        ],
+        "start": "2026-09-12T16:24:57.025000+00:00",
+        "end": "2026-09-12T16:27:25.331000+00:00",
+        "turns": 6,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a528f06925160dfd8",
+        "label": "session 5 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a5-p1.html"
+        ],
+        "start": "2026-09-12T16:26:23.380000+00:00",
+        "end": "2026-09-12T16:28:16.423000+00:00",
+        "turns": 6,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a8e234dc11837fc80",
+        "label": "session 6 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a8-p1.html"
+        ],
+        "start": "2026-09-12T16:26:33.649000+00:00",
+        "end": "2026-09-12T16:28:36.797000+00:00",
+        "turns": 6,
+        "tool_calls": 12,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-af7b63604a8ae7f8f",
+        "label": "session 7 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-af-p1.html"
+        ],
+        "start": "2026-09-12T16:26:44.481000+00:00",
+        "end": "2026-09-12T16:29:05.352000+00:00",
+        "turns": 6,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-ab0bcca501fdf88e2",
+        "label": "session 8 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-ab-p1.html"
+        ],
+        "start": "2026-09-12T16:28:23.682000+00:00",
+        "end": "2026-09-12T16:28:50.990000+00:00",
+        "turns": 6,
+        "tool_calls": 5,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "agent-a550b0aa00445ae2c",
+        "label": "session 9 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a5-p1.html"
+        ],
+        "start": "2026-09-12T17:42:22.644000+00:00",
+        "end": "2026-09-12T17:43:35.263000+00:00",
+        "turns": 7,
+        "tool_calls": 16,
+        "model": "claude-opus-5"
+      },
+      {
+        "id": "agent-aeae8e29f35ff3550",
+        "label": "session 10 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-ae-p1.html"
+        ],
+        "start": "2026-09-12T17:43:40.924000+00:00",
+        "end": "2026-09-12T17:45:16.780000+00:00",
+        "turns": 7,
+        "tool_calls": 12,
+        "model": "claude-haiku-4-5-20251001"
+      },
+      {
+        "id": "agent-a7f48ee245940c908",
+        "label": "session 11 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a7-p1.html"
+        ],
+        "start": "2026-09-12T17:44:12.400000+00:00",
+        "end": "2026-09-12T17:46:57.047000+00:00",
+        "turns": 5,
+        "tool_calls": 12,
+        "model": "claude-fable-5-1"
+      },
+      {
+        "id": "agent-a6dd81ad5c95162e8",
+        "label": "session 12 of 12",
+        "pages": [
+          "research-subagent-dana-whitfield/agent-a6-p1.html"
+        ],
+        "start": "2026-09-12T17:59:05.532000+00:00",
+        "end": "2026-09-12T17:59:54.121000+00:00",
+        "turns": 4,
+        "tool_calls": 3,
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ]
+  },
+  {
+    "persona": "Naomi Voss",
+    "slug": "naomi-voss",
+    "role": "Product Owner, lead 01 \u2014 planning-phase run",
+    "track": "01",
+    "group": "planning",
+    "model": "claude-fable-5-1",
+    "turns": 71,
+    "tool_calls": 84,
+    "sessions": [
+      {
+        "id": "fa4d4dda-e0e3-4e34-aae3-a086b5b7753b",
+        "label": "session 1 of 2",
+        "pages": [
+          "naomi-voss/fa4d4dda-p1.html"
+        ],
+        "start": "2026-09-12T16:39:40.155000+00:00",
+        "end": "2026-09-12T17:03:13.741000+00:00",
+        "turns": 29,
+        "tool_calls": 26,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "6bc37449-c845-4a22-a0c6-96a25b079d5f",
+        "label": "session 2 of 2",
+        "pages": [
+          "naomi-voss/6bc37449-p1.html"
+        ],
+        "start": "2026-09-12T17:15:54.875000+00:00",
+        "end": "2026-09-12T18:18:26.508000+00:00",
+        "turns": 42,
+        "tool_calls": 58,
+        "model": "claude-fable-5-1"
+      }
+    ]
+  },
+  {
+    "persona": "Marcus Ilori",
+    "slug": "marcus-ilori",
+    "role": "Security & AI architecture lead \u2014 planning-phase run",
+    "track": "02",
+    "group": "planning",
+    "model": "claude-fable-5-1",
+    "turns": 81,
+    "tool_calls": 128,
+    "sessions": [
+      {
+        "id": "718947b3-417c-43e1-a7d5-cff1525b9c6e",
+        "label": "session 1 of 2",
+        "pages": [
+          "marcus-ilori/718947b3-p1.html"
+        ],
+        "start": "2026-09-12T16:39:45.986000+00:00",
+        "end": "2026-09-12T17:03:11.331000+00:00",
+        "turns": 28,
+        "tool_calls": 26,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "000d2acc-d0ad-4c6f-a8e6-a1546b3117da",
+        "label": "session 2 of 2",
+        "pages": [
+          "marcus-ilori/000d2acc-p1.html"
+        ],
+        "start": "2026-09-12T17:16:00.344000+00:00",
+        "end": "2026-09-12T18:18:28.978000+00:00",
+        "turns": 53,
+        "tool_calls": 102,
+        "model": "claude-fable-5-1"
+      }
+    ]
+  },
+  {
+    "persona": "Renata Cole",
+    "slug": "renata-cole",
+    "role": "Engineering lead \u2014 hiring session",
+    "track": "03",
+    "group": "planning",
+    "model": "claude-sonnet-5",
+    "turns": 54,
+    "tool_calls": 59,
+    "sessions": [
+      {
+        "id": "9742161a-96a0-413e-9469-54d468189735",
+        "label": "session",
+        "pages": [
+          "renata-cole/9742161a-p1.html"
+        ],
+        "start": "2026-09-12T17:16:07.127000+00:00",
+        "end": "2026-09-12T18:18:27.152000+00:00",
+        "turns": 54,
+        "tool_calls": 59,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Theo Bergman",
+    "slug": "theo-bergman",
+    "role": "Infra & DevOps lead \u2014 planning-phase run \u00b7 Infra & DevOps lead \u2014 hiring session",
+    "track": "04",
+    "group": "planning",
+    "model": "claude-sonnet-5",
+    "turns": 67,
+    "tool_calls": 65,
+    "sessions": [
+      {
+        "id": "bfdaa8b8-d28b-48a8-b5f2-5bffe673ddd6",
+        "label": "session 1 of 2",
+        "pages": [
+          "theo-bergman/bfdaa8b8-p1.html"
+        ],
+        "start": "2026-09-12T16:39:59.184000+00:00",
+        "end": "2026-09-12T17:03:16.382000+00:00",
+        "turns": 15,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "f654ed73-46c6-4209-9a8b-45ec6fcac460",
+        "label": "session 2 of 2",
+        "pages": [
+          "theo-bergman/f654ed73-p1.html"
+        ],
+        "start": "2026-09-12T17:16:12.376000+00:00",
+        "end": "2026-09-12T18:18:36.795000+00:00",
+        "turns": 52,
+        "tool_calls": 52,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Priya Nandakumar",
+    "slug": "priya-nandakumar",
+    "role": "Data ops lead \u2014 planning-phase run",
+    "track": "05",
+    "group": "planning",
+    "model": "claude-sonnet-5",
+    "turns": 81,
+    "tool_calls": 80,
+    "sessions": [
+      {
+        "id": "90d4da28-5ae5-41e8-867e-cf04c05690c6",
+        "label": "session 1 of 3",
+        "pages": [
+          "priya-nandakumar/90d4da28-p1.html"
+        ],
+        "start": "2026-09-12T16:39:52.536000+00:00",
+        "end": "2026-09-12T17:03:19.359000+00:00",
+        "turns": 31,
+        "tool_calls": 30,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "a0f1a04f-bb98-4478-817b-a13e59459c5f",
+        "label": "session 2 of 3",
+        "pages": [
+          "priya-nandakumar/a0f1a04f-p1.html"
+        ],
+        "start": "2026-09-12T16:40:05.285000+00:00",
+        "end": "2026-09-12T17:05:12.690000+00:00",
+        "turns": 35,
+        "tool_calls": 37,
+        "model": "claude-sonnet-5"
+      },
+      {
+        "id": "caaeebc8-673a-4947-b3b7-49021e1e7734",
+        "label": "session 3 of 3",
+        "pages": [
+          "priya-nandakumar/caaeebc8-p1.html"
+        ],
+        "start": "2026-09-12T17:16:20.828000+00:00",
+        "end": "2026-09-12T18:18:30.518000+00:00",
+        "turns": 15,
+        "tool_calls": 13,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  },
+  {
+    "persona": "Dana Whitfield",
+    "slug": "dana-whitfield",
+    "role": "PM teammate run",
+    "track": "PM",
+    "group": "planning",
+    "model": "claude-opus-5",
+    "turns": 30,
+    "tool_calls": 32,
+    "sessions": [
+      {
+        "id": "e9cc731e-704e-41cc-97d4-be5baf34b884",
+        "label": "session",
+        "pages": [
+          "dana-whitfield/e9cc731e-p1.html"
+        ],
+        "start": "2026-09-14T02:44:30.005000+00:00",
+        "end": "2026-09-14T03:28:33.472000+00:00",
+        "turns": 30,
+        "tool_calls": 32,
+        "model": "claude-opus-5"
+      }
+    ]
+  },
+  {
+    "persona": "PM-directed utility session",
+    "slug": "pm-utility",
+    "role": "Cross-track pass / Jira scribe (spawned by Dana Whitfield)",
+    "track": "PM",
+    "group": "planning",
+    "model": "claude-sonnet-5",
+    "turns": 97,
+    "tool_calls": 347,
+    "sessions": [
+      {
+        "id": "47cb5423-3173-4f73-9e8a-3e2842e70675",
+        "label": "session 1 of 2",
+        "pages": [
+          "pm-utility/47cb5423-p1.html"
+        ],
+        "start": "2026-09-12T21:46:15.103000+00:00",
+        "end": "2026-09-12T22:22:47.595000+00:00",
+        "turns": 30,
+        "tool_calls": 84,
+        "model": "claude-fable-5-1"
+      },
+      {
+        "id": "a095e303-450b-4213-ac14-b8da0f6502f5",
+        "label": "session 2 of 2",
+        "pages": [
+          "pm-utility/a095e303-p1.html"
+        ],
+        "start": "2026-09-12T21:54:32.276000+00:00",
+        "end": "2026-09-13T02:40:02.118000+00:00",
+        "turns": 67,
+        "tool_calls": 263,
+        "model": "claude-sonnet-5"
+      }
+    ]
+  }
+]

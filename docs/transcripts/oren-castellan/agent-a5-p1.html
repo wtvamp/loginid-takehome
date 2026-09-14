@@ -1,0 +1,679 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 20 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 9:37 AM PDT – Sep 13, 2026 9:37 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #53 on the loginid-takehome repo (branch fix/idp-connector-config-validation): https://github.com/wtvamp/loginid-takehome/pull/53
+
+Context: Naomi (01, PO) found in an in-cluster review that idp-connector 401'd every single request because its Kubernetes Deployment never set AUTH_JWKS_URL/AUTH_JWT_ISSUER. Theo (04) already fixed the manifest itself in a separate, already-merged PR (#48). This PR is Renata's fix for the other half of that finding: the binary itself let a missing auth config silently start and serve broken requests, with nothing to catch a future recurrence.
+
+The PR does three things:
+1. Adds `internal/config.RequiredAuthEnvVars(service, mode string) []string` in internal/config/config.go as a single source of truth for which auth env vars a given (service, mode) combination requires.
+2. Adds startup validation to cmd/idp-connector/main.go (refuses to start if AUTH_JWKS_URL, AUTH_JWT_ISSUER, or CONNECTOR_JWT_AUDIENCE is unset) and rewrites cmd/api-service/main.go's existing validateAuthConfig to read from the same RequiredAuthEnvVars source — which also fixes a real pre-existing gap: api-service's verifier mode never actually checked AUTH_JWKS_URL (an earlier PR, #42, added the issuer/audience check but missed this one).
+3. Adds internal/config/manifest_test.go — a new test that parses the REAL deploy/api-service.yaml and deploy/manifests.yaml Kubernetes manifests with gopkg.in/yaml.v3, and asserts every Deployment sets every env var its own (service, mode) requires, per RequiredAuthEnvVars. This is meant as a structural CI regression guard so this exact class of gap (config supported by code, never wired into one specific manifest) can't recur silently a fourth time.
+
+Please do a real second-pass review — your usual detail-hawk focus on error semantics, nullability, and off-by-one issues, but also specifically:
+- Whether `RequiredAuthEnvVars`'s switch statement correctly covers every (service, mode) combination that actually exists in the manifests, and what happens on an unrecognized combination (currently returns nil — is that the right default, or does it risk silently checking nothing for a typo'd mode?).
+- Whether the manifest test's `serviceForImage` substring-matching on container image strings is robust, or could misfire (e.g., matching "istio/idp-connector:sidecar" as idp-connector, or partial substring collisions).
+- Whether `cmd/idp-connector/main.go`'s new validateAuthConfig is called at the right point in main() — before or after other initialization that might itself depend on these vars being set (i.e., does anything execute using a bad/empty AUTH_JWKS_URL etc. before the check fires?).
+- Whether cmd/api-service/main_test.go and cmd/idp-connector/main_test.go's t.Setenv-based tests correctly isolate from each other and from a real environment (no leakage risk).
+- General Go idiom and error-message quality.
+
+Read the actual diff (gh pr diff 53, or check out the branch) rather than trusting this description. Report back findings in under 300 words — concrete issues only, with file:line references, not a general summary of what the PR does.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Bash</span> gh pr diff 53 --repo wtvamp/loginid-takehome</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh pr diff 53 --repo wtvamp/loginid-takehome"
+}</pre><div class="lbl">result</div><pre>diff --git a/cmd/api-service/main.go b/cmd/api-service/main.go
+index db69913..b705696 100644
+--- a/cmd/api-service/main.go
++++ b/cmd/api-service/main.go
+@@ -9,6 +9,7 @@ import (
+ 	"fmt"
+ 	"log"
+ 	"net/http"
++	"os"
+ 
+ 	"loginid-takehome/internal/api"
+ 	"loginid-takehome/internal/app"
+@@ -42,33 +43,33 @@ func sqlDriverNameFor(daoDriver string) string {
+ 	}
+ }
+ 
+-// validateAuthConfig catches exactly the live-review finding that
+-// motivated it: AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE were never set in the
+-// deployed manifests, so the issuer minted iss-less tokens and the
+-// verifier compared aud against "" — every token "verified" against an
+-// empty audience check, which is a silent authorization hole (any
+-// signed token, for any audience, would have passed), not a visible
+-// failure. A verifier that quietly 401s everything, or an issuer that
+-// mints structurally-incomplete tokens, is worse than a crash-loop that
+-// names the exact missing variable — this is api-service's own
+-// mode-aware check, kept out of internal/config's shared Load() because
+-// AUTH_JWT_AUDIENCE is meaningless to cmd/idp-connector (which has its
+-// own ConnectorJWTAudience instead) and a blanket check in the shared
+-// loader would wrongly fail that binary's startup too.
++// validateAuthConfig catches exactly the two live-review findings that
++// motivated it — first AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE, then
++// AUTH_JWKS_URL, silently absent from the deployed manifests, each time
++// letting a verifier or issuer come up cleanly and fail in a way that
++// looked like an ordinary token-rejection rather than a configuration
++// gap. A verifier that quietly 401s everything, or an issuer that mints
++// structurally-incomplete tokens, is worse than a crash-loop that names
++// the exact missing variable.
+ //
+-// AUTH_JWT_ISSUER is required in BOTH modes: the verifier checks it on
+-// every inbound token, and the issuer stamps it into every token it
+-// mints. AUTH_JWT_AUDIENCE is required only in verifier mode — the
+-// issuer never reads its own audience config; it mints each token's
+-// `aud` from the per-client oauth_client.audience column instead
+-// (tokenhandler.go), so requiring it here would reject a valid issuer
+-// configuration that simply has no use for the variable.
+-func validateAuthConfig(cfg config.Config, mode app.Mode) error {
+-	if cfg.AuthJWTIssuer == "" {
+-		return fmt.Errorf("AUTH_JWT_ISSUER must be set in %s mode", mode)
+-	}
+-	if mode == app.ModeVerifier &amp;&amp; cfg.AuthJWTAudience == "" {
+-		return fmt.Errorf("AUTH_JWT_AUDIENCE must be set in verifier mode")
++// Reads config.RequiredAuthEnvVars(service, mode) — the single source of
++// truth also read by internal/config's own manifest test — rather than
++// hardcoding its own list, so this check and that test can never drift
++// apart from each other. Checks the raw environment directly (not cfg's
++// already-loaded fields): the manifest test checks for the same env var
++// NAMES in the manifest text, so both sides operate on the identical
++// primitive.
++//
++// Kept out of internal/config's shared Load() because AUTH_JWT_AUDIENCE
++// is meaningless to cmd/idp-connector (which has its own
++// ConnectorJWTAudience instead) and a blanket check in the shared loader
++// would wrongly fail that binary's startup too — idp-connector runs the
++// equivalent check itself, against its own required list.
++func validateAuthConfig(mode app.Mode) error {
++	for _, name := range config.RequiredAuthEnvVars("api-service", string(mode)) {
++		if os.Getenv(name) == "" {
++			return fmt.Errorf("%s must be set in %s mode", name, mode)
++		}
+ 	}
+ 	return nil
+ }
+@@ -78,7 +79,7 @@ func main() {
+ 	if err != nil {
+ 		log.Fatalf("api-service: loading config: %v", err)
+ 	}
+-	if err := validateAuthConfig(cfg, app.Mode(cfg.AppMode)); err != nil {
++	if err := validateAuthConfig(app.Mode(cfg.AppMode)); err != nil {
+ 		log.Fatalf("api-service: %v", err)
+ 	}
+ 
+diff --git a/cmd/api-service/main_test.go b/cmd/api-service/main_test.go
+index ef07df0..17b6ecc 100644
+--- a/cmd/api-service/main_test.go
++++ b/cmd/api-service/main_test.go
+@@ -5,50 +5,43 @@ import (
+ 	"testing"
+ 
+ 	"loginid-takehome/internal/app"
+-	"loginid-takehome/internal/config"
+ )
+ 
+ // TestValidateAuthConfig_VerifierMode is the live-review finding's own
+-// enforcement site: AUTH_JWT_ISSUER and AUTH_JWT_AUDIENCE both missing
+-// from the deployed manifests let the verifier silently compare every
+-// token's aud claim against "" — this must fail startup loudly instead,
+-// naming exactly which variable is missing.
++// enforcement site: AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE, and AUTH_JWKS_URL
++// all missing from the deployed manifests (in two separate incidents)
++// let the verifier come up cleanly and fail in a way that looked like an
++// ordinary token rejection — this must fail startup loudly instead,
++// naming exactly which variable is missing. validateAuthConfig reads the
++// process environment directly (via config.RequiredAuthEnvVars), so
++// these tests set/unset real env vars rather than constructing a
++// config.Config.
+ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
++	allSet := func(t *testing.T) {
++		t.Helper()
++		t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++		t.Setenv("AUTH_JWT_AUDIENCE", "loginid-api-service")
++		t.Setenv("AUTH_JWKS_URL", "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json")
++	}
++
+ 	cases := []struct {
+ 		name          string
+-		cfg           config.Config
++		unset         string // one var to blank out after allSet, "" for the all-set case
+ 		wantErr       bool
+ 		wantErrSubstr string
+ 	}{
+-		{
+-			name:    "both set: ok",
+-			cfg:     config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: "loginid-api-service"},
+-			wantErr: false,
+-		},
+-		{
+-			name:          "issuer missing",
+-			cfg:           config.Config{AuthJWTIssuer: "", AuthJWTAudience: "loginid-api-service"},
+-			wantErr:       true,
+-			wantErrSubstr: "AUTH_JWT_ISSUER",
+-		},
+-		{
+-			name:          "audience missing",
+-			cfg:           config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: ""},
+-			wantErr:       true,
+-			wantErrSubstr: "AUTH_JWT_AUDIENCE",
+-		},
+-		{
+-			name:    "both missing",
+-			cfg:     config.Config{},
+-			wantErr: true,
+-			// Either name is acceptable — the point is a loud, named
+-			// failure, not a specific ordering between the two checks.
+-			wantErrSubstr: "AUTH_JWT_ISSUER",
+-		},
++		{name: "all set: ok", wantErr: false},
++		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
++		{name: "audience missing", unset: "AUTH_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "AUTH_JWT_AUDIENCE"},
++		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
+ 	}
+ 	for _, c := range cases {
+ 		t.Run(c.name, func(t *testing.T) {
+-			err := validateAuthConfig(c.cfg, app.ModeVerifier)
++			allSet(t)
++			if c.unset != "" {
++				t.Setenv(c.unset, "")
++			}
++			err := validateAuthConfig(app.ModeVerifier)
+ 			if c.wantErr &amp;&amp; err == nil {
+ 				t.Fatalf("validateAuthConfig() = nil, want an error")
+ 			}
+@@ -63,30 +56,29 @@ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
+ }
+ 
+ // TestValidateAuthConfig_IssuerMode confirms issuer mode only requires
+-// AUTH_JWT_ISSUER — AUTH_JWT_AUDIENCE is meaningless here (the issuer
+-// mints each token's aud from the per-client oauth_client.audience
+-// column, not from global config), so an issuer Deployment with no
+-// AUTH_JWT_AUDIENCE set at all must NOT be rejected.
++// AUTH_JWT_ISSUER — AUTH_JWT_AUDIENCE and AUTH_JWKS_URL are meaningless
++// here (the issuer mints each token's aud from the per-client
++// oauth_client.audience column, not from global config, and never
++// verifies inbound tokens so it has no JWKS to fetch), so an issuer
++// Deployment with neither set at all must NOT be rejected.
+ func TestValidateAuthConfig_IssuerMode(t *testing.T) {
+ 	cases := []struct {
+-		name    string
+-		cfg     config.Config
+-		wantErr bool
++		name      string
++		setIssuer bool
++		wantErr   bool
+ 	}{
+-		{
+-			name:    "issuer set, audience empty: ok",
+-			cfg:     config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: ""},
+-			wantErr: false,
+-		},
+-		{
+-			name:    "issuer missing",
+-			cfg:     config.Config{AuthJWTIssuer: ""},
+-			wantErr: true,
+-		},
++		{name: "issuer set, audience/jwks unset: ok", setIssuer: true, wantErr: false},
++		{name: "issuer missing", setIssuer: false, wantErr: true},
+ 	}
+ 	for _, c := range cases {
+ 		t.Run(c.name, func(t *testing.T) {
+-			err := validateAuthConfig(c.cfg, app.ModeIssuer)
++			t.Setenv("AUTH_JWT_ISSUER", "")
++			t.Setenv("AUTH_JWT_AUDIENCE", "")
++			t.Setenv("AUTH_JWKS_URL", "")
++			if c.setIssuer {
++				t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++			}
++			err := validateAuthConfig(app.ModeIssuer)
+ 			if c.wantErr &amp;&amp; err == nil {
+ 				t.Fatalf("validateAuthConfig() = nil, want an error")
+ 			}
+diff --git a/cmd/idp-connector/main.go b/cmd/idp-connector/main.go
+index 5f26a0a..6f28baf 100644
+--- a/cmd/idp-connector/main.go
++++ b/cmd/idp-connector/main.go
+@@ -5,19 +5,44 @@
+ package main
+ 
+ import (
++	"fmt"
+ 	"log"
+ 	"net/http"
++	"os"
+ 
+ 	"loginid-takehome/internal/app"
+ 	"loginid-takehome/internal/config"
+ 	"loginid-takehome/internal/connector"
+ )
+ 
++// validateAuthConfig catches the live-review finding this binary's
++// manifest actually hit: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both
++// silently absent from idp-connector's Deployment, so every request
++// 401'd in a way indistinguishable from an ordinary rejected token — the
++// PM's own postmortem note was that cmd/api-service's equivalent check
++// (added after ITS OWN identical incident) only protects that binary,
++// not this one, since nothing shared the requirement between them until
++// now. Reads config.RequiredAuthEnvVars("idp-connector", "") — the same
++// single source of truth internal/config's own manifest test reads —
++// rather than a hardcoded list of its own, so this check and that test
++// can never drift apart.
++func validateAuthConfig() error {
++	for _, name := range config.RequiredAuthEnvVars("idp-connector", "") {
++		if os.Getenv(name) == "" {
++			return fmt.Errorf("%s must be set", name)
++		}
++	}
++	return nil
++}
++
+ func main() {
+ 	cfg, err := config.Load()
+ 	if err != nil {
+ 		log.Fatalf("idp-connector: loading config: %v", err)
+ 	}
++	if err := validateAuthConfig(); err != nil {
++		log.Fatalf("idp-connector: %v", err)
++	}
+ 
+ 	addr := cfg.HTTPAddr
+ 	if addr == "" {
+diff --git a/cmd/idp-connector/main_test.go b/cmd/idp-connector/main_test.go
+new file mode 100644
+index 0000000..13cf774
+--- /dev/null
++++ b/cmd/idp-connector/main_test.go
+@@ -0,0 +1,50 @@
++package main
++
++import (
++	"strings"
++	"testing"
++)
++
++// TestValidateAuthConfig is the live-review finding's own enforcement
++// site: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both silently absent from
++// idp-connector's Deployment manifest, so every request 401'd in a way
++// indistinguishable from an ordinary rejected token — this must fail
++// startup loudly instead, naming exactly which variable is missing.
++func TestValidateAuthConfig(t *testing.T) {
++	allSet := func(t *testing.T) {
++		t.Helper()
++		t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++		t.Setenv("AUTH_JWKS_URL", "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json")
++		t.Setenv("CONNECTOR_JWT_AUDIENCE", "idp-connector-service")
++	}
++
++	cases := []struct {
++		name          string
++		unset         string
++		wantErr       bool
++		wantErrSubstr string
++	}{
++		{name: "all set: ok", wantErr: false},
++		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
++		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
++		{name: "connector audience missing", unset: "CONNECTOR_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "CONNECTOR_JWT_AUDIENCE"},
++	}
++	for _, c := range cases {
++		t.Run(c.name, func(t *testing.T) {
++			allSet(t)
++			if c.unset != "" {
++				t.Setenv(c.unset, "")
++			}
++			err := validateAuthConfig()
++			if c.wantErr &amp;&amp; err == nil {
++				t.Fatalf("validateAuthConfig() = nil, want an error")
++			}
++			if !c.wantErr &amp;&amp; err != nil {
++				t.Fatalf("validateAuthConfig() = %v, want nil", err)
++			}
++			if c.wantErr &amp;&amp; !strings.Contains(err.Error(), c.wantErrSubstr) {
++				t.Errorf("error = %q, want it to name %q", err, c.wantErrSubstr)
++			}
++		})
++	}
++}
+diff --git a/go.mod b/go.mod
+index 4c0cdcb..c456c7b 100644
+--- a/go.mod
++++ b/go.mod
+@@ -8,6 +8,7 @@ require (
+ 	github.com/jackc/pgx/v5 v5.11.0
+ 	github.com/pressly/goose/v3 v3.28.0
+ 	golang.org/x/crypto v0.57.0
++	gopkg.in/yaml.v3 v3.0.1
+ 	modernc.org/sqlite v1.58.0
+ )
+ 
+@@ -16,10 +17,12 @@ require (
+ 	github.com/jackc/pgpassfile v1.0.0 // indirect
+ 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+ 	github.com/jackc/puddle/v2 v2.2.2 // indirect
++	github.com/kr/text v0.2.0 // indirect
+ 	github.com/mattn/go-isatty v0.0.24 // indirect
+ 	github.com/mfridman/interpolate v0.0.2 // indirect
+ 	github.com/ncruces/go-strftime v1.0.0 // indirect
+ 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
++	github.com/rogpeppe/go-internal v1.16.0 // indirect
+ 	github.com/sethvargo/go-retry v0.4.0 // indirect
+ 	go.uber.org/multierr v1.11.0 // indirect
+ 	golang.org/x/sync v0.23.0 // indirect
+diff --git a/go.sum b/go.sum
+index 56a5ed3..91f7a49 100644
+--- a/go.sum
++++ b/go.sum
+@@ -1,3 +1,4 @@
++github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
+ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
+ github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
+@@ -17,6 +18,10 @@ github.com/jackc/pgx/v5 v5.11.0 h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=
+ github.com/jackc/pgx/v5 v5.11.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
+ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
+ github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
++github.com/kr/pretty v0.3.0 h1:WgNl7dwNpEZ6jJ9k1snq4pZsg7DOEN8hP9Xw0Tsjwk0=
++github.com/kr/pretty v0.3.0/go.mod h1:640gp4NfQd8pI5XOwp5fnNeVWj67G7CFk/SaSQn7NBk=
++github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
++github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+ github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
+ github.com/mattn/go-isatty v0.0.24/go.mod h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=
+ github.com/mfridman/interpolate v0.0.2 h1:pnuTK7MQIxxFz1Gr+rjSIx9u7qVjf5VOoM/u6BbAxPY=
+@@ -28,6 +33,8 @@ github.com/pressly/goose/v3 v3.28.0 h1:D2M+iL31GmpZxSHOhX8mqyqAT3CXnokUmm0eKoSP+
+ github.com/pressly/goose/v3 v3.28.0/go.mod h1:v26MOuB8bL3kzzrt3Vqhb3R0PRVsl8hFQKdrht/L6Rk=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
++github.com/rogpeppe/go-internal v1.16.0 h1:O9DK+vNMDVGLr2BeZqmpLeMjiMNkuXfcqntWbZV6S5g=
++github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
+ github.com/sethvargo/go-retry v0.4.0 h1:9qy1OoIAxBL+gBYnkTnTnWle5wlfsXQlwRzIbbpdqPw=
+ github.com/sethvargo/go-retry v0.4.0/go.mod h1:tvsjdKG6xfiCx4LSiUZ06kcv38xvdVQwv8R6/VnnVWg=
+ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+@@ -52,7 +59,11 @@ golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
+ golang.org/x/tools v0.49.0 h1:3NI7VXzL9+1WZD52Dx2ttoPwD5DWrFGpl9mFZDlmisI=
+ golang.org/x/tools v0.49.0/go.mod h1:SJNXV9DBKT0UbdttsQjbfJlAE/q+y36++zo3uL3N0Oo=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
+ gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
++gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
++gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ modernc.org/cc/v4 v4.29.2 h1:h6+9ciCnPKutf4I03CvheAvDLX7+IHlqR6Iy6J+cgd8=
+ modernc.org/cc/v4 v4.29.2/go.mod h1:OnovgIhbbMXMu1aISnJ0wvVD1KnW+cAUJkIrAWh+kVI=
+ modernc.org/ccgo/v4 v4.35.0 h1:F+TUsmw09QxLzmi3aeYYGxjAXarmZaKgj3mKQHNaA8w=
+diff --git a/internal/config/config.go b/internal/config/config.go
+index 55e9409..8c31f4a 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -218,3 +218,51 @@ func resolveDSNFrom(fileEnv, plainEnv string) (string, error) {
+ 	}
+ 	return os.Getenv(plainEnv), nil
+ }
++
++// RequiredAuthEnvVars is the single source of truth for which auth-related
++// env vars a given (service, mode) combination MUST have set to function
++// correctly — read by both this process's own startup validation
++// (cmd/api-service/main.go's validateAuthConfig, cmd/idp-connector/main.go's
++// equivalent) and, independently, by internal/config's own
++// TestManifestsSetRequiredAuthEnvVars, which parses the actual deployed
++// manifests (deploy/api-service.yaml, deploy/manifests.yaml) and asserts
++// every Deployment sets everything its own (service, mode) requires.
++//
++// Exists because of two separate live-review incidents in one day, both
++// the same shape: a real, correctly-signed token failed verification
++// because a required auth env var was silently absent from a
++// Deployment's manifest, and nothing caught it before a human noticed
++// the symptom in production. cmd/api-service/main.go's own
++// validateAuthConfig (added after the first incident) only checks the
++// binary it lives in — it has no way to know cmd/idp-connector's
++// Deployment was missing AUTH_JWKS_URL/AUTH_JWT_ISSUER entirely (the
++// second incident), because idp-connector never runs that check at all
++// until this same list is wired into its own main() too. And neither
++// check, however complete, can catch a manifest that's simply missing
++// the variable outright before a real request exercises the gap — only
++// a test that reads the manifest text itself can do that ahead of time,
++// which is what this declaration exists to make possible.
++//
++// service is "api-service" or "idp-connector" — the binary, not the
++// Deployment name (api-service and api-service-issuer are the SAME
++// binary in different modes). mode is "verifier"/"issuer" for
++// api-service (matching AppMode's own two values), or "" for
++// idp-connector, which has no mode concept.
++func RequiredAuthEnvVars(service, mode string) []string {
++	switch {
++	case service == "api-service" &amp;&amp; mode == "verifier":
++		return []string{"AUTH_JWT_ISSUER", "AUTH_JWT_AUDIENCE", "AUTH_JWKS_URL"}
++	case service == "api-service" &amp;&amp; mode == "issuer":
++		// AUTH_JWT_AUDIENCE deliberately absent here — the issuer mints
++		// each token's aud from the per-client oauth_client.audience
++		// column (tokenhandler.go), never from its own config, so
++		// requiring it would reject a valid issuer configuration for a
++		// variable it has no use for (validateAuthConfig's own doc
++		// comment states this same reasoning).
++		return []string{"AUTH_JWT_ISSUER"}
++	case service == "idp-connector":
++		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}
++	default:
++		return nil
++	}
++}
+diff --git a/internal/config/manifest_test.go b/internal/config/manifest_test.go
+new file mode 100644
+index 0000000..dab49c8
+--- /dev/null
++++ b/internal/config/manifest_tes
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> gh pr checkout 53 --repo wtvamp/loginid-takehome 2&gt;&amp;1 | tail -5; git -C /Users/warrenthompson/Source</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh pr checkout 53 --repo wtvamp/loginid-takehome 2&gt;&amp;1 | tail -5; git -C /Users/warrenthompson/Source/LoginID-worktrees 2&gt;/dev/null; find / -maxdepth 2 -iname \"loginid-takehome\" 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>fatal: 'fix/idp-connector-config-validation' is already used by worktree at '/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation'
+failed to run git: exit status 128
+usage: git [-v | --version] [-h | --help] [-C &lt;path&gt;] [-c &lt;name&gt;=&lt;value&gt;]
+           [--exec-path[=&lt;path&gt;]] [--html-path] [--man-path] [--info-path]
+           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]
+           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=&lt;path&gt;]
+           [--work-tree=&lt;path&gt;] [--namespace=&lt;name&gt;] [--config-env=&lt;name&gt;=&lt;envvar&gt;]
+           &lt;command&gt; [&lt;args&gt;]
+
+These are common Git commands used in various situations:
+
+start a working area (see also: git help tutorial)
+   clone      Clone a repository into a new directory
+   init       Create an empty Git repository or reinitialize an existing one
+
+work on the current change (see also: git help everyday)
+   add        Add file contents to the index
+   mv         Move or rename a file, a directory, or a symlink
+   restore    Restore working tree files
+   rm         Remove files from the working tree and from the index
+
+examine the history and state (see also: git help revisions)
+   bisect     Use binary search to find the commit that introduced a bug
+   diff       Show changes between commits, commit and working tree, etc
+   grep       Print lines matching a pattern
+   log        Show commit logs
+   show       Show various types of objects
+   status     Show the working tree status
+
+grow, mark and tweak your common history
+   backfill   Download missing objects in a partial clone
+   branch     List, create, or delete branches
+   commit     Record changes to the repository
+   history    EXPERIMENTAL: Rewrite history
+   merge      Join two or more development histories together
+   rebase     Reapply commits on top of another base tip
+   reset      Set `HEAD` or the index to a known state
+   switch     Switch branches
+   tag        Create, list, delete or verify tags
+
+collaborate (see also: git help workflows)
+   fetch      Download objects and refs from another repository
+   pull       Fetch from and integrate with another repository or a local branch
+   push       Update remote refs along with associated objects
+
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help &lt;command&gt;' or 'git help &lt;concept&gt;'
+to read about a specific subcommand or concept.
+See 'git help git' for an overview of the system.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><div class="body">There's an existing worktree for this branch. Let me read the file directly from there.</div><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/cmd/idp-connector/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/cmd/idp-connector/main.go"
+}</pre><div class="lbl">result</div><pre>1	// Command idp-connector is the outbound-only binary (Q3: /auth, /identity
+2	// against third-party IDPs). Per decisions/go-layout-debate.md, this file
+3	// is a thin wrapper — route registration and config loading live in
+4	// internal/app and internal/config, not here.
+5	package main
+6	
+7	import (
+8		"fmt"
+9		"log"
+10		"net/http"
+11		"os"
+12	
+13		"loginid-takehome/internal/app"
+14		"loginid-takehome/internal/config"
+15		"loginid-takehome/internal/connector"
+16	)
+17	
+18	// validateAuthConfig catches the live-review finding this binary's
+19	// manifest actually hit: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both
+20	// silently absent from idp-connector's Deployment, so every request
+21	// 401'd in a way indistinguishable from an ordinary rejected token — the
+22	// PM's own postmortem note was that cmd/api-service's equivalent check
+23	// (added after ITS OWN identical incident) only protects that binary,
+24	// not this one, since nothing shared the requirement between them until
+25	// now. Reads config.RequiredAuthEnvVars("idp-connector", "") — the same
+26	// single source of truth internal/config's own manifest test reads —
+27	// rather than a hardcoded list of its own, so this check and that test
+28	// can never drift apart.
+29	func validateAuthConfig() error {
+30		for _, name := range config.RequiredAuthEnvVars("idp-connector", "") {
+31			if os.Getenv(name) == "" {
+32				return fmt.Errorf("%s must be set", name)
+33			}
+34		}
+35		return nil
+36	}
+37	
+38	func main() {
+39		cfg, err := config.Load()
+40		if err != nil {
+41			log.Fatalf("idp-connector: loading config: %v", err)
+42		}
+43		if err := validateAuthConfig(); err != nil {
+44			log.Fatalf("idp-connector: %v", err)
+45		}
+46	
+47		addr := cfg.HTTPAddr
+48		if addr == "" {
+49			addr = ":8081"
+50		}
+51	
+52		// No real ABC/XYZ vendor exists for this take-home (LT-41's own
+53		// non-goal) — IDP_ABC_BASE_URL unset (the common case in this
+54		// environment) wires the self-contained StubVendorClient instead,
+55		// seeded with one demo identity so the connector's full /auth -&gt;
+56		// /identity flow is exercisable end to end without a real vendor. If
+57		// IDP_ABC_BASE_URL IS set, a real (or real-shaped) vendor is assumed
+58		// reachable over HTTPS and HTTPVendorClient is used instead — this
+59		// process does not silently fall back to the stub if that vendor
+60		// turns out to be unreachable at request time; NewHTTPVendorClient
+61		// only fails loudly at startup, on a non-https URL.
+62		var vendor connector.VendorClient
+63		if cfg.IDPABCBaseURL != "" {
+64			httpVendor, err := connector.NewHTTPVendorClient(cfg.IDPABCBaseURL, nil)
+65			if err != nil {
+66				log.Fatalf("idp-connector: configuring vendor client: %v", err)
+67			}
+68			vendor = httpVendor
+69			log.Printf("idp-connector: using HTTP vendor client at %s", cfg.IDPABCBaseURL)
+70		} else {
+71			stub := connector.NewStubVendorClient()
+72			stub.Seed("demo-user", "demo-password", connector.Identity{
+73				Name:          "Jane Demo",
+74				Phone:         "+15555550100",
+75				StreetAddress: "1 Demo Way",
+76				Locality:      "Demoville",
+77				Region:        "CA",
+78				PostalCode:    "94000",
+79				Country:       "US",
+80			})
+81			vendor = stub
+82			log.Printf("idp-connector: IDP_ABC_BASE_URL not set — using in-process stub vendor (LT-41 non-goal: no real vendor integration)")
+83		}
+84	
+85		log.Printf("idp-connector: listening on %s", addr)
+86		if err := http.ListenAndServe(addr, app.NewConnectorRouter(cfg, vendor)); err != nil {
+87			log.Fatalf("idp-connector: %v", err)
+88		}
+89	}
+90	</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "image:" /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/api-s</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"image:\" /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/api-service.yaml /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml:102:          image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml:274:          image: postgres:16-alpine
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml:379:          image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml:395:          image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml:435:          image: ghcr.io/wtvamp/loginid-takehome/idp-connector:IMAGE_TAG
+/Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/api-service.yaml:42:          image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> grep -n "kind: Deployment\|name: api-service\|APP_MODE\|image:" /Users/warrenthompson/Source/LoginID</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"kind: Deployment\\|name: api-service\\|APP_MODE\\|image:\" /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml | head -50"
+}</pre><div class="lbl">result</div><pre>24:metadata: {name: api-service, namespace: loginid-takehome}
+28:metadata: {name: api-service-issuer, namespace: loginid-takehome}
+70:# on one"). Same image as api-service, mode selected by APP_MODE.
+87:kind: Deployment
+89:  name: api-service-issuer
+101:        - name: api-service
+102:          image: ghcr.io/wtvamp/loginid-takehome/api-service:IMAGE_TAG
+109:            - {name: APP_MODE, value: issuer}
+127:metadata: {name: api-service-issuer, namespace: loginid-takehome}
+274:          image: postgres:16-alpine
+379:          image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
+395:          image: ghcr.io/wtvamp/loginid-takehome/migrate:IMAGE_TAG
+422:kind: Deployment
+435:          image: ghcr.io/wtvamp/loginid-takehome/idp-connector:IMAGE_TAG
+494:metadata: {name: api-service-issuer-default-deny, namespace: loginid-takehome}
+519:          - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
+520:          - {path: /auth/token, pathType: Exact, backend: {service: {name: api-service-issuer, port: {number: 443}}}}
+527:          - {path: /profiles, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> grep -n "APP_MODE\|AUTH_JWKS_URL\|AUTH_JWT_ISSUER\|AUTH_JWT_AUDIENCE\|CONNECTOR_JWT_AUDIENCE\|kind: </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"APP_MODE\\|AUTH_JWKS_URL\\|AUTH_JWT_ISSUER\\|AUTH_JWT_AUDIENCE\\|CONNECTOR_JWT_AUDIENCE\\|kind: Deployment\\|name: \" /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/api-service.yaml"
+}</pre><div class="lbl">result</div><pre>27:kind: Deployment
+29:  name: api-service
+41:        - name: api-service
+48:            - {name: HTTP_ADDR, value: ":8080"}
+49:            - {name: APP_MODE, value: verifier}
+50:            - {name: DB_DRIVER, value: postgres}
+51:            - {name: DB_DSN_FILE, value: /secrets/db/dsn}
+59:            - {name: AUTH_JWKS_URL, value: "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json"}
+66:            - {name: AUTH_JWT_ISSUER, value: "https://auth.loginid-takehome.internal"}
+67:            - {name: AUTH_JWT_AUDIENCE, value: "loginid-api-service"}
+73:            - {name: AUTHZ_QA_SUB, value: qa-review-read-own}
+74:            - {name: AUTHZ_QA_ALLOWED_PROFILE_ID, value: "00000000-0000-4000-8000-000000000001"}
+76:            - {name: db-runtime-credential, mountPath: /secrets/db, readOnly: true}
+80:        - name: db-runtime-credential
+85:metadata: {name: api-service, namespace: loginid-takehome}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Good, all real manifests are covered. Now I have enough to write the review.</div><details><summary><span class="tn">Bash</span> grep -n "AUTH_JWKS_URL\|CONNECTOR_JWT_AUDIENCE" /Users/warrenthompson/Source/LoginID-worktrees/LT-41</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"AUTH_JWKS_URL\\|CONNECTOR_JWT_AUDIENCE\" /Users/warrenthompson/Source/LoginID-worktrees/LT-41-config-validation/deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>442:            - {name: CONNECTOR_JWT_AUDIENCE, value: "idp-connector-service"}
+443:            # AUTH_JWKS_URL/AUTH_JWT_ISSUER were missing entirely — the
+460:            - {name: AUTH_JWKS_URL, value: "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json"}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Findings for Renata — PR #53, `fix/idp-connector-config-validation`:
+
+1. **`config.go`: `RequiredAuthEnvVars` default case is the weakest point in this PR.** `internal/config/config.go` (new func, `default: return nil`) means any unrecognized `(service, mode)` pair — a typo'd `APP_MODE` like `"Verifier"` or `"verifer"` in a future manifest edit — silently requires *zero* env vars. Both `validateAuthConfig` call sites and the new manifest test read this same list, so a typo produces no startup failure and no CI failure: exactly the "config supported by code, never wired in" class of bug this PR exists to catch, just moved one level up. The default should either `panic`/return a sentinel "unrecognized" error the caller treats as fatal, or the manifest test should independently assert the *set* of `(service, mode)` pairs it saw is a subset of ones the switch explicitly recognizes (not just `len(required) == 0` → skip, which is what `manifest_test.go` does today at the `if len(required) == 0 { continue }` line — that line can't distinguish "issuer mode legitimately needs nothing extra" from "mode string didn't match anything").
+
+2. **`manifest_test.go`'s `serviceForImage` substring match will silently stop matching on a digest-pinned image.** It matches on `"/idp-connector:"` / `"/api-service:"` (colon required). A future manifest pinning by digest (`.../idp-connector@sha256:...`) has no such colon and would be `recognized=false`, silently skipped — not caught by the `checked == 0` guard since other deployments still match. Worth a comment or a second match arm for `@sha256:` at minimum, since digest-pinning is a plausible supply-chain hardening move 04 could make later without knowing it silences this test.
+
+3. `serviceForImage`'s false-positive risk you asked about (e.g. `istio/idp-connector:sidecar`) is real in principle but not reachable today — no sidecars in either manifest — so I'd leave it, not block on it; flag as a known limitation in the doc comment.
+
+4. **Call order in `cmd/idp-connector/main.go` is correct** — `validateAuthConfig()` (line 43) runs immediately after `config.Load()` and before the vendor client (`NewHTTPVendorClient`/stub) and `http.ListenAndServe` are constructed, so nothing executes against a bad/empty `AUTH_JWKS_URL` first.
+
+5. **`t.Setenv` isolation is fine** in both `main_test.go` files — each subtest gets its own `t`, `t.Setenv` auto-restores at test end, no `t.Parallel()` used anywhere so no cross-subtest race.
+
+6. Error messages are good — name the exact missing var, consistent with the "loud crash beats silent 401" framing stated in the comments.
+
+Net: one real gap (finding 1) worth a line of code before merge; finding 2 worth a one-line comment; the rest is solid.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

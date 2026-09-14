@@ -1,0 +1,1316 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 8 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 4:14 AM PDT – Sep 13, 2026 4:15 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 4:14 AM PDT</span><span class="who">Lead</span><div class="body">You previously reviewed GitHub PR #26 (wtvamp/loginid-takehome, branch feature/LT-39) and found: (1) TouchCounter's cumulative cap was being applied to profile:read:own despite the package's own doc comment saying it should only apply to search/read:any, with no test either way; (2) reason_code was validated but had no traceable consumer; (3) check ordering was inconsistent between the two handlers; (4) writeDAOError was being called from non-DAO error paths (RateLimiter/TouchCounter/Authorizer), which was safe today but risky naming.
+
+The branch has since been updated (new commit f93b19d) responding to your findings and Nolan Reyes's separate finding of a real concurrency race in TouchCounter (Reserve/Settle now replaces Allowed/RecordTouches), plus a new requirement from Ingrid Solano's independent review (an AuditLogger interface, wired at every handler decision point) and a fix for silently-ignored "offset" query fields.
+
+Re-review the CURRENT state of PR #26 — run `gh pr diff 26 --repo wtvamp/loginid-takehome` to see the full current diff (not just the delta) since the touch-counter interface itself changed shape. Specifically verify:
+1. Is profile:read:own now correctly exempted from the touch cap, and is there a real test locking that in?
+2. Is writeDAOError vs writeInternalError now used consistently (DAO-only vs everything else)?
+3. Does the reason_code handling now have a clear comment about why it has no other consumer?
+4. Any NEW issues introduced by this delta — in particular check whether the Reserve/Settle pattern is used correctly at every exit point in both handlers (does every successful Reserve get exactly one matching Settle call on every code path, including error paths?).
+
+Report back in plain prose (not a tool call): either concrete findings (file/line, what's wrong, why it matters), or confirmation that your prior findings are now resolved with no new issues, if that's genuinely your assessment.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:14 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+69	
+70	## Status
+71	
+72	Planning Phases 0–3 are complete (2026-09-12): five track plans approved, 18 hires live in five lead sessions, every track's Phase 3 debates and hand-offs delivered, and the cross-track consistency pass reported (`decisions/cross-track-consistency.md`: 52 findings, six bounded fixes required before planning is declared done — in progress, owned per finding). Phase 4 is under way: Jira Epics `LT-1`…`LT-5` exist, tracks 01 and 05 are transcribed, 02/03/04 follow the pass fixes. All implementation code was deliberately wiped earlier in the day and none has been written since; **no code until Warren's explicit go-ahead**, which he gives after the PM reports the backlog implementation-ready.
+73	
+74	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+75	@profiles/dana-whitfield/dana-whitfield.md
+76	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+77	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+37	
+38	&lt;!-- profile-gen:start slug=renata-cole --&gt;
+39	@profiles/renata-cole/renata-cole.md
+40	&lt;!-- profile-gen:end slug=renata-cole --&gt;
+41	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md"
+}</pre><div class="lbl">result</div><pre>1	---
+2	schema_version: 1
+3	name: "Oren Castellan"
+4	slug: "oren-castellan"
+5	image: "profiles/oren-castellan/oren-castellan.png"
+6	
+7	nsfw: false
+8	display:
+9	  image: true
+10	  name: true
+11	  autostart: false
+12	generation:
+13	  backend: "comfyui"
+14	  model: "comfyui-workflow.json"
+15	  prompt: "Oren Castellan, a meticulous and understated man in his late 30s with short neat hair, wire-rim glasses, wearing a plain navy button-down shirt, calm focused expression, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+16	  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+17	  seed: null
+18	  gif_mode: null
+19	  created_at: "2026-09-12T00:00:00Z"
+20	---
+21	
+22	# Oren Castellan
+23	
+24	![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+25	
+26	
+27	## Personality
+28	
+29	Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied.
+30	
+31	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:14 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> gh pr diff 26 --repo wtvamp/loginid-takehome &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "gh pr diff 26 --repo wtvamp/loginid-takehome &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr26.diff 2&gt;&amp;1; wc -l /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr26.diff"
+}</pre><div class="lbl">result</div><pre>    2020 /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr26.diff</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:14 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706e</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr26.diff"
+}</pre><div class="lbl">result</div><pre>1	diff --git a/internal/api/audit.go b/internal/api/audit.go
+2	new file mode 100644
+3	index 0000000..7d9b37b
+4	--- /dev/null
+5	+++ b/internal/api/audit.go
+6	@@ -0,0 +1,76 @@
+7	+package api
+8	+
+9	+import (
+10	+	"context"
+11	+	"encoding/json"
+12	+	"log"
+13	+	"time"
+14	+)
+15	+
+16	+// AuditEventKind names a policy decision for the audit trail —
+17	+// handoff-03-auth.md v3's audit-log field list requires "policy decision
+18	+// (allow/deny, and if deny, whether it was a scope failure or an
+19	+// authorize() policy denial — these are distinct signals for detection)"
+20	+// on every search/retrieve call. The client-visible response body is
+21	+// deliberately identical for AuditScopeFailure and AuditPolicyDenial
+22	+// (decisions/error-semantics.md F7) — this is the ONLY place that
+23	+// distinction is allowed to exist.
+24	+type AuditEventKind string
+25	+
+26	+const (
+27	+	AuditAuthnFailure  AuditEventKind = "authn_failure"
+28	+	AuditScopeFailure  AuditEventKind = "scope_failure"
+29	+	AuditPolicyDenial  AuditEventKind = "authorize_denial"
+30	+	AuditRateLimited   AuditEventKind = "rate_limited"
+31	+	AuditCapExceeded   AuditEventKind = "cumulative_cap_exceeded"
+32	+	AuditRequestFailed AuditEventKind = "request_failed" // a DAO/internal error, not a policy decision
+33	+	AuditSuccess       AuditEventKind = "success"
+34	+)
+35	+
+36	+// AuditEvent carries exactly the fields handoff-03-auth.md v3's audit-log
+37	+// section names, and only those — RecordIDs are opaque ids, never PII
+38	+// field values; ReasonCode is empty unless the request was
+39	+// ScopeReadAny. Never add a field here without checking
+40	+// handoff-04-secrets.md's never-log list first (see AuditEvent's own
+41	+// logger implementations for the enforcement site).
+42	+type AuditEvent struct {
+43	+	Sub        string
+44	+	Scope      Scope
+45	+	Kind       AuditEventKind
+46	+	RecordIDs  []string
+47	+	ReasonCode ReasonCode
+48	+	Timestamp  time.Time
+49	+}
+50	+
+51	+// AuditLogger is the seam this story wires (Ingrid Solano's PR #26
+52	+// review, ruled by the PM as an unmet acceptance criterion, not a
+53	+// follow-up story): handoff-03-auth.md v3 requires reason_code and the
+54	+// scope/authorize() distinction to be "logged with the audit record" —
+55	+// this interface is what every handler decision point calls, regardless
+56	+// of which real sink backs it. A structured-stdout implementation is
+57	+// sufficient for this story; 04's retention/RBAC-separated log pipeline
+58	+// is a separate, infrastructure-side concern this interface doesn't
+59	+// depend on.
+60	+type AuditLogger interface {
+61	+	Log(ctx context.Context, event AuditEvent)
+62	+}
+63	+
+64	+// StdoutAuditLogger writes one JSON line per event to the process's
+65	+// standard logger. Real production wiring (a shipped log pipeline with
+66	+// the RBAC separation handoff-04-secrets.md requires between Secret
+67	+// access and audit-log access) is 04's infrastructure work; this
+68	+// satisfies "events are actually emitted somewhere real" for this story
+69	+// without waiting on that pipeline to exist.
+70	+type StdoutAuditLogger struct{}
+71	+
+72	+func (StdoutAuditLogger) Log(_ context.Context, event AuditEvent) {
+73	+	if event.Timestamp.IsZero() {
+74	+		event.Timestamp = time.Now().UTC()
+75	+	}
+76	+	b, err := json.Marshal(event)
+77	+	if err != nil {
+78	+		log.Printf("api: audit event marshal error: %v", err)
+79	+		return
+80	+	}
+81	+	log.Printf("audit: %s", b)
+82	+}
+83	diff --git a/internal/api/auth.go b/internal/api/auth.go
+84	new file mode 100644
+85	index 0000000..349ef97
+86	--- /dev/null
+87	+++ b/internal/api/auth.go
+88	@@ -0,0 +1,103 @@
+89	+// Package api implements the Q2 REST handlers (search/retrieve
+90	+// user_profile) per 02-ai-security-architecture/handoff-03-auth.md v3 and
+91	+// 03-engineering-delivery/refinement/LT-39.md. This story's own non-goals
+92	+// (LT-39, S6) exclude the JWT verification middleware itself — that's S7
+93	+// (LT-40), a separate pull — so every handler here reads its auth context
+94	+// from the request's context.Context, populated by whatever put it there.
+95	+// Until S7 lands, that's this package's own tests using fakes, per
+96	+// decisions/test-double-strategy.md; once S7 lands, it's S7's middleware.
+97	+// These handlers are not yet wired into cmd/api-service's live router —
+98	+// doing so before S7 exists would expose unauthenticated PII, which is
+99	+// exactly the outcome the whole auth design exists to prevent.
+100	+package api
+101	+
+102	+import "context"
+103	+
+104	+// Scope is the token's authorized action, from handoff-03-auth.md v3's
+105	+// closed vocabulary (§ "Scope vocabulary"). A typed string rather than a
+106	+// bare one so a handler comparing scopes can't typo past the compiler on
+107	+// a scope it never validates against a literal.
+108	+type Scope string
+109	+
+110	+const (
+111	+	// ScopeReadOwn retrieves a single record by id the caller already
+112	+	// holds a legitimate reference to; authorize() checks the target
+113	+	// against the caller_referral mapping.
+114	+	ScopeReadOwn Scope = "profile:read:own"
+115	+	// ScopeReadAny retrieves a single record by id with no referral
+116	+	// constraint, but requires a ReasonCode on every request and is
+117	+	// still subject to the cumulative touch cap.
+118	+	ScopeReadAny Scope = "profile:read:any"
+119	+	// ScopeSearch queries by name/phone fragment across the table. The
+120	+	// broadest scope; there is no broader one.
+121	+	ScopeSearch Scope = "profile:search"
+122	+)
+123	+
+124	+// AuthContext is what a validated request carries once past S7's
+125	+// middleware (or, until S7 exists, whatever a test injects directly via
+126	+// WithAuthContext). Sub is the calling client identity (the token's `sub`
+127	+// claim); Scope is the single scope this request is being made under —
+128	+// handoff-03-auth.md v3 doesn't describe multi-scope tokens being
+129	+// disambiguated per-request, so one request carries exactly one Scope.
+130	+type AuthContext struct {
+131	+	Sub   string
+132	+	Scope Scope
+133	+}
+134	+
+135	+type authContextKey struct{}
+136	+
+137	+// WithAuthContext attaches ac to ctx. The seam S7's middleware (or a
+138	+// test) uses to populate the auth context every handler in this package
+139	+// reads.
+140	+func WithAuthContext(ctx context.Context, ac AuthContext) context.Context {
+141	+	return context.WithValue(ctx, authContextKey{}, ac)
+142	+}
+143	+
+144	+// AuthContextFromContext retrieves the AuthContext WithAuthContext
+145	+// attached, ok=false if none was ever set (e.g. this package's handlers
+146	+// were reached without going through auth middleware — a caller bug, not
+147	+// a request the handler should try to interpret).
+148	+func AuthContextFromContext(ctx context.Context) (AuthContext, bool) {
+149	+	ac, ok := ctx.Value(authContextKey{}).(AuthContext)
+150	+	return ac, ok
+151	+}
+152	+
+153	+// ReasonCode is the closed enum profile:read:any requires on every
+154	+// request (handoff-03-auth.md v3). Adding a value is a documented change
+155	+// to this list, not a runtime config toggle.
+156	+type ReasonCode string
+157	+
+158	+const (
+159	+	ReasonSupportTicket     ReasonCode = "support_ticket"
+160	+	ReasonFraudReview       ReasonCode = "fraud_review"
+161	+	ReasonKYCReverification ReasonCode = "kyc_reverification"
+162	+	ReasonLegalHold         ReasonCode = "legal_hold"
+163	+)
+164	+
+165	+// Valid reports whether r is one of the four closed enum values.
+166	+func (r ReasonCode) Valid() bool {
+167	+	switch r {
+168	+	case ReasonSupportTicket, ReasonFraudReview, ReasonKYCReverification, ReasonLegalHold:
+169	+		return true
+170	+	default:
+171	+		return false
+172	+	}
+173	+}
+174	+
+175	+// Authorizer is the object-level policy hook (handoff-03-auth.md v3):
+176	+// "a function authorize(sub, scope, target) -&gt; allow|deny, called after
+177	+// scope validation, before the handler executes the query/retrieve."
+178	+// caller_referral and the caller-role table live in the token-issuing
+179	+// authorization server's own datastore (v3's F8 resolution) — not
+180	+// 05-data-ops's schema, and not built by this story. This interface is
+181	+// the seam: real implementation is a follow-up story against that
+182	+// datastore; this package's tests use a hand-written fake per
+183	+// decisions/test-double-strategy.md.
+184	+type Authorizer interface {
+185	+	// Authorize reports whether sub may act under scope against target
+186	+	// (a record id for ScopeReadOwn/ScopeReadAny; ignored for
+187	+	// ScopeSearch, which has no single target). A false, nil return is
+188	+	// an ordinary policy denial, not an error — errors are reserved for
+189	+	// the datastore itself being unreachable.
+190	+	Authorize(ctx context.Context, sub string, scope Scope, target string) (bool, error)
+191	+}
+192	diff --git a/internal/api/cursor.go b/internal/api/cursor.go
+193	new file mode 100644
+194	index 0000000..28abe91
+195	--- /dev/null
+196	+++ b/internal/api/cursor.go
+197	@@ -0,0 +1,49 @@
+198	+package api
+199	+
+200	+import (
+201	+	"encoding/base64"
+202	+	"fmt"
+203	+	"strconv"
+204	+	"strings"
+205	+)
+206	+
+207	+// cursorPrefix distinguishes this package's cursors from arbitrary
+208	+// base64 a caller might send, so a malformed cursor fails with a clear
+209	+// message rather than a confusing offset.
+210	+const cursorPrefix = "v1:"
+211	+
+212	+// encodeCursor produces the opaque, API-facing cursor for the next page
+213	+// starting at offset. handoff-03-auth.md v3's F-pag correction: the
+214	+// cursor may encode the DAO's own Offset directly underneath — the
+215	+// opaque-cursor requirement is that callers cannot construct or walk one
+216	+// by hand, not that the handler is forbidden from using Offset
+217	+// internally. Encoding is base64 of a versioned, prefixed string rather
+218	+// than the bare decimal offset so a caller can't trivially read or
+219	+// increment it by eye.
+220	+func encodeCursor(offset int) string {
+221	+	return base64.RawURLEncoding.EncodeToString([]byte(cursorPrefix + strconv.Itoa(offset)))
+222	+}
+223	+
+224	+// decodeCursor recovers the offset encodeCursor produced. An empty
+225	+// cursor (the first page) decodes to offset 0, not an error.
+226	+func decodeCursor(cursor string) (offset int, err error) {
+227	+	if cursor == "" {
+228	+		return 0, nil
+229	+	}
+230	+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+231	+	if err != nil {
+232	+		return 0, fmt.Errorf("api: malformed cursor: %w", err)
+233	+	}
+234	+	s := string(raw)
+235	+	if !strings.HasPrefix(s, cursorPrefix) {
+236	+		return 0, fmt.Errorf("api: malformed cursor: missing version prefix")
+237	+	}
+238	+	n, err := strconv.Atoi(strings.TrimPrefix(s, cursorPrefix))
+239	+	if err != nil {
+240	+		return 0, fmt.Errorf("api: malformed cursor: %w", err)
+241	+	}
+242	+	if n &lt; 0 {
+243	+		return 0, fmt.Errorf("api: malformed cursor: negative offset")
+244	+	}
+245	+	return n, nil
+246	+}
+247	diff --git a/internal/api/cursor_test.go b/internal/api/cursor_test.go
+248	new file mode 100644
+249	index 0000000..ecac38c
+250	--- /dev/null
+251	+++ b/internal/api/cursor_test.go
+252	@@ -0,0 +1,60 @@
+253	+package api
+254	+
+255	+import (
+256	+	"encoding/base64"
+257	+	"testing"
+258	+)
+259	+
+260	+func TestCursor_RoundTrip(t *testing.T) {
+261	+	for _, offset := range []int{0, 1, 20, 12345} {
+262	+		c := encodeCursor(offset)
+263	+		got, err := decodeCursor(c)
+264	+		if err != nil {
+265	+			t.Fatalf("decodeCursor(%q): %v", c, err)
+266	+		}
+267	+		if got != offset {
+268	+			t.Errorf("round trip of offset %d = %d", offset, got)
+269	+		}
+270	+	}
+271	+}
+272	+
+273	+func TestCursor_EmptyIsOffsetZero(t *testing.T) {
+274	+	got, err := decodeCursor("")
+275	+	if err != nil {
+276	+		t.Fatalf("decodeCursor(\"\"): %v", err)
+277	+	}
+278	+	if got != 0 {
+279	+		t.Errorf("empty cursor decoded to %d, want 0", got)
+280	+	}
+281	+}
+282	+
+283	+func TestCursor_OpaqueAtAPIBoundary(t *testing.T) {
+284	+	// A caller cannot construct or walk a cursor by hand — the encoded
+285	+	// form must not be a bare decimal offset a caller could increment by
+286	+	// eye (handoff-03-auth.md v3's opaque-cursor requirement).
+287	+	c := encodeCursor(20)
+288	+	if c == "20" {
+289	+		t.Error("cursor must not be the bare decimal offset")
+290	+	}
+291	+}
+292	+
+293	+func TestCursor_MalformedRejected(t *testing.T) {
+294	+	cases := []string{"not-base64!!!", "AAAA", "0"}
+295	+	for _, c := range cases {
+296	+		if _, err := decodeCursor(c); err == nil {
+297	+			t.Errorf("decodeCursor(%q) = nil error, want a malformed-cursor error", c)
+298	+		}
+299	+	}
+300	+}
+301	+
+302	+// TestCursor_NegativeOffsetRejected constructs a tampered cursor directly
+303	+// (base64 of "v1:-5") — encodeCursor never produces a negative offset
+304	+// itself, so this proves decodeCursor's own guard against untrusted
+305	+// caller input, not encodeCursor's behavior.
+306	+func TestCursor_NegativeOffsetRejected(t *testing.T) {
+307	+	tampered := base64.RawURLEncoding.EncodeToString([]byte("v1:-5"))
+308	+	neg, err := decodeCursor(tampered)
+309	+	if err == nil {
+310	+		t.Errorf("decodeCursor of a negative-offset payload = %d, nil error, want rejected", neg)
+311	+	}
+312	+}
+313	diff --git a/internal/api/errors.go b/internal/api/errors.go
+314	new file mode 100644
+315	index 0000000..4c00b13
+316	--- /dev/null
+317	+++ b/internal/api/errors.go
+318	@@ -0,0 +1,116 @@
+319	+// errors.go implements this package's boundary-translation function, per
+320	+// decisions/error-semantics.md: internal/api never serializes err.Error()
+321	+// on an unmapped error. Only the DAO's seven sentinels' safe messages
+322	+// (plus the authn/authz/context rules below) ever reach a client; anything
+323	+// else defaults to a generic 500 with no wrapped detail.
+324	+package api
+325	+
+326	+import (
+327	+	"context"
+328	+	"encoding/json"
+329	+	"errors"
+330	+	"net/http"
+331	+
+332	+	"loginid-takehome/internal/dao"
+333	+)
+334	+
+335	+// errorResponse is the only JSON shape an error path ever writes. code is
+336	+// a short machine-readable string (never a driver error, never
+337	+// err.Error()); message is a safe, human-readable sentence.
+338	+type errorResponse struct {
+339	+	Code    string `json:"code"`
+340	+	Message string `json:"message"`
+341	+}
+342	+
+343	+func writeError(w http.ResponseWriter, status int, code, message string) {
+344	+	w.Header().Set("Content-Type", "application/json")
+345	+	w.WriteHeader(status)
+346	+	_ = json.NewEncoder(w).Encode(errorResponse{Code: code, Message: message})
+347	+}
+348	+
+349	+// writeUnauthorized and writeForbidden are named separately from the
+350	+// generic mapper below because F7 (decisions/error-semantics.md) requires
+351	+// an identical client-visible body for a scope failure and an
+352	+// authorize() policy denial — the two are distinguished only in the
+353	+// audit log, never in what the client sees. Both call the one function
+354	+// below so that identity is enforced by construction, not by two call
+355	+// sites happening to agree.
+356	+func writeUnauthorized(w http.ResponseWriter) {
+357	+	writeError(w, http.StatusUnauthorized, "unauthorized", "missing or invalid token")
+358	+}
+359	+
+360	+func writeForbidden(w http.ResponseWriter) {
+361	+	writeError(w, http.StatusForbidden, "forbidden", "not authorized for this request")
+362	+}
+363	+
+364	+func writeRateLimited(w http.ResponseWriter) {
+365	+	writeError(w, http.StatusTooManyRequests, "rate_limited", "rate limit exceeded")
+366	+}
+367	+
+368	+func writeTouchCapExceeded(w http.ResponseWriter) {
+369	+	writeError(w, http.StatusTooManyRequests, "cumulative_cap_exceeded", "cumulative record-access cap exceeded for the current window")
+370	+}
+371	+
+372	+func writeBadRequest(w http.ResponseWriter, message string) {
+373	+	writeError(w, http.StatusBadRequest, "bad_request", message)
+374	+}
+375	+
+376	+// writeDAOError translates an error returned by the DAO layer into an
+377	+// HTTP response, per decisions/error-semantics.md's boundary rule and its
+378	+// F7/F50 additions:
+379	+//   - context.DeadlineExceeded -&gt; 504, never wrapped in a generic 500.
+380	+//   - context.Canceled -&gt; handled by the caller before this is reached
+381	+//     (a cancelled client request has no response to write); if it
+382	+//     reaches here anyway it's treated the same as an unmapped error but
+383	+//     the caller should not count it as an alerting failure.
+384	+//   - one of the seven dao sentinels -&gt; its mapped status/safe message.
+385	+//   - anything else -&gt; 500, no wrapped detail, ever.
+386	+func writeDAOError(w http.ResponseWriter, err error) {
+387	+	switch {
+388	+	case errors.Is(err, context.DeadlineExceeded):
+389	+		writeError(w, http.StatusGatewayTimeout, "deadline_exceeded", "request timed out")
+390	+	case errors.Is(err, dao.ErrNotFound):
+391	+		writeError(w, http.StatusNotFound, "not_found", "no such record")
+392	+	case errors.Is(err, dao.ErrInvalidArgument):
+393	+		writeBadRequest(w, "invalid request")
+394	+	case errors.Is(err, dao.ErrInvalidQuery):
+395	+		writeBadRequest(w, "invalid search query")
+396	+	case errors.Is(err, dao.ErrDuplicateUsername),
+397	+		errors.Is(err, dao.ErrInvalidMethod),
+398	+		errors.Is(err, dao.ErrInvalidCredential),
+399	+		errors.Is(err, dao.ErrAlreadyExists):
+400	+		// None of these are reachable from this package's read-only
+401	+		// search/retrieve handlers (they're write-path sentinels), but
+402	+		// mapped defensively rather than falling through to a raw 500
+403	+		// if a future handler in this package ever does reach them.
+404	+		writeBadRequest(w, "request could not be completed")
+405	+	default:
+406	+		// Never err.Error() here — an unmapped error (a raw driver
+407	+		// error that somehow escaped the DAO's translation layer, a
+408	+		// context.Canceled that reached this far, anything else) gets a
+409	+		// generic message with no wrapped detail (decisions/
+410	+		// error-semantics.md's F50: no DETAIL text, no driver message,
+411	+		// ever, ***even in the log line a caller can't see*** — that
+412	+		// sanitization is the DAO translation layer's job upstream of
+413	+		// here, not repeated in this file).
+414	+		writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+415	+	}
+416	+}
+417	+
+418	+// writeInternalError is writeDAOError's twin for a collaborator that
+419	+// isn't the DAO — RateLimiter, TouchCounter, Authorizer — kept as a
+420	+// separate, identically-behaving function rather than reusing
+421	+// writeDAOError at those call sites (Oren Castellan, PR #26 review):
+422	+// writeDAOError is named and documented as the DAO-sentinel translator,
+423	+// and a future edit to its switch (adding a case for some DAO-specific
+424	+// condition) should not silently also change how an authz/rate-limit
+425	+// collaborator's errors are handled. Behavior is identical today — never
+426	+// err.Error(), context.DeadlineExceeded still maps to 504 — because none
+427	+// of these collaborators have their own sentinel set to translate.
+428	+func writeInternalError(w http.ResponseWriter, err error) {
+429	+	if errors.Is(err, context.DeadlineExceeded) {
+430	+		writeError(w, http.StatusGatewayTimeout, "deadline_exceeded", "request timed out")
+431	+		return
+432	+	}
+433	+	writeError(w, http.StatusInternalServerError, "internal_error", "internal error")
+434	+}
+435	diff --git a/internal/api/fakes_test.go b/internal/api/fakes_test.go
+436	new file mode 100644
+437	index 0000000..55e948c
+438	--- /dev/null
+439	+++ b/internal/api/fakes_test.go
+440	@@ -0,0 +1,132 @@
+441	+package api
+442	+
+443	+import (
+444	+	"context"
+445	+	"time"
+446	+
+447	+	"loginid-takehome/internal/dao"
+448	+	"loginid-takehome/internal/model"
+449	+)
+450	+
+451	+// Hand-written fakes, per decisions/test-double-strategy.md: any change
+452	+// to Repository or its three sub-interfaces must update the corresponding
+453	+// fake in the same PR — a review-checklist item, not codegen.
+454	+
+455	+// fakeRepository implements dao.Repository. Only Profiles() is exercised
+456	+// by this package's handlers; the rest panic if ever called, so a test
+457	+// that reaches them fails loudly instead of silently zero-valuing.
+458	+type fakeR
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:14 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706e</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr26.diff",
+  "offset": 1239,
+  "limit": 800
+}</pre><div class="lbl">result</div><pre>1239	+	}
+1240	+	if len(audit2.events) != 1 || audit2.events[0].Kind != AuditPolicyDenial {
+1241	+		t.Errorf("authorize()-denial path audit events = %+v, want exactly one AuditPolicyDenial", audit2.events)
+1242	+	}
+1243	+}
+1244	+
+1245	+// TestGetProfileHandler_ReadOwn_DoesNotHitTouchCap: the cumulative
+1246	+// distinct-record-touch cap applies to profile:search and
+1247	+// profile:read:any (handoff-03-auth.md v3, verbatim) — profile:read:own
+1248	+// is bounded by the caller_referral relationship, not an open id space,
+1249	+// so it must not be gated by TouchCounter at all (Oren Castellan, PR #26
+1250	+// review: an earlier version of this handler applied the cap to
+1251	+// read:own too, contradicting the package's own doc comment, and nothing
+1252	+// caught it).
+1253	+func TestGetProfileHandler_ReadOwn_DoesNotHitTouchCap(t *testing.T) {
+1254	+	d := allowAllDeps()
+1255	+	// A TouchCounter that denies everything — if read:own ever calls it,
+1256	+	// the request fails; it must not be called at all for this scope.
+1257	+	d.TouchCounter = &amp;fakeTouchCounter{reserveOK: false}
+1258	+	repo := d.Repo.(*fakeRepository)
+1259	+	repo.profiles.getFn = func(ctx context.Context, id string) (*model.UserProfile, error) {
+1260	+		return &amp;model.UserProfile{ID: id, Name: "Jane Doe"}, nil
+1261	+	}
+1262	+	h := NewGetProfileHandler(d)
+1263	+	req := newGetRequest("11111111-1111-1111-1111-111111111111")
+1264	+	req = req.WithContext(withScope("client1", ScopeReadOwn))
+1265	+	w := httptest.NewRecorder()
+1266	+	h(w, req)
+1267	+	if w.Code != http.StatusOK {
+1268	+		t.Errorf("status = %d, want 200 — profile:read:own must not be gated by the cumulative touch cap", w.Code)
+1269	+	}
+1270	+}
+1271	+
+1272	+// TestSearchHandler_RejectsUnknownField is Ingrid Solano's PR #26 finding:
+1273	+// an unrecognized field (in particular an "offset" key, the exact bypass
+1274	+// the opaque-cursor contract exists to close) must be rejected outright,
+1275	+// not silently ignored.
+1276	+func TestSearchHandler_RejectsUnknownField(t *testing.T) {
+1277	+	h := NewSearchHandler(allowAllDeps())
+1278	+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a","offset":40}`))
+1279	+	req = req.WithContext(withScope("client1", ScopeSearch))
+1280	+	w := httptest.NewRecorder()
+1281	+	h(w, req)
+1282	+	if w.Code != http.StatusBadRequest {
+1283	+		t.Errorf("status = %d, want 400 for an unrecognized \"offset\" field", w.Code)
+1284	+	}
+1285	+}
+1286	+
+1287	+// TestSearchHandler_SuccessAuditsWithRecordIDs asserts a successful
+1288	+// search still emits an audit event (the field list requires "record
+1289	+// id(s) touched" and "request outcome" on every call, not only denials).
+1290	+func TestSearchHandler_SuccessAuditsWithRecordIDs(t *testing.T) {
+1291	+	d := allowAllDeps()
+1292	+	audit := d.AuditLog.(*fakeAuditLogger)
+1293	+	repo := d.Repo.(*fakeRepository)
+1294	+	repo.profiles.searchFn = func(ctx context.Context, q dao.ProfileQuery) ([]model.UserProfile, int, error) {
+1295	+		return []model.UserProfile{{ID: "p1", Name: "Jane"}}, 1, nil
+1296	+	}
+1297	+	h := NewSearchHandler(d)
+1298	+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"jane"}`))
+1299	+	req = req.WithContext(withScope("client1", ScopeSearch))
+1300	+	w := httptest.NewRecorder()
+1301	+	h(w, req)
+1302	+	if w.Code != http.StatusOK {
+1303	+		t.Fatalf("status = %d, want 200", w.Code)
+1304	+	}
+1305	+	if len(audit.events) != 1 || audit.events[0].Kind != AuditSuccess {
+1306	+		t.Fatalf("audit events = %+v, want exactly one AuditSuccess", audit.events)
+1307	+	}
+1308	+	if len(audit.events[0].RecordIDs) != 1 || audit.events[0].RecordIDs[0] != "p1" {
+1309	+		t.Errorf("audit event RecordIDs = %v, want [p1]", audit.events[0].RecordIDs)
+1310	+	}
+1311	+}
+1312	+
+1313	+// TestSearchHandler_DeniedRequestReleasesTouchReservation asserts that
+1314	+// when authorize() denies a request after Reserve already booked its
+1315	+// budget, that budget is released via Settle rather than permanently
+1316	+// consumed — a denied request must not itself count against the cap.
+1317	+func TestSearchHandler_DeniedRequestReleasesTouchReservation(t *testing.T) {
+1318	+	d := allowAllDeps()
+1319	+	d.Authz = &amp;fakeAuthorizer{allow: false}
+1320	+	tc := d.TouchCounter.(*fakeTouchCounter)
+1321	+	h := NewSearchHandler(d)
+1322	+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+1323	+	req = req.WithContext(withScope("client1", ScopeSearch))
+1324	+	w := httptest.NewRecorder()
+1325	+	h(w, req)
+1326	+	if w.Code != http.StatusForbidden {
+1327	+		t.Fatalf("status = %d, want 403", w.Code)
+1328	+	}
+1329	+	if len(tc.settledReserved) != 1 || tc.settledReserved[0] != defaultPageSize {
+1330	+		t.Errorf("Settle calls = %v, want exactly one release of the full reserved page size (%d)", tc.settledReserved, defaultPageSize)
+1331	+	}
+1332	+	if len(tc.settledIDs) != 0 {
+1333	+		t.Errorf("a denied request must settle with no record ids, got %v", tc.settledIDs)
+1334	+	}
+1335	+}
+1336	+
+1337	+func TestGetProfileHandler_MissingID_400(t *testing.T) {
+1338	+	d := allowAllDeps()
+1339	+	h := NewGetProfileHandler(d)
+1340	+	req := newGetRequest("")
+1341	+	req = req.WithContext(withScope("client1", ScopeReadOwn))
+1342	+	w := httptest.NewRecorder()
+1343	+	h(w, req)
+1344	+	if w.Code != http.StatusBadRequest {
+1345	+		t.Errorf("status = %d, want 400", w.Code)
+1346	+	}
+1347	+}
+1348	+
+1349	+func TestGetProfileHandler_NotFound(t *testing.T) {
+1350	+	d := allowAllDeps()
+1351	+	repo := d.Repo.(*fakeRepository)
+1352	+	repo.profiles.getFn = func(ctx context.Context, id string) (*model.UserProfile, error) {
+1353	+		return nil, dao.ErrNotFound
+1354	+	}
+1355	+	h := NewGetProfileHandler(d)
+1356	+	req := newGetRequest("11111111-1111-1111-1111-111111111111")
+1357	+	req = req.WithContext(withScope("client1", ScopeReadOwn))
+1358	+	w := httptest.NewRecorder()
+1359	+	h(w, req)
+1360	+	if w.Code != http.StatusNotFound {
+1361	+		t.Errorf("status = %d, want 404", w.Code)
+1362	+	}
+1363	+}
+1364	diff --git a/internal/api/masking.go b/internal/api/masking.go
+1365	new file mode 100644
+1366	index 0000000..ac2cf6b
+1367	--- /dev/null
+1368	+++ b/internal/api/masking.go
+1369	@@ -0,0 +1,79 @@
+1370	+package api
+1371	+
+1372	+import (
+1373	+	"strings"
+1374	+
+1375	+	"loginid-takehome/internal/model"
+1376	+)
+1377	+
+1378	+// SearchResultProfile is profile:search's masked response shape —
+1379	+// handoff-03-auth.md v3: "masking is a profile:search-response property,
+1380	+// not a per-call flag." A distinct type (and distinct serialization
+1381	+// function, below) from the full read-response shape, per LT-39's own
+1382	+// acceptance criteria: "the search-response serialization path is a
+1383	+// distinct code path from the read-response one, not the same serializer
+1384	+// with a masking flag." Unmasked detail is obtained only through a
+1385	+// separate, separately-audited profile:read:own/profile:read:any call.
+1386	+type SearchResultProfile struct {
+1387	+	ID     string  `json:"id"`
+1388	+	Name   string  `json:"name"`
+1389	+	Phone  *string `json:"phone,omitempty"`  // masked, e.g. "***-***-1234"
+1390	+	Region *string `json:"region,omitempty"` // address reduced to locality/region only
+1391	+}
+1392	+
+1393	+// ProfileResponse is the full, unmasked shape returned by a
+1394	+// profile:read:own/profile:read:any call.
+1395	+type ProfileResponse struct {
+1396	+	ID            string  `json:"id"`
+1397	+	Name          string  `json:"name"`
+1398	+	Phone         *string `json:"phone,omitempty"`
+1399	+	StreetAddress *string `json:"street_address,omitempty"`
+1400	+	Locality      *string `json:"locality,omitempty"`
+1401	+	Region        *string `json:"region,omitempty"`
+1402	+	PostalCode    *string `json:"postal_code,omitempty"`
+1403	+	Country       *string `json:"country,omitempty"`
+1404	+}
+1405	+
+1406	+// toSearchResult builds the masked search-response shape for one
+1407	+// profile. This function, not ProfileResponse's serialization, is the
+1408	+// only place a search result is ever produced — there is no shared
+1409	+// helper with a masking bool, by design.
+1410	+func toSearchResult(p model.UserProfile) SearchResultProfile {
+1411	+	return SearchResultProfile{
+1412	+		ID:     p.ID,
+1413	+		Name:   p.Name,
+1414	+		Phone:  maskPhone(p.Phone),
+1415	+		Region: p.Region,
+1416	+	}
+1417	+}
+1418	+
+1419	+// toProfileResponse builds the full, unmasked read-response shape.
+1420	+func toProfileResponse(p *model.UserProfile) ProfileResponse {
+1421	+	return ProfileResponse{
+1422	+		ID:            p.ID,
+1423	+		Name:          p.Name,
+1424	+		Phone:         p.Phone,
+1425	+		StreetAddress: p.StreetAddress,
+1426	+		Locality:      p.Locality,
+1427	+		Region:        p.Region,
+1428	+		PostalCode:    p.PostalCode,
+1429	+		Country:       p.Country,
+1430	+	}
+1431	+}
+1432	+
+1433	+// maskPhone reduces an E.164 phone to its last 4 digits, e.g.
+1434	+// "+15551234567" -&gt; "***-***-4567" — nil stays nil (absent, not masked
+1435	+// into a value that looks like data).
+1436	+func maskPhone(phone *string) *string {
+1437	+	if phone == nil {
+1438	+		return nil
+1439	+	}
+1440	+	digits := *phone
+1441	+	if len(digits) &lt; 4 {
+1442	+		masked := strings.Repeat("*", len(digits))
+1443	+		return &amp;masked
+1444	+	}
+1445	+	last4 := digits[len(digits)-4:]
+1446	+	masked := "***-***-" + last4
+1447	+	return &amp;masked
+1448	+}
+1449	diff --git a/internal/api/masking_test.go b/internal/api/masking_test.go
+1450	new file mode 100644
+1451	index 0000000..8d5a4c3
+1452	--- /dev/null
+1453	+++ b/internal/api/masking_test.go
+1454	@@ -0,0 +1,25 @@
+1455	+package api
+1456	+
+1457	+import "testing"
+1458	+
+1459	+func TestMaskPhone(t *testing.T) {
+1460	+	cases := []struct {
+1461	+		in   *string
+1462	+		want *string
+1463	+	}{
+1464	+		{nil, nil},
+1465	+		{strp("+15551234567"), strp("***-***-4567")},
+1466	+		{strp("123"), strp("***")},
+1467	+	}
+1468	+	for _, tc := range cases {
+1469	+		got := maskPhone(tc.in)
+1470	+		switch {
+1471	+		case tc.want == nil &amp;&amp; got != nil:
+1472	+			t.Errorf("maskPhone(%v) = %v, want nil", tc.in, *got)
+1473	+		case tc.want != nil &amp;&amp; got == nil:
+1474	+			t.Errorf("maskPhone(%v) = nil, want %v", *tc.in, *tc.want)
+1475	+		case tc.want != nil &amp;&amp; got != nil &amp;&amp; *got != *tc.want:
+1476	+			t.Errorf("maskPhone(%v) = %v, want %v", *tc.in, *got, *tc.want)
+1477	+		}
+1478	+	}
+1479	+}
+1480	diff --git a/internal/api/ratelimit.go b/internal/api/ratelimit.go
+1481	new file mode 100644
+1482	index 0000000..6e1db7a
+1483	--- /dev/null
+1484	+++ b/internal/api/ratelimit.go
+1485	@@ -0,0 +1,62 @@
+1486	+package api
+1487	+
+1488	+import (
+1489	+	"context"
+1490	+	"sync"
+1491	+	"time"
+1492	+)
+1493	+
+1494	+// RateLimiter enforces handoff-03-auth.md v3's per-client-credential
+1495	+// rate limits (60 req/min for read:own/read:any, 10 req/min for
+1496	+// profile:search), keyed per sub+scope. The mechanism is this track's
+1497	+// call (v3, explicitly) — an interface so handler tests use a fake
+1498	+// instead of real wall-clock behavior.
+1499	+type RateLimiter interface {
+1500	+	// Allow reports whether sub may make one more request under scope
+1501	+	// right now, given limit requests per rolling minute.
+1502	+	Allow(ctx context.Context, sub string, scope Scope, limit int) (bool, error)
+1503	+}
+1504	+
+1505	+// InProcessRateLimiter is a fixed-window (per-wall-clock-minute) limiter,
+1506	+// in-process rather than Redis-backed — the simplest mechanism satisfying
+1507	+// v3's "the mechanism is your call" framing, sufficient for this
+1508	+// take-home's single-instance deployment. A fixed window (vs. sliding) can
+1509	+// admit up to 2x limit across a window boundary; accepted here as a
+1510	+// deliberate simplification, not hidden — a production multi-instance
+1511	+// deployment would need a shared store (Redis) instead.
+1512	+type InProcessRateLimiter struct {
+1513	+	mu      sync.Mutex
+1514	+	buckets map[string]*bucket
+1515	+	now     func() time.Time
+1516	+}
+1517	+
+1518	+type bucket struct {
+1519	+	windowStart time.Time
+1520	+	count       int
+1521	+}
+1522	+
+1523	+// NewInProcessRateLimiter constructs a ready-to-use limiter.
+1524	+func NewInProcessRateLimiter() *InProcessRateLimiter {
+1525	+	return &amp;InProcessRateLimiter{
+1526	+		buckets: make(map[string]*bucket),
+1527	+		now:     time.Now,
+1528	+	}
+1529	+}
+1530	+
+1531	+func (r *InProcessRateLimiter) Allow(_ context.Context, sub string, scope Scope, limit int) (bool, error) {
+1532	+	r.mu.Lock()
+1533	+	defer r.mu.Unlock()
+1534	+
+1535	+	key := sub + "|" + string(scope)
+1536	+	now := r.now()
+1537	+	b, ok := r.buckets[key]
+1538	+	if !ok || now.Sub(b.windowStart) &gt;= time.Minute {
+1539	+		b = &amp;bucket{windowStart: now, count: 0}
+1540	+		r.buckets[key] = b
+1541	+	}
+1542	+	if b.count &gt;= limit {
+1543	+		return false, nil
+1544	+	}
+1545	+	b.count++
+1546	+	return true, nil
+1547	+}
+1548	diff --git a/internal/api/ratelimit_test.go b/internal/api/ratelimit_test.go
+1549	new file mode 100644
+1550	index 0000000..9ce53aa
+1551	--- /dev/null
+1552	+++ b/internal/api/ratelimit_test.go
+1553	@@ -0,0 +1,65 @@
+1554	+package api
+1555	+
+1556	+import (
+1557	+	"context"
+1558	+	"testing"
+1559	+	"time"
+1560	+)
+1561	+
+1562	+func TestInProcessRateLimiter_AllowsUpToLimit(t *testing.T) {
+1563	+	rl := NewInProcessRateLimiter()
+1564	+	ctx := context.Background()
+1565	+	for i := 0; i &lt; 3; i++ {
+1566	+		allow, err := rl.Allow(ctx, "clientA", ScopeSearch, 3)
+1567	+		if err != nil {
+1568	+			t.Fatalf("Allow: %v", err)
+1569	+		}
+1570	+		if !allow {
+1571	+			t.Fatalf("request %d denied, want allowed (limit 3)", i+1)
+1572	+		}
+1573	+	}
+1574	+	allow, err := rl.Allow(ctx, "clientA", ScopeSearch, 3)
+1575	+	if err != nil {
+1576	+		t.Fatalf("Allow: %v", err)
+1577	+	}
+1578	+	if allow {
+1579	+		t.Error("4th request within the same window should be denied at limit 3")
+1580	+	}
+1581	+}
+1582	+
+1583	+func TestInProcessRateLimiter_KeyedPerSubAndScope(t *testing.T) {
+1584	+	rl := NewInProcessRateLimiter()
+1585	+	ctx := context.Background()
+1586	+	if _, err := rl.Allow(ctx, "clientA", ScopeSearch, 1); err != nil {
+1587	+		t.Fatalf("Allow: %v", err)
+1588	+	}
+1589	+	// A different sub, or a different scope for the same sub, must have
+1590	+	// its own independent bucket.
+1591	+	allowOtherSub, _ := rl.Allow(ctx, "clientB", ScopeSearch, 1)
+1592	+	if !allowOtherSub {
+1593	+		t.Error("a different sub must not share clientA's bucket")
+1594	+	}
+1595	+	allowOtherScope, _ := rl.Allow(ctx, "clientA", ScopeReadOwn, 1)
+1596	+	if !allowOtherScope {
+1597	+		t.Error("a different scope for the same sub must not share the bucket")
+1598	+	}
+1599	+}
+1600	+
+1601	+func TestInProcessRateLimiter_WindowResets(t *testing.T) {
+1602	+	rl := NewInProcessRateLimiter()
+1603	+	fakeNow := time.Now()
+1604	+	rl.now = func() time.Time { return fakeNow }
+1605	+	ctx := context.Background()
+1606	+
+1607	+	if allow, _ := rl.Allow(ctx, "clientA", ScopeSearch, 1); !allow {
+1608	+		t.Fatal("first request should be allowed")
+1609	+	}
+1610	+	if allow, _ := rl.Allow(ctx, "clientA", ScopeSearch, 1); allow {
+1611	+		t.Fatal("second request within the same window should be denied")
+1612	+	}
+1613	+
+1614	+	fakeNow = fakeNow.Add(time.Minute + time.Second)
+1615	+	if allow, _ := rl.Allow(ctx, "clientA", ScopeSearch, 1); !allow {
+1616	+		t.Error("request after the window rolled over should be allowed again")
+1617	+	}
+1618	+}
+1619	diff --git a/internal/api/touchcounter.go b/internal/api/touchcounter.go
+1620	new file mode 100644
+1621	index 0000000..8d01214
+1622	--- /dev/null
+1623	+++ b/internal/api/touchcounter.go
+1624	@@ -0,0 +1,152 @@
+1625	+package api
+1626	+
+1627	+import (
+1628	+	"context"
+1629	+	"sync"
+1630	+	"time"
+1631	+)
+1632	+
+1633	+// TouchCounter enforces handoff-03-auth.md v3's cumulative
+1634	+// distinct-record-touch cap per caller per rolling 24h window — the
+1635	+// control that actually resists decomposition-style enumeration, tracked
+1636	+// independently of the per-minute RateLimiter above. Applies to both
+1637	+// ScopeSearch and ScopeReadAny unconditionally: a valid ReasonCode
+1638	+// satisfies the per-call Authorize() policy check but does not exempt the
+1639	+// caller from this cap.
+1640	+//
+1641	+// Reserve/Settle, not a bare check-then-record: an earlier shape split
+1642	+// this into Allowed() (check) and RecordTouches() (record), with the
+1643	+// DAO call — unlocked, and potentially slow — happening in between.
+1644	+// Under concurrent requests from the same sub, every one of them could
+1645	+// read Allowed()==true before any of them recorded a touch, letting N
+1646	+// concurrent requests each add up to a full page's worth of distinct
+1647	+// touches — overshooting the cap by a multiple of the page size, not the
+1648	+// one-request overshoot the design accepts (Nolan Reyes, PR #26 review).
+1649	+// Reserve atomically checks capacity AND books a worst-case-sized
+1650	+// placeholder for the request in progress, so a second concurrent
+1651	+// request sees the first's reservation and is correctly denied before
+1652	+// either request's DAO call returns.
+1653	+type TouchCounter interface {
+1654	+	// Reserve reports whether sub may proceed with a request that could
+1655	+	// touch up to maxNewTouches additional distinct records — false once
+1656	+	// sub's committed-plus-reserved count already meets the cap. A true
+1657	+	// result books maxNewTouches against the window immediately; the
+1658	+	// caller must call Settle exactly once per successful Reserve
+1659	+	// (whether or not the request that follows succeeds) to release the
+1660	+	// reservation and record the actual distinct ids touched.
+1661	+	Reserve(ctx context.Context, sub string, maxNewTouches int) (bool, error)
+1662	+	// Settle releases a reservation of size reserved (the same value
+1663	+	// passed to the Reserve call this settles) and records recordIDs
+1664	+	// (already deduplicated by the caller) as actually touched — fewer
+1665	+	// than reserved is the common case (a page returned fewer rows than
+1666	+	// its cap, or the request failed and recordIDs is empty).
+1667	+	Settle(ctx context.Context, sub string, recordIDs []string, reserved int) error
+1668	+}
+1669	+
+1670	+// touchWindow is one caller's rolling-24h bookkeeping. reserved is the
+1671	+// sum of in-flight requests' booked-but-not-yet-settled budget; a
+1672	+// request is denied once len(touched)+reserved reaches the cap, not just
+1673	+// once len(touched) does.
+1674	+type touchWindow struct {
+1675	+	windowStart time.Time
+1676	+	touched     map[string]struct{}
+1677	+	reserved    int
+1678	+}
+1679	+
+1680	+// InProcessTouchCounter is an in-process implementation — Redis or any
+1681	+// other shared store is a drop-in replacement behind the same interface
+1682	+// for a multi-instance deployment; the mechanism is this track's call
+1683	+// (handoff-03-auth.md v3, explicitly).
+1684	+//
+1685	+// windows has no active eviction beyond lazy replacement-on-next-access
+1686	+// (currentWindow swaps in a fresh entry once a sub's window has rolled
+1687	+// over) — a sub that stops calling entirely leaves its entry in the map
+1688	+// forever. sweep(), called opportunistically from Reserve, bounds this:
+1689	+// harmless if sub cardinality is small and fixed (registered client
+1690	+// credentials), a real concern if sub is minted per end-user session
+1691	+// (Nolan Reyes, PR #26 review) — worth confirming what populates sub
+1692	+// before this backs a real deployment.
+1693	+type InProcessTouchCounter struct {
+1694	+	mu        sync.Mutex
+1695	+	windows   map[string]*touchWindow
+1696	+	cap       int
+1697	+	window    time.Duration
+1698	+	now       func() time.Time
+1699	+	lastSweep time.Time
+1700	+}
+1701	+
+1702	+// NewInProcessTouchCounter constructs a counter enforcing capPerWindow
+1703	+// distinct record touches per rolling window (24h in production; a
+1704	+// shorter window is accepted for tests).
+1705	+func NewInProcessTouchCounter(capPerWindow int, window time.Duration) *InProcessTouchCounter {
+1706	+	return &amp;InProcessTouchCounter{
+1707	+		windows: make(map[string]*touchWindow),
+1708	+		cap:     ca
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:15 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/decisions/context-propagation.md 2&gt;</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/decisions/context-propagation.md 2&gt;/dev/null | head -100"
+}</pre><div class="lbl">result</div><pre># Decision: Context propagation into the DAO layer
+
+Pattern: rotating devil's advocate, decision 2 of 3 (seat: Nolan Reyes). Proposer: Renata Cole.
+
+## Proposal
+
+Every `Repository` method (and its three sub-interfaces — `Profiles`/`Credentials`/`Methods`) takes `context.Context` as its first argument, propagated unbroken from the HTTP request through the handler into every DB call, so request cancellation/timeout actually cancels in-flight queries.
+
+## Objections — Nolan Reyes (Veteran)
+
+Agreed with the direction but pushed on three failure modes from production experience:
+
+1. **Cancellation racing a multi-statement write.** A cancelled `SELECT` aborts cleanly; a cancelled multi-statement write (e.g., profile + credential saved together) risks a half-written row unless cancellation is scoped to a transaction, not a statement. Cited a migration job killed mid-batch by a deploy SIGTERM, leaving orphaned rows because cancellation was handled per-statement.
+2. **Deadline budget, not a boolean.** Unbroken propagation means an inherited, already-partially-consumed deadline reaches the DAO call. If upstream work (e.g., a connector call) already burned most of the HTTP handler's timeout, the DAO gets a shrinking remainder and starts timing out under *normal* latency, not just failure — the good case starts looking like the bad case.
+3. **Sub-interfaces are not uniformly cancel-safe.** Credential writes during auth are exactly the path that caused a real incident: a retry re-issued a credential write against an already-expired derived context and silently no-op'd instead of erroring. Wants explicit naming of which write paths deliberately detach from the inbound context (via `context.WithoutCancel` or a fresh background context) for durability, distinct from read paths that don't need it.
+
+## Ruling (Renata Cole)
+
+All three accepted; no decline.
+
+1. Any `Repository` method that writes to more than one table (e.g., a profile+credential save) runs inside a single `Tx`. Context cancellation during that transaction triggers `Tx.Rollback`, never a partial commit — this is a stated requirement on the `Repository` implementation contract, not left to each backend's discretion.
+2. Deadline propagation is a budget-allocation decision, stated explicitly in S3's middleware design: the HTTP-boundary timeout must be sized to cover realistic p99 DAO latency *plus* any upstream work (e.g., no DAO call should ever be handed a near-zero remaining deadline as a matter of routine operation). This gets a concrete number attached when S3's middleware design is written, not left as "some deadline."
+3. Credential writes are named explicitly as the path that needs a detach point for durability, distinct from profile reads and other cancel-safe paths, which propagate the inbound context unmodified. This distinction is documented at the point each such method is implemented, not left implicit.
+
+## Status
+
+Ruled. Carries into S2 (Repository implementation contract: transaction scoping, detach points) and S3 (middleware deadline budget).
+
+## Resolved against 05's contract (2026-09-12)
+
+Oren's first-pass review of 05's DAO contract flagged a real tension: this ruling's item 1 requires any multi-table write to run in a single `Tx`, but the contract as first landed had no method spanning both `user_profile` and `user_credential`, and explicitly barred 03 from composing a cross-call transaction — leaving registration's profile+credential creation with no atomic path at all. 05 resolved it by adding `CreateProfileWithCredential(ctx, p, c)` on the `Repository` composite (05's §3b) — the one cross-table operation in the contract, DAO-generated IDs for both rows, single transaction, `c.UserID` ignored on input and set from the just-created profile. This ruling's item 1 now has exactly one caller-visible method satisfying it, rather than being a requirement with no concrete instance.
+
+## Consistency-pass fixes (2026-09-12)
+
+**F19 — a real contradiction with 05's contract, not just stale wording.** 05's `multi-db-strategy.md` states "`Context` is first on every method and cancellation is honoured" — a blanket guarantee. Item 3 above, as originally written, said credential writes detach via `context.WithoutCancel` *inside the DAO*, which would mean the DAO does not honor cancellation on those specific methods — directly contradicting 05's guarantee. Fixed: **the detach happens in the handler, before the DAO call, not inside the DAO.** The handler passes the DAO a fresh, independently-bounded context for a credential write (not derived from the inbound request's cancellation tree, but with its own timeout) — from the DAO's perspective, cancellation of the context it was given is still honored unconditionally, exactly as 05's contract states. The DAO layer's guarantee is never weakened; the detach decision is a handler-layer policy about *which* context to hand the DAO, not an exception the DAO carves out for itself.
+
+**F17 — stale references to a token cache dropped.** Item 3 originally also named "any token-persistence write" as a detach point, left over from before 02's S3 ruling settled on no-cache-by-default for the connector's vendor tokens (`decisions/connector-token-lifecycle-redblue.md`). There is no token-persistence write in the current design, so the phrase is removed (done above) rather than left to describe a mechanism that no longer exists.
+
+---
+Model: sonnet (Nolan Reyes, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 4:15 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Findings from re-reviewing PR #26 at commit f93b19d (`gh pr diff 26 --repo wtvamp/loginid-takehome`, full current diff).
+
+1. Resolved, with a real test. `internal/api/handlers.go` — `NewGetProfileHandler` only calls `d.TouchCounter.Reserve` inside `if ac.Scope == ScopeReadAny`; for `ScopeReadOwn`, `reserved` stays its zero value (`false`) and every downstream `if reserved { Settle }` guard correctly skips. `TestGetProfileHandler_ReadOwn_DoesNotHitTouchCap` (handlers_test.go) locks this in: it wires a `TouchCounter` that denies everything and asserts 200 for `read:own`. That's what I asked for — not just a fixed code path but a test that fails if it regresses.
+
+2. Consistent now. Every DAO call error (`d.Repo.Profiles().Search`/`.Get`) goes through `writeDAOError`; every non-DAO collaborator error (`RateLimiter.Allow`, `TouchCounter.Reserve`/`Settle`, `Authorizer.Authorize`) goes through `writeInternalError`. The comment on `writeInternalError` in `errors.go` now names exactly why it's kept separate rather than reusing `writeDAOError` — my prior naming-risk objection is addressed in the doc comment itself, not just in behavior.
+
+3. Resolved. `handlers.go`'s comment above the `reasonCode` block in `NewGetProfileHandler` now states explicitly: it's validated and logged for the audit trail, has no other consumer this story, and threading it into `Authorizer` is a follow-up story's concern. That's the traceability I was missing.
+
+4. One new issue, narrow but real, in the Reserve/Settle delta itself. I traced every exit point in both handlers — `NewSearchHandler` and `NewGetProfileHandler` — and every successful `Reserve` does get exactly one matching `Settle` call on every code path (Authorize error, Authorize denial, DAO error, and success), including the `read:any`-only conditional in the get handler. No leaked or double-released reservations there; the concurrency tests (`TestInProcessTouchCounter_ConcurrentReservesNeverExceedCap` with `-race`, `TestInProcessTouchCounter_ReserveBooksBudgetBeforeSettle`) exercise the actual race Nolan flagged, not a sequential stand-in.
+
+The issue is what context those cleanup `Settle` calls run under. Every `Settle` call on an error-exit path (e.g. `handlers.go:761`, `766`, `782`, `895`, `902`, `912`) uses `ctx := r.Context()` — the same context that may already be canceled or past its deadline, since these are precisely the failure paths where an upstream call (DAO, Authorize, RateLimiter) just errored, plausibly because that context expired. `decisions/context-propagation.md` already established the principle that a release/durability write shouldn't inherit a context that's about to make it fail — that ruling scoped it to DAO credential writes, but `Settle`-as-release is functionally the same shape: a cleanup operation that must succeed even when the triggering request context is dying. Today this is harmless because `InProcessTouchCounter.Reserve`/`Settle` both ignore `ctx` entirely (first parameter is `_ context.Context`). But the moment this interface is backed by something real (Redis, per the type's own doc comment), a canceled context handed to a cleanup `Settle` call could make the release itself fail, permanently leaking reserved budget until the window's sweep — silently changing the whole cap's behavior under load. Same pattern as the writeDAOError/writeInternalError naming risk I raised last round: safe today, latent for the next person who fills in the interface. Recommend detaching the context (`context.WithoutCancel`) specifically at these cleanup `Settle` call sites, or a comment on `TouchCounter.Settle`'s doc stating callers must not assume its `ctx` argument is honored for cancellation — whichever Renata prefers, but it shouldn't be silent.
+
+Relevant files: `internal/api/handlers.go`, `internal/api/errors.go`, `internal/api/touchcounter.go`, `internal/api/touchcounter_test.go`, `internal/api/handlers_test.go`, `03-engineering-delivery/decisions/context-propagation.md`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

@@ -1,0 +1,285 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tobias Lindqvist — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Tobias Lindqvist</h1><div class="sub">Hire (track 01) · session 5 of 6 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 11:59 AM PDT – Sep 13, 2026 11:59 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 11:59 AM PDT</span><span class="who">Lead</span><div class="body">Naomi (PO) just corrected `04-infra-devops/refinement/LT-49.md` (metrics sink, alert rules, NetworkPolicy, RBAC — all corrected against Amber's read-only observability inventory, since Prometheus turns out not to be able to ingest a CronJob's stdout at all) and wrote a new `04-infra-devops/refinement/LT-20.md` (log-sink retention for the audit trail, now understood to be a shared Elasticsearch stream on a Basic license outside this project's namespace/RBAC reach).
+
+Read `04-infra-devops/refinement/LT-49.md`, `04-infra-devops/refinement/LT-20.md`, and `04-infra-devops/handoff-amber-observability-inventory.md` for full context. This project's standing pattern has been catching real gaps (unenforced config, missing fail-loud behavior, concurrency races, mechanism assumptions that turn out wrong once actually checked) — look for the next one, not a style nit. Specifically worth checking:
+
+1. LT-49's new alert rules reference `retention_sweep_skipped_total` as a counter Renata's implementation needs to add — but the existing "Update — implementation, 03 side" section (further down the same file) only describes `rows_examined`/`rows_deleted`/`oldest_surviving_row_age_seconds`/`sweep_last_run_timestamp_seconds`. Is `retention_sweep_skipped_total` actually specified anywhere as something the sweep or the CronJob's own skip-visibility signal (LT-44 5a) actually produces, or is this a metric name invented in the alert-rule section with no corresponding emission criterion anywhere in this doc?
+2. LT-20 proposes "Option A" (a dedicated `loginid-takehome-audit-*` data stream) as the same underlying decision as LT-49's audit-RBAC item — but is anything in either doc actually the RIGHT owner/mechanism to decide that, or does this refinement just assert the two are "the same decision" without anyone with authority over either the audit-log design (Marcus/02) or the ES stack (logging owner) actually agreeing that's true? Could treating them as one decision accidentally under-scope one of the two stories?
+3. The PO-script's new step 9 (fire one alert on purpose via a throwaway PrometheusRule) — does it specify how the threshold-0 rule interacts with the REAL PrometheusRule already running for the same class/alertname? Could a throwaway rule with the same alertname collide with or get deduplicated against the real one in Alertmanager, making the "confirm it clears after deletion" check ambiguous about which rule actually fired?
+4. Anything else concrete you find.
+
+Give your strongest objection(s) as specific, concrete gaps — not vague "consider" notes. If you genuinely find nothing beyond what's already handled, say so. Under 400 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:59 AM PDT</span><span class="who">Tobias Lindqvist</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-49 refinement — S5: observability (logging, metrics, never-log enforcement, retention-sweep alerting)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Theo Bergman (04, lint check, ingress redaction, RBAC, sink, alert rule), Renata Cole (03, metrics exposure at the sweep-invocation layer, never-log test at the application layer). **Design inputs:** Marcus Ilori (02, never-log-list completeness confirmation), Priya Nandakumar (05, retention-alert-threshold seat). **Source:** `04-infra-devops/backlog.md` Story 5 (LT-49), design already done in `04-infra-devops/observability.md`.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: LT-44's sweep wiring (merged, #55) exists but its metrics have nowhere to land and no alert watches them — `oldest_surviving_row_age_seconds` is worthless as a dead-sweep detector if nothing scrapes or alerts on it. `observability.md` is fully designed already (this is a build story against an existing design, not a fresh design pass), so this is genuinely ready to refine now rather than re-litigated.
+10	
+11	## What this story actually is
+12	
+13	Not a redesign — `observability.md` already specifies every mechanism this story builds:
+14	1. **Logging discipline + lint check** (04): explicit-field `slog` logging, a CI lint rule flagging never-log-list field names/whole-struct log calls.
+15	2. **Ingress-level redaction** (04): search-endpoint `name`/`phone` query fragments never reach an ingress access log.
+16	3. **Audit-log RBAC** (04): a distinct `Role` for audit-log read access, separate from any Secret-read grant.
+17	4. **Retention-sweep metrics + alert** (03 exposes, 04 sinks/alerts): `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class}` per LT-44's sweep, only from `Drained == true` results (LT-44's own criterion, unaffected here — this story is the metrics *sink and alert rule*, not re-deriving the emission-gating logic LT-44 already built).
+18	5. **Never-log-list completeness confirmation** (02, Marcus): a sign-off that all 11 items in `handoff-04-secrets.md`'s list map to a named enforcement site, not just a policy statement — the mapping already exists in `observability.md`'s "operationalized" section; this is Marcus confirming it, not this story inventing new coverage.
+19	
+20	This is genuinely two-track work, per team-lead's framing: 04 builds the sink, alert rule, ingress redaction, RBAC, and lint check; 03 adds/confirms the metrics-exposure code path at the sweep-invocation layer (LT-44's own code) and a never-log-list enforcement test at the application layer (the lint check's *complement* — a test asserting specific known-sensitive values never appear in captured log output, catching what a static lint rule can miss).
+21	
+22	## Acceptance criteria (restated from `backlog.md` S5, split by side)
+23	
+24	**04 side:**
+25	- [ ] The CI lint check (a `golangci-lint` custom rule or CI-run grep) flags any log call passing a whole request/response struct, an `*http.Request` body, or a variable named/typed to match the never-log list's field names (`password`, `token`, `secret`, `dsn`, `client_secret`) — enforcement site: the lint rule itself, run in CI, not a design-doc statement.
+26	- [ ] Ingress-level log-format override or redaction ensures `name`/`phone` query-string fragments on `POST /profiles/search` never appear in ingress access logs — enforcement site: the ingress `ConfigMap`'s log-format setting.
+27	- [ ] **Audit-log read access, escalated to Warren, not closable by this track alone (Amber's read-only observability inventory, `handoff-amber-observability-inventory.md`):** the audit trail lives in the shared `filebeat-9.4.4` Elasticsearch data stream, and the ES licence is **Basic** — document-level security (the feature that would let a role read only `kubernetes.namespace: loginid-takehome`) is Platinum/Enterprise-only. Any ES role over `filebeat-9.4.4` grants read on **every tenant's** logs, not just this project's. Two honest options Amber named, neither closable inside this namespace: (a) write audit events to a dedicated data stream this application owns (e.g. `loginid-takehome-audit-*`), then an index-level ES role scoped to that pattern is genuinely narrow — the app creates the index, but the ES role/user itself is still a cluster-level object someone on the `logging` side must create, since this project's CI deployer has no path to create Elasticsearch objects at all; (b) accept namespace-wide read on the shared stream, which isn't real scoping for something labeled "audit." Recorded as an environment residual in the threat model pending Warren's ruling, not silently closed as Done.
+28	- [ ] **Metrics sink — corrected per Amber's inventory, not what this refinement originally assumed.** Prometheus (the cluster's actual, only metrics sink — `kube-prometheus-stack` in ns `monitoring`) **cannot ingest a CronJob's stdout**; it only scrapes HTTP endpoints, and a short-lived Job pod would usually be gone before a scrape could catch it regardless. Mechanism (Amber's recommendation, Priya's addendum, PM's ruling): the sweep persists its per-class results to the database it already reaches; **`api-service`** (the one always-up pod) serves them as Prometheus gauges — `retention_sweep_last_success_timestamp_seconds`, `oldest_surviving_row_age_seconds{class}`, `retention_sweep_skipped_total` — on a separate `/metrics` port. **No metric or label name may contain the substring `health`** — Filebeat silently drops any log line matching `(kube-probe|health|/healthz|/readyz)`, so a metric name like `retention_sweep_health` would vanish with no error anywhere; this constraint is now binding on 03's naming choices, not just a nice-to-know. Enforcement site: a `ServiceMonitor` in `loginid-takehome`, labeled `release: prometheus` (the cluster's Prometheus CR selects on this label with an empty namespace selector — self-service, no edit to any shared object required) — confirmed scraping the real endpoint, not just present in a manifest.
+29	- [ ] **Alert rules — corrected mechanism, same three-rule design.** A `PrometheusRule` object (e.g. `loginid-takehome-retention`) in `loginid-takehome`, labeled `release: prometheus`, expressing Priya's three rules as real PromQL against the persisted-gauge metric above: `RetentionSweepNotReporting` as `time() - retention_sweep_last_success_timestamp_seconds{class="X"} &gt; 2*sweep_interval_seconds`, `RetentionWindowExceeded` as `oldest_surviving_row_age_seconds{class="X"} &gt; (W + 2*sweep_interval_seconds)`, `RetentionSweepSkipRate` on `retention_sweep_skipped_total`'s rate. **`RetentionSweepSkipRate` must be `severity: warning`, never `info`** — Alertmanager's route tree sends `severity =~ info|none` straight to a null receiver, so an `info`-severity rule would fire and be silently swallowed, never reaching Discord; this is now a hard requirement, not a style choice. Enforcement site: the `PrometheusRule` YAML's `labels.severity` field, plus a live check that the rule actually appears in Alertmanager (not just Prometheus) once fired.
+30	- [ ] **New NetworkPolicy requirement (Amber's inventory):** whichever pod serves `/metrics` (`api-service`) needs an ingress rule admitting `namespaceSelector: {kubernetes.io/metadata.name: monitoring}` on the metrics port specifically — Prometheus's scraper lives in a different namespace than every other consumer this project's NetworkPolicies were written for. `monitoring` is an auto-applied namespace label, so this is addressable without modifying the `monitoring` namespace itself.
+31	- [ ] **New RBAC requirement (Amber's inventory):** the CI deployer's `Role` (`deploy/rbac.yaml`) does not currently grant the `monitoring.coreos.com` API group at all — `prometheusrules`/`servicemonitors` must be added, namespaced to `loginid-takehome`, no shared object touched. This is a bootstrap-permission change (same class as the Vault-role RBAC additions in LT-46), so it goes to Warren for the apply, and deployment should refuse to proceed until it's applied rather than silently skip creating the new objects.
+32	- [ ] **Added per Tobias's objection:** the alert's suppression logic distinguishes a *skipped* run (LT-44's `concurrencyPolicy: Forbid` causing the next scheduled run to be skipped when the previous one is still active — itself required by LT-44 5a to be visible in observability) from a genuinely *dead* sweep. With `Forbid`, a skipped run means no new `oldest_surviving_row_age_seconds` line is emitted for that cycle at all — the alert reads the previous run's last value, and whether that's distinguishable from a truly stopped sweep depends on the sink's staleness/retention handling, which nothing in this story or LT-44 currently pins down. Enforcement site: either (a) the same alert rule additionally suppresses/qualifies on LT-44 5a's skip-visibility signal, or (b) a distinct alert exists for "sweep skipped, still healthy" vs. "sweep dead" — LT-44's own fix (Forbid + skip-visibility metric) must actually feed the one alert it was built to inform, not sit unused.
+33	
+34	**03 side:**
+35	- [ ] **Corrected per Amber's inventory:** the sweep (a short-lived `CronJob` pod) cannot itself serve a scrapable `/metrics` endpoint — it persists its per-class `SweepResult` (`rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds`, last-success timestamp) to the database it already reaches (`db-runtime-credential`), gated on `Drained == true` exactly as LT-44 already requires; **`api-service`** (the always-up pod) reads that persisted state and serves it as real Prometheus gauges with the `class` label values above, on its own `/metrics` port, separate from the application's own request-handling port. This is a new, small persistence contract between the sweep and `api-service` (Priya's addendum) — not a redesign of LT-44's own sweep logic, which is unaffected.
+36	- [ ] A never-log-list enforcement **test** exists at the application layer — asserting that a representative sample of never-log-list values (a password, a token, a DSN, a raw vendor error body) passed through the real logging path never appears in captured log output — the lint check's complement, catching what a static grep-style rule can miss (e.g., a value passed through an intermediate variable the lint rule's pattern doesn't match). Enforcement site: a test in `internal/api`/`internal/connector` that captures `slog` output and asserts absence of seeded sensitive values.
+37	
+38	**02 side:**
+39	- [ ] Marcus (02) confirms in writing that `handoff-04-secrets.md`'s 11-item never-log list is fully covered by a named enforcement site. **Correction (Desmond's claims check):** `observability.md`'s "operationalized" section, as currently written, maps only items 1–9 ("hand-off's nine items map to two enforcement surfaces") — it predates the F50 consistency-pass fix that added items 10 (driver-error `DETAIL` text) and 11 (username) to the hand-off, and was never updated. Marcus's confirmation must therefore supply the missing mapping for items 10–11, not just cross-check an existing mapping that doesn't yet cover them. Flagged to Theo to update `observability.md` itself (source-doc drift, not this refinement's error to carry silently) — see note below.
+40	
+41	## Source-doc drift found during refinement (Desmond's claims check)
+42	
+43	Both traced to the same root cause: the F50 consistency-pass fix expanded `handoff-04-secrets.md`'s never-log list from nine items to eleven (items 10–11: driver-error `DETAIL` text, username), and that expansion was never back-propagated into two of 04's own documents:
+44	- `observability.md`'s "operationalized" section still says "hand-off's nine items map to two enforcement surfaces" and only enumerates 1–9 — see the 02-side criterion above for the fix this requires.
+45	- `04-infra-devops/backlog.md`'s own Story 5 (LT-49) acceptance-criteria text still says "handoff-04-secrets.md's nine items" — stale for the same reason. This refinement doc restates the criterion using the correct, current count (eleven) rather than perpetuating the stale number, but that means this refinement doc's wording will visibly disagree with `backlog.md`'s own text unless Theo corrects nine→eleven there too.
+46	
+47	Flagged to Theo (04) to fix both source documents directly, since they're his track's files — not something this refinement should silently carry forward or correct in his place.
+48	
+49	## Priya's seat — retention-alert threshold
+50	
+51	**Added per team-lead's routing, sharpened by Tobias's objection:** Priya Nandakumar (05) has a seat specifically on whether the alert formula's two terms are the right ones, since she owns the retention-window numbers and the sweep-invocation cadence assumption. Question for her turn: does `retention_window_seconds + sweep_interval_seconds` need a third term — a slack/grace factor for a sweep run that's merely running slow (not dead), given LT-44's `concurrencyPolicy: Forbid` means a slow run causes the *next* scheduled run to be skipped rather than overlapped? Tobias's pass confirmed this is worse than a "might trip early" edge case: a skipped run means no new metric line is emitted for that cycle at all, so the alert is reasoning about the previous run's last value, and whether that reads as "climbing" or "stale-but-fine" depends on sink staleness handling nobody has specified. This is why the 04-side criterion above now requires the alert to actually consume LT-44 5a's skip-visibility signal — Priya's ruling should say whether a third grace term is *also* needed on top of that, or whether skip-visibility alone resolves it.
+52	
+53	## Non-goals
+54	
+55	- No new retention windows or data-class definitions — those are `pii-governance.md`'s numbers, already final per LT-44.
+56	- No tracing/OpenTelemetry — explicitly out per `observability.md`'s own "what's deliberately not here."
+57	- No general SLO/error-budget policy or alert catalog beyond the one retention-sweep alert rule this story requires.
+58	- No re-derivation of the never-log list's 11 items or their categorization — that's `handoff-04-secrets.md`'s inventory, already final; this story only confirms and enforces it.
+59	
+60	## PO review script
+61	
+62	1. Read the CI lint-check config/rule directly; confirm it actually flags the named patterns (whole-struct log calls, never-log-list field names) rather than being a no-op placeholder.
+63	2. Confirm the ingress `ConfigMap`'s log-format override is applied to the live ingress (not just committed in a manifest never deployed) and that a live search request's `name`/`phone` query params don't appear in the ingress access log.
+64	3. Confirm the audit-log RBAC `Role` is genuinely distinct from Secret-read RBAC — read both role definitions, confirm no overlap, confirm the incident-review group binding.
+65	4. Confirm the three sweep metrics reach the real sink (query the sink directly for `oldest_surviving_row_age_seconds`, don't just trust the code emits it) and that the alert rule is configured with the real numeric retention windows and real sweep interval substituted in, not placeholders.
+66	4a. **Added per Tobias's objection — value correctness, not just presence:** seed one row of known age in each retention class, run the sweep once, query the sink for that class's `oldest_surviving_row_age_seconds`, and confirm the value is within a few seconds of the known seeded age — not merely that a number arrived. Neither side's criterion above checks the emitted value against ground truth on its own; this step closes that gap without duplicating either team's enforcement site.
+67	5. Confirm 03's never-log-list enforcement test exists, runs in CI, and genuinely fails if a seeded sensitive value leaks into captured log output (mutate the test locally to confirm it can fail, not just that it currently passes).
+68	6. Confirm Marcus's never-log-list completeness confirmation is recorded, and read it against the 11-item list directly rather than trusting a summary — including items 10–11, per the source-doc-drift note above.
+69	7. Confirm Priya's ruling on the alert-formula question above is recorded, and that the alert rule matches whatever she rules (two-term formula as-is, or a third grace term) and that the skip-vs-dead suppression logic is actually wired in, not just designed.
+70	8. **Rewritten per Tobias's objection — the original "suspend and wait one sweep interval" step assumed a short enough interval to observe live within a review session, but nothing in this story or LT-44 states the CronJob's actual schedule (plausibly daily, given the 24-month/30-day/7-day retention regime).** Cite the real schedule value here once Theo's manifest sets it; if it's longer than a review session can wait out, substitute a manually-triggered, off-schedule one-off `Job` run (bypassing the CronJob's own cadence) as the equivalent live proof that a dead/stopped sweep produces no other symptom and the alert correctly fires once its condition is met.
+71	9. **Added, same principle as LT-46 step 6 (deliberately force the failure rather than trust the design):** fire one alert on purpose and confirm it reaches Alertmanager, not just Prometheus. E.g., apply a throwaway `PrometheusRule` temporarily setting `RetentionWindowExceeded`'s threshold to `0` for one class, confirm the alert appears in Alertmanager (`kubectl port-forward` to the Alertmanager UI, or its API) carrying the `loginid-takehome` namespace label, then delete the throwaway rule and confirm the alert clears. This closes the same class of gap Amber's inventory surfaced twice already (the `info`-severity route-to-null-receiver trap, the Filebeat `health`-substring drop) — a rule that looks correctly configured but is silently swallowed by shared alerting infrastructure this project doesn't own or control.
+72	10. **Added — confirm the NetworkPolicy and RBAC additions are both actually live, not just in a manifest:** the `monitoring`-namespace ingress rule on `api-service`'s `/metrics` port (query Prometheus's own "Targets" page or API for the `loginid-takehome` `ServiceMonitor` showing `UP`, not just that the `NetworkPolicy` YAML exists), and the CI deployer's `monitoring.coreos.com` RBAC grant (confirm Warren applied it, and that a deploy without it correctly refuses rather than silently skipping the new objects).
+73	
+74	## Research team review
+75	
+76	**Desmond Okafor — claims check:** Verified the `observability.md`/`handoff-04-secrets.md`/`LT-44.md`/`backlog.md` claims directly. One real finding: `observability.md`'s "operationalized" section and `backlog.md`'s own Story 5 text both still say "nine items," predating the F50 consistency-pass fix that brought the never-log list to eleven — neither was back-propagated. Not this refinement's error (it correctly uses eleven), but both source docs need Theo's fix. Everything else — the alert formula, `Drained`-only gating, the 11-item count and items 10/11's content, LT-44's metric names/class labels/`Forbid` — verified accurate.
+77	
+78	**Tobias Lindqvist — objection:** Two real gaps. First, the alert as originally scoped can't distinguish a skipped run (from `Forbid`) from a dead sweep — a skipped run means no new metric line at all for that cycle, so the alert reasons about a stale prior value with no stated staleness handling; LT-44's own skip-visibility fix (5a) needs to actually feed this alert's suppression logic, not sit unused. Second, PO-script step 8 assumed a sweep interval short enough to observe live, but the actual schedule is never stated and is plausibly daily — untestable as originally written. Also flagged that neither side's metrics criterion checked the emitted *value* against ground truth, only that a number reaches the sink. All three fixes applied: the skip-vs-dead suppression requirement added to the 04-side criteria and Priya's question, step 8 rewritten to allow a man
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:59 AM PDT</span><span class="who">Tobias Lindqvist</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-20.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-20.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-20 refinement — S6: log-sink retention for the audit trail
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Desmond Okafor (claims check), Tobias Lindqvist (objection seat). **Engineering:** Theo Bergman (04). **Design inputs:** Marcus Ilori (02, never-log-list scope), Priya Nandakumar (05, retention-window row), Amber (read-only observability inventory). **Source:** `04-infra-devops/backlog.md` Story 6 (LT-20), corrected against `04-infra-devops/handoff-amber-observability-inventory.md`.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this refinement corrects the backlog's own framing before restating criteria
+8	
+9	`backlog.md`'s Story 6 description names the enforcement site as "a retention policy on the log sink 04 already operates (Loki or equivalent)" and its own acceptance criteria assume this track can simply "configure the sink's retention setting to that window." **Both assumptions are wrong, confirmed by Amber's read-only inventory, not assumed correct at design time:**
+10	
+11	- **There is no Loki.** The cluster runs Filebeat (Helm DaemonSet, not an ECK `Beat` CR) shipping every namespace's stdout — this project's included, already, at no cost to us — into a single shared Elasticsearch data stream, `filebeat-9.4.4`, owned by the `logging` namespace's operators, not by this track.
+12	- **04 does not operate this sink.** `filebeat-9.4.4` is configured by a ConfigMap (`filebeat-filebeat-daemonset-config`) and backed by an Elasticsearch cluster this project's CI deployer has zero access to — no Kubernetes RBAC grant reaches Elasticsearch's own object model at all (an ES index-lifecycle-management, ILM, policy is a cluster-level object in a different system, not a Kubernetes CRD this namespace's `Role` could ever cover).
+13	- **The retention window can't be scoped to just this project's data even in principle, on the license the cluster runs.** The ES license is **Basic** — document-level security (the feature that would let an ILM/retention policy or a read scope apply to only `kubernetes.namespace: loginid-takehome` within the shared stream) is a Platinum/Enterprise feature. Any retention policy applied to `filebeat-9.4.4` is index/stream-level, meaning it would apply to **every tenant's logs in that stream**, not just this project's audit trail.
+14	
+15	This means Story 6 as originally scoped — "this story configures the sink's retention setting to that window once it's a number" — describes an action this track cannot actually take, on infrastructure this track does not own, at a granularity the platform's own license doesn't support. Per the PM's routing: **this story's job is to say what retention it needs and who applies it, not to pretend this namespace can apply it itself.**
+16	
+17	## What this story actually is, corrected
+18	
+19	Not a configuration change 04 makes. Instead:
+20	1. **State the required retention window precisely**, sourced from 05's `pii-governance.md` audit-log row (still pending a legal ruling on the actual number, per the original story's own "basis: unknown" framing — unaffected by this correction).
+21	2. **Name the actual owner who must apply it**: whoever administers the shared Elastic stack in `logging` — outside this project's org boundary, the same class of escalation as LT-49's audit-log-RBAC item (both trace to the same Basic-license constraint, on the same shared stream).
+22	3. **Record the options honestly, mirroring LT-49's audit-RBAC framing** (Amber's inventory named this once and both stories inherit it):
+23	   - **Option A (recommended, matches LT-49's audit-RBAC recommendation):** if `api-service` is changed to write audit events to its own dedicated data stream (e.g. `loginid-takehome-audit-*`, per LT-49's audit-RBAC option (a)) rather than relying on Filebeat's stdout capture of the shared stream, then an ILM policy scoped to that dedicated stream **is** genuinely this project's own object to request — narrow, not touching any other tenant's retention. This makes LT-20 and LT-49's audit-RBAC item the same underlying architectural decision, not two independent asks to the `logging` owner.
+24	   - **Option B:** accept that the audit trail's retention rides on whatever retention policy already exists (or doesn't) for the shared `filebeat-9.4.4` stream — meaning this project's audit data expires exactly when everyone else's does, decided by someone else's policy, with no ability to set or verify a project-specific window at all.
+25	4. **This story cannot be called Done by a configuration change in this namespace.** It's Done when the required window is stated, the owner is named and asked, and (if Option A is chosen) the dedicated-stream decision is recorded as a joint scope with LT-49's audit-RBAC item — or when whoever owns `logging` rules on Option B and this project accepts that ruling explicitly rather than by default.
+26	
+27	## Acceptance criteria (corrected from `backlog.md` S6)
+28	
+29	- [ ] The hand-off standard holds: 02's never-log-list scope and 05's retention-window row are each confirmed independently, without this story needing to be rewritten if either changes later — unaffected by this correction.
+30	- [ ] **Corrected:** the required retention window is stated precisely (05's `pii-governance.md` row, once ruled), and the request to apply it is sent to the actual owner (whoever administers the shared Elastic stack in `logging`) — not configured directly, since this track has no access to do so.
+31	- [ ] **Corrected:** if Option A (dedicated audit data stream) is adopted — jointly with LT-49's audit-RBAC decision, since both are the same underlying architectural question — the ILM policy request is scoped to that dedicated stream by name, never the shared `filebeat-9.4.4` stream as a whole.
+32	- [ ] Confirmed this remains a configuration/request, not a deletion job: no new DAO method, no new `cmd/` entrypoint, no scheduled job beyond LT-49's retention-sweep story for `user_profile`/`user_credential`-derived data — unaffected by this correction, restated for clarity since the enforcement site moved outside this namespace.
+33	- [ ] **Added:** this story is not marked Done on a configuration value this track can't actually verify was applied — the closing check is a request sent and a response received (or an explicit acceptance of Option B), not "we set a number in our own manifest," since no such manifest exists for this track to set it in.
+34	
+35	## Non-goals
+36	
+37	- No new retention windows invented by this track — 05's number, once ruled, is the number requested.
+38	- No attempt to build a per-namespace log-sink from scratch (a dedicated Loki instance, e.g.) to route around the shared stream's limitation — that's new, disproportionate infrastructure for a take-home, and duplicates infrastructure the cluster already has (same reasoning `local-dev-loop.md` used to rule out a local Kubernetes cluster).
+39	- No re-litigation of the never-log list's scope — 02's list, already final, is assumed correct here.
+40	
+41	## PO review script
+42	
+43	1. Confirm 05's `pii-governance.md` states the audit-log retention window as a ruled number (not still "basis: unknown") before this story can close — if still unruled, this story stays open on that dependency alone, same as it always has.
+44	2. Confirm a request was actually sent to the `logging` stack's owner (an email, a ticket, a message — whatever channel exists) naming the specific window and the specific stream (dedicated, if Option A; shared, if Option B) — not just recorded as an intention in this doc.
+45	3. If Option A: confirm this is the same decision as LT-49's audit-RBAC item, not a second, redundant request to the same owner for a subtly different scope.
+46	4. Confirm the response (or the explicit acceptance of Option B, with no response needed) is recorded before Done — a request sent with no confirmed outcome is not the same as a closed loop.
+47	
+48	## Research team review
+49	
+50	**Desmond Okafor — claims check:** [pending]
+51	
+52	**Tobias Lindqvist — objection:** [pending]
+53	
+54	**Naomi Voss — ruling:** [pending]
+55	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/handoff-amber-observability-inventory.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/handoff-amber-observability-inventory.md"
+}</pre><div class="lbl">result</div><pre>1	# Hand-off: what observability the cluster already has (LT-49, LT-20)
+2	
+3	**From:** Amber (OpenClaw Kubernetes agent on the Mac mini), read-only inventory on Warren's instruction, 2026-09-13 11:42–11:57 PDT. **Requested by:** Dana Whitfield (PM), after Warren asked "don't we already have a logging/monitoring/observability stack in the cluster?" **Receivers:** Theo Bergman (04) for the sink, alert rules, NetworkPolicy and RBAC; Renata Cole (03) for the `/metrics` exposure; Priya Nandakumar (05) for the sweep-result persistence contract; Naomi Voss (01) for the LT-49 and LT-20 refinement records; Marcus Ilori (02) for the audit-log residual.
+4	
+5	Amber's report follows verbatim. Names, versions, and namespaces only; nothing was created or changed.
+6	
+7	---
+8	
+9	## 1. What's actually here
+10	
+11	Both a Prometheus stack and an Elastic stack, from different eras and owned by different operators.
+12	
+13	| Component | Version | Namespace | Owner |
+14	|---|---|---|---|
+15	| kube-prometheus-stack operator | — | `monitoring` | Helm release `prometheus` |
+16	| Prometheus | `v3.13.2-distroless` | `monitoring` | Prometheus Operator |
+17	| Alertmanager | — | `monitoring` | Prometheus Operator |
+18	| Grafana | `13.1.1` | `monitoring` | Helm |
+19	| kube-state-metrics + node-exporter (DaemonSet, 5/5) | — | `monitoring` | Helm |
+20	| ECK operator | — | `elastic-system` | ECK |
+21	| Elasticsearch (CR `elastic`, 1 node, **yellow**) | `9.4.4` | `logging` | ECK |
+22	| Kibana (CR `kibana`) | `9.4.4` | `logging` | ECK |
+23	| Filebeat DaemonSet (5/5) | `9.4.4` | `logging` | **Helm, not ECK** |
+24	
+25	All `monitoring.coreos.com` CRDs are present: `prometheusrules`, `servicemonitors`, `podmonitors`, `scrapeconfigs`, `probes`, `alertmanagerconfigs`, `thanosrulers`.
+26	
+27	**No Loki. No Fluent Bit.** Note the Filebeat is *not* an ECK `Beat` CR (`kubectl get beat -A` → none); it's a Helm DaemonSet configured by ConfigMap `filebeat-filebeat-daemonset-config` in `logging`. Theo was right to ask before touching `logging`, but the shared object he'd have had to edit is that ConfigMap, not the ES/Kibana CRs.
+28	
+29	## 2. Yes — your stdout is already being collected
+30	
+31	Filebeat tails `/var/log/containers/*.log` on every node with no namespace allowlist, and adds `add_kubernetes_metadata`. Your lines land in the data stream:
+32	
+33	**`filebeat-9.4.4`** (backing indices `.ds-filebeat-9.4.4-YYYY.MM.DD-NNNNNN`, ~33M docs / 18.5 GB)
+34	
+35	I confirmed rather than assumed — `loginid-takehome` already has **2,643 documents**, including `db-migrate`, `postgres-0`, `lt46-injector-failure-test{,2,3}`, `lt44-review-2`. Filter field is `kubernetes.namespace`. So (a)'s *storage* problem is already solved and costs you nothing.
+36	
+37	**Two traps, both real:**
+38	
+39	- ⚠️ Filebeat has `drop_event` on regex `(kube-probe|health|/healthz|/readyz)` against `message`. Any metric line containing the substring **"health"** is silently discarded — `retention_sweep_health 1` would simply never appear, with no error anywhere. Name your metrics around that.
+40	- ⚠️ **There is no per-namespace tenancy pattern.** 29 ES roles, all built-in — zero custom roles. Kibana has only the `default` space. You would be the first tenant, so there's no precedent to copy.
+41	
+42	## 3. Where alert rules live
+43	
+44	**Prometheus/Alertmanager. Not Kibana, not Grafana.**
+45	
+46	- 30+ `PrometheusRule` objects, all in `monitoring`, all from the Helm release.
+47	- **Kibana alerting: 0 rules, 0 connectors.** Entirely unused — choosing it means building the rule engine *and* the notification path from scratch.
+48	- Grafana has only Prometheus + Alertmanager datasources — **no Elasticsearch datasource**, so Grafana cannot query your logs today.
+49	
+50	**The house self-service mechanism exists and is permissive.** The Prometheus CR:
+51	
+52	```
+53	ruleSelector            = {matchLabels: {release: prometheus}}
+54	ruleNamespaceSelector   = {}        # empty = ALL namespaces
+55	serviceMonitorSelector  = {matchLabels: {release: prometheus}}
+56	serviceMonitorNamespaceSelector = {}
+57	```
+58	
+59	So **a `PrometheusRule` or `ServiceMonitor` in `loginid-takehome` carrying the label `release: prometheus` is adopted automatically**, with no edit to any shared object. Prometheus's ClusterRole+ClusterRoleBinding already grant cluster-wide `get/list/watch` on pods/services/endpoints, so it can scrape you.
+60	
+61	Caveat I want to be straight about: all 13 existing ServiceMonitors are in `monitoring`. No tenant has used this path yet, so I'm verifying it from configuration, not from a working precedent.
+62	
+63	⚠️ **Alertmanager will silently eat your low-severity rule.** The route tree is:
+64	
+65	```
+66	root receiver: discord    group_by: [namespace, alertname]
+67	  ├─ alertname =~ Watchdog|InfoInhibitor  → null
+68	  ├─ severity  =~ info|none               → null      ← dropped
+69	  └─ severity  =  critical                → discord
+70	  (no match → falls through to root → discord)
+71	```
+72	
+73	`RetentionSweepSkipRate` at `severity: info` goes to the **null receiver and is never delivered**. Use `severity: warning` — it falls through to `discord`. `group_by` already includes `namespace`, so your alerts group separately from everyone else's.
+74	
+75	## 4. Recommendation
+76	
+77	**The blocking constraint: Prometheus cannot ingest stdout.** It scrapes HTTP endpoints. And a CronJob pod is short-lived, so even a PodMonitor would usually miss the run entirely. Pushgateway is the normal answer to exactly this and you've ruled it out — so the metrics need a different door.
+78	
+79	**(a) Export from the long-running pod, not from the CronJob.**
+80	
+81	Have the sweep persist its results to the database it already has access to (`db-runtime-credential`), and have **api-service** expose them on an HTTP `/metrics` port as gauges — `retention_sweep_last_success_timestamp_seconds`, `oldest_surviving_row_age_seconds`, `retention_sweep_skipped_total`. Then one `ServiceMonitor` in your namespace labelled `release: prometheus`.
+82	
+83	This isn't just a workaround — it's what makes rule (b)#1 *expressible*. "No fresh sample in &gt; 2 intervals" becomes `time() - retention_sweep_last_success_timestamp_seconds &gt; 2*interval`, which evaluates correctly **because an always-up pod serves the gauge**. If you instead alerted on the absence of a short-lived scrape target, you'd get an `absent()` that fires permanently and can never resolve.
+84	
+85	Keep printing to stdout as well — it's already captured in ES for free and gives you the forensic trail.
+86	
+87	⚠️ **NetworkPolicy will block the scrape.** `api-service-issuer`, `idp-connector` and `postgres` each have a default-deny ingress policy; none admits `monitoring`. (`api-service` currently has no policy, so it's reachable.) Whichever pod serves `/metrics` needs an ingress rule with `namespaceSelector: {kubernetes.io/metadata.name: monitoring}` — that label is auto-applied, so you select `monitoring` **without modifying it**. The policy object is yours, in your namespace.
+88	
+89	**(b)** One `PrometheusRule` — e.g. `loginid-takehome-retention` in ns `loginid-takehome`, label `release: prometheus`, all three rules in it. `warning` not `info` for the skip-rate rule.
+90	
+91	⚠️ **Your CI deployer cannot create either object yet.** `Role/loginid-takehome-deployer` grants `apps`, `""`, `networking.k8s.io`, `cert-manager.io`, `batch` — but **not `monitoring.coreos.com`**. Add that apiGroup with `prometheusrules`/`servicemonitors` to your own `deploy/rbac.yaml`. Namespaced Role, no shared object touched.
+92	
+93	**(c) This one does not fit the model, and I'd rather say so than dress it up.**
+94	
+95	The ES licence is **`basic`**. Document-level security is a Platinum/Enterprise feature, so **you cannot grant a filtered read over the shared `filebeat-9.4.4` stream restricted to `kubernetes.namespace: loginid-takehome`.** On Basic, index privileges are index-level only. Any role you create over `filebeat-9.4.4` grants the whole cluster's logs — every other tenant included.
+96	
+97	Two honest options:
+98	
+99	1. **Dedicated audit stream (recommended).** Have api-service write audit events to its own data stream (e.g. `loginid-takehome-audit-*`) rather than relying on stdout capture. Then an ES role granting `read` on just that pattern is genuinely scoped, with no DLS needed. The index is created by your app; only the role/user is a shared-stack object.
+100	2. Accept namespace-wide log read on the shared stream — which I don't recommend for something labelled "audit".
+101	
+102	Either way, note that an ES role + user is a **cluster-level object in the shared Elastic stack**. It is not a Kubernetes object, it cannot live in your namespace, and your CI deployer cannot apply it. That's inherent, not a gap in your setup — so (c) will need an owner on the `logging` side regardless of which option you pick. (a) and (b) are fully self-contained; (c) isn't, and no amount of arranging will make it so on a Basic licence.
+103	
+104	&lt;details&gt;
+105	&lt;summary&gt;What I touched (nothing)&lt;/summary&gt;
+106	
+107	Read-only throughout: `kubectl get/describe`, and read-only GETs against the ES and Kibana APIs via temporary port-forwards using the ECK-generated `elastic` user. No objects created, modified, or deleted; both port-forwards closed; no credential reproduced here or written to any file.
+108	&lt;/details&gt;
+109	
+110	---
+111	
+112	## PM rulings from this report (Dana, 12:00 PDT)
+113	
+114	- **(a) and (b) proceed, self-contained in `loginid-takehome`.** The retention sweep persists its per-class results to the database it already reaches; `api-service` (the always-up pod) serves them as gauges on a separate `/metrics` port; one `ServiceMonitor` and one `PrometheusRule`, both labelled `release: prometheus`, both in our namespace; a NetworkPolicy ingress rule admitting `namespaceSelector: {kubernetes.io/metadata.name: monitoring}` on the metrics port only. Priya's three rules become Prometheus expressions over `time() - retention_sweep_last_success_timestamp_seconds`, per class. Severity `warning`, never `info`, for the skip-rate rule. No metric or label name may contain the substring `health` (Filebeat drops those lines silently).
+115	- **The deployer Role needs `monitoring.coreos.com` (`prometheusrules`, `servicemonitors`).** That is a `deploy/rbac.yaml` change, bootstrap-applied, so it goes to Warren for the apply as before, and #62's preflight will now refuse to deploy until it is applied. Theo's PR states this in its body.
+116	- **(c) does not fit on a Basic licence and is escalated to Warren**, not quietly closed: the two honest options are a dedicated audit data stream written by the application (then an index-level ES role that is genuinely scoped) or accepting namespace-wide read on the shared stream. Either needs a cluster-level ES role created by someone on the `logging` side. Recorded as an environment residual in the threat model until Warren rules.
+117	- **LT-20 (log-sink retention) is now refinable**: the audit trail lives in the shared `filebeat-9.4.4` data stream, so retention is an ILM question on a shared object, and the story must say so.
+118	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 11:59 AM PDT</span><span class="who">Tobias Lindqvist</span><div class="body">Findings, in order of the four questions:
+
+**1. `retention_sweep_skipped_total` is a name that never gets implemented — real drift, same class as the nine/eleven item.** The original 04-side acceptance criterion (line 28) and the original alert-rule text (line 29) both name it as a gauge `api-service` must serve, and the alert `RetentionSweepSkipRate` is described as keying on its rate. But Priya's ruling (lines 145–157) and Renata's implementation update (lines 159–169) both supersede this: the skip signal ends up as `missed_slots`, computed from the persisted `retention_sweep_run` table, and `RetentionSweepSkipRate` becomes `sum(missed_slots)` over a rolling day — nowhere does either implementation emit a metric literally named `retention_sweep_skipped_total`. The two earlier bullets that name it were never struck or corrected once the table-based approach replaced it. Fix: amend lines 28–29 to remove `retention_sweep_skipped_total` and replace with "skip-rate derived from `missed_slots` per the `retention_sweep_run` table (§145–157)," the same way the nine→eleven drift got a named correction rather than being left to contradict itself silently.
+
+**2. "Same underlying decision" (LT-20 line 23) is asserted, not ruled, by someone with actual authority over either half.** Amber's inventory treats RBAC-scoping (§3c, `handoff-amber-observability-inventory.md`) and retention/ILM-scoping (§3, dedicated-stream option) as two separate consequences of the same Basic-license constraint — not as one decision. Nobody who owns the audit-log design (Marcus, 02) or the `logging`/Elastic side has confirmed that a stream created to solve RBAC-scoping also satisfies whatever retention window 05 rules. Concrete risk: if Option A ships to close LT-49's RBAC item, LT-20 could get marked Done by proxy — "the stream exists, so retention is handled" — without anyone separately checking that the ILM policy applied to that stream actually matches the ruled window, or that it was applied at all. Counter-proposal: LT-20's Done criteria should require the ILM policy be independently confirmed against the dedicated stream by name, even if Option A is adopted jointly — a shared *stream* is not a shared *closed loop*.
+
+**3. PO-script step 9 doesn't say which `class` label the throwaway rule should target, and using a real one is the wrong default.** If the throwaway `RetentionWindowExceeded` override targets an existing production class (e.g. `direct`), for the duration of the test it reports a real customer-data class as window-exceeded — a false signal any dashboard or downstream consumer watching that label sees as real, and it muddies "did it fire, did it clear" if someone else is also watching that class. Fix: step 9 should specify a reserved/synthetic class label (e.g. `class="_test_"`) never used by real sweep data, so the fire-and-clear check is unambiguous and doesn't transiently report a false alarm on real data.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

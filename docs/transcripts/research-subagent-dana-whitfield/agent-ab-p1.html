@@ -1,0 +1,226 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 8 of 12 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 9:28 AM PDT – Sep 12, 2026 9:28 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Lead</span><div class="body">Read /Users/warrenthompson/.claude/skills/profile-gen/references/comfyui-workflow-authoring.md carefully first — it defines the exact node-title convention and gives an example still-image workflow you must follow.
+
+Task: author a still-image ComfyUI text-to-image workflow JSON for a professional headshot-style portrait persona, and write it to:
+/Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json
+
+Persona: "Dana Whitfield" — a decisive, low-drama engineering/AI project manager. Professional headshot subject: a composed, approachable person in professional business-casual attire, plain neutral studio-style background, confident but warm expression, photorealistic.
+
+Server inventory (from a prior inspect_comfyui.py call against http://192.168.1.24:8000):
+- Checkpoints available include: "sdxl\\juggernautXL_ragnarokBy.safetensors" (good general photoreal SDXL), "pony\\realismByStableYogi_v50FP16.safetensors", "pony\\cyberrealisticPony_v125.safetensors", "cyberrealisticZImage_v20NSFW.safetensors", "fluxs\\acornIsSpinningFLUX_schnellFP8V10.safetensors", among many others (full list has many NSFW/character/anime-style checkpoints — avoid those, this is a professional SFW headshot).
+- Samplers include: dpmpp_2m, dpmpp_2m_sde, euler, euler_ancestral, etc.
+- Schedulers include: karras, normal, simple, exponential, etc.
+- This is a plain SFW professional portrait — do NOT use any NSFW-oriented checkpoint or LoRA, and do NOT apply any LoRA at all unless you find a clearly professional/photoreal-quality one; a bare checkpoint (no LoRA) is a perfectly acceptable and preferred choice here for simplicity and reliability.
+
+Pick "sdxl\\juggernautXL_ragnarokBy.safetensors" as the checkpoint (a solid general-purpose photoreal SDXL model, appropriate for a professional headshot) unless the authoring reference gives you a strong reason to choose differently — in which case explain why in your report.
+
+Follow the node-title convention exactly (positive/negative/latent/output titles) so check_config.py's resolution logic can find each node. Use a sane resolution for a square profile photo (e.g. 1024x1024 for SDXL), a reasonable step count and CFG for the chosen sampler/scheduler, and karras or normal scheduler.
+
+After writing the file, run this validation command and report its output:
+python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/check_config.py --backend comfyui --workflow /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json
+
+If it reports any unresolved node or an error about a node type not being installed, fix the workflow JSON and re-run validation until it passes cleanly (ok: true, no errors, no null in resolved).
+
+Report back: which checkpoint you used and why, the final validation JSON output, and confirmation the file was written to the exact path above.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/skills/profile-gen/references/comfyui-workflow-authoring.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/skills/profile-gen/references/comfyui-workflow-authoring.md"
+}</pre><div class="lbl">result</div><pre>1	# Authoring a ComfyUI workflow (for the workflow-building subagent)
+2	
+3	You've been handed a ComfyUI server inventory (from `scripts/inspect_comfyui.py`) and a persona
+4	description. Your job: write an **API-format** ComfyUI workflow JSON file that this skill's
+5	`inject()` function (`scripts/profilegen/backends/comfyui.py`) can drive, and pick sensible
+6	LoRAs from what's actually installed. Do not invent checkpoint or LoRA filenames that aren't in
+7	the inventory — if the inventory has no checkpoints at all, say so instead of writing a workflow
+8	that will fail to load.
+9	
+10	## Required node-title convention
+11	
+12	`inject()` looks for nodes by `_meta.title` (case-insensitive) first, falling back to a
+13	graph-walk. Use the explicit titles — it's more reliable and it's what this skill's tests exercise:
+14	
+15	- The node whose text becomes the subject/style prompt: `_meta.title: "ProfileGen Positive"`
+16	  (a `CLIPTextEncode` node).
+17	- The negative-prompt node: `_meta.title: "ProfileGen Negative"` (a `CLIPTextEncode` node).
+18	- The size node: `_meta.title: "ProfileGen Latent"` (an `EmptyLatentImage` node) — `inject()`
+19	  overwrites its `width`/`height` inputs.
+20	- Every node with a `seed` or `noise_seed` input gets it overwritten by `inject()` automatically
+21	  — no title needed for that.
+22	- Exactly one output node: a `SaveImage` node (for a still-image workflow) or a
+23	  `VHS_VideoCombine` node with `format: "image/gif"` (for a GIF workflow).
+24	
+25	## Minimal still-image workflow shape
+26	
+27	```json
+28	{
+29	  "1": {"class_type": "CheckpointLoaderSimple",
+30	        "inputs": {"ckpt_name": "&lt;a checkpoint from the inventory&gt;"}},
+31	  "2": {"class_type": "CLIPTextEncode", "_meta": {"title": "ProfileGen Positive"},
+32	        "inputs": {"text": "", "clip": ["1", 1]}},
+33	  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "ProfileGen Negative"},
+34	        "inputs": {"text": "", "clip": ["1", 1]}},
+35	  "4": {"class_type": "EmptyLatentImage", "_meta": {"title": "ProfileGen Latent"},
+36	        "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+37	  "5": {"class_type": "KSampler",
+38	        "inputs": {"seed": 0, "steps": 24, "cfg": 6.5, "sampler_name": "&lt;from inventory&gt;",
+39	                    "scheduler": "&lt;from inventory&gt;", "denoise": 1.0,
+40	                    "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0],
+41	                    "latent_image": ["4", 0]}},
+42	  "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+43	  "7": {"class_type": "SaveImage", "inputs": {"images": ["6", 0], "filename_prefix": "profile-gen"}}
+44	}
+45	```
+46	
+47	Leave `text` fields on nodes 2/3 as empty strings — `inject()` fills them in at generation time.
+48	`seed` on node 5 is likewise overwritten by `inject()`; put any placeholder integer there.
+49	
+50	## Adding LoRAs
+51	
+52	For each LoRA you choose (0-2 is typical; don't stack more than that without a reason), insert a
+53	`LoraLoader` node between the checkpoint and the sampler/text-encode nodes, chaining `model`/
+54	`clip` through it:
+55	
+56	```json
+57	"1b": {"class_type": "LoraLoader",
+58	       "inputs": {"lora_name": "&lt;a lora from the inventory&gt;", "strength_model": 0.8,
+59	                  "strength_clip": 0.8, "model": ["1", 0], "clip": ["1", 1]}}
+60	```
+61	
+62	Then point nodes 2/3/5's `model`/`clip` inputs at `["1b", 0]`/`["1b", 1]` instead of `["1", ...]`
+63	(chain multiple LoRAs by feeding one's outputs into the next's inputs). Only reference LoRA
+64	filenames that appear in the inventory's `loras` list — match on what the filename suggests
+65	about style (realism, anime, specific art styles, etc.) against the persona's description.
+66	
+67	**Never select a LoRA (or checkpoint) that names or clearly represents a specific real,
+68	identifiable person** — a real name in the filename/path (e.g. a `celeb/` folder, a named public
+69	figure, an actor), regardless of how well it might otherwise match the persona's described
+70	appearance. This is a hard rule, not a style preference: generating a likeness of a real person
+71	is out of bounds for this skill no matter which backend can technically do it. If the only LoRAs
+72	that match the requested look are real-person ones, pick a generic/style LoRA instead (or none)
+73	and say so in your report — don't substitute a real-person LoRA because nothing else fit as well.
+74	
+75	Report which LoRAs you picked and why in your response, so the orchestrating skill can tell the
+76	user.
+77	
+78	## GIF workflow (only when the inventory reports `has_native_animation: true`)
+79	
+80	**Trust the inventory's actual node lists, not vibes.** `has_animatediff`/`has_ltxv`/`has_wan`
+81	are each computed from a strict, name-prefix match against the server's real `/object_info` —
+82	not a loose "sounds like AnimateDiff" guess — specifically because a looser match previously
+83	produced false positives (nodes like `DetailerForEachPipeForAnimateDiff` that merely mention
+84	AnimateDiff in their name without being it), which led to workflows referencing nodes that don't
+85	actually exist on the server. Don't second-guess this by assuming a family is available because
+86	you'd expect a "real" ComfyUI setup to have it — if `has_animatediff`, `has_ltxv`, and `has_wan`
+87	are all false, there is no native animation path on this server; tell the orchestrator so it
+88	falls back to the synthetic GIF path (see `references/prompting.md`), and stop here.
+89	
+90	If any are true, build a second workflow file using the same checkpoint/LoRA/prompt nodes as the
+91	still-image workflow, per whichever family is actually present:
+92	
+93	- **AnimateDiff** (`has_animatediff: true`, real loader class_type(s) in `animatediff_nodes`):
+94	  insert that AnimateDiff loader node between the checkpoint and sampler.
+95	- **LTX-Video** (`has_ltxv: true`, node class_types in `ltxv_nodes`): use those nodes to build an
+96	  LTX-based generation graph instead — LTX is a different video-diffusion family with its own
+97	  node set (not an AnimateDiff drop-in), so base the graph on what `ltxv_nodes` actually lists
+98	  rather than assuming AnimateDiff's node shape applies.
+99	- **Wan2.x** (`has_wan: true`, node class_types in `wan_nodes`): also a distinct family, exposed
+100	  either via ComfyUI-core nodes (`WanImageToVideo`, `WanFirstLastFrameToVideo`, etc.) or Kijai's
+101	  ComfyUI-WanVideoWrapper node pack (`WanVideoModelLoader`, `WanVideoSampler`,
+102	  `WanVideoTextEncode`, `WanVideoDecode`, etc. — check `wan_nodes` for which set is actually
+103	  installed and build the graph from that set consistently, not a mix of both). **If
+104	  `WanAnimateToVideo` (or another node whose name plainly indicates character/pose animation,
+105	  e.g. containing "Animate" or "UniAnimate") is in `wan_nodes`, prefer it over a generic
+106	  image-to-video node** — it's purpose-built for animating a subject rather than general
+107	  video generation, which is a closer match to what this skill needs than a generic I2V node.
+108	- If multiple families are present, prefer a dedicated character-animation entry point (like
+109	  `WanAnimateToVideo` above) over a generic one, and otherwise prefer whichever produces a
+110	  still-recognizable subject with natural motion at a small frame count — for a profile-picture
+111	  GIF, simplicity and identity preservation matter more than production video quality.
+112	- If you're unsure of a node's exact input schema from its name alone, note that in your report
+113	  rather than guessing at inputs.
+114	
+115	End the workflow with a `VHS_VideoCombine` node (`format: "image/gif"`, a reasonable `frame_rate`
+116	like 8-12, `loop_count: 0`) instead of `SaveImage` — `has_video_combine` in the inventory
+117	confirms this output node is installed; if it's false, there's no way to actually produce a GIF
+118	from any family and you should stop and tell the orchestrator, same as the no-family case above.
+119	
+120	**Do not reference any node class_type that isn't in the inventory's own lists
+121	(`animatediff_nodes`/`ltxv_nodes`/`wan_nodes`) or the standard nodes already used in the
+122	still-image workflow.** `scripts/check_config.py` now verifies every class_type your workflow references
+123	against the server's live `/object_info` and will hard-error on anything not actually installed
+124	— so inventing a plausible-sounding node name doesn't just risk a bad guess, it will be caught
+125	and bounced back to you to fix.
+126	
+127	**The subject must actually animate — this is not a camera-pan effect.** This is the entire
+128	point of building a native workflow instead of accepting the synthetic fallback, so get this
+129	right. `scripts/make_gif.py` already appends a motion clause to the prompt text before injection
+130	(asking for gentle blinking, breathing, slight head movement — see `references/prompting.md`),
+131	so you don't need to duplicate that in the workflow's static text nodes. But the *workflow's own
+132	settings* also matter here, independent of the prompt text:
+133	
+134	- **AnimateDiff**: prefer a general-purpose motion module over any motion LoRA whose name
+135	  suggests it's specifically for camera moves (e.g. containing "PanLeft"/"PanRight"/"ZoomIn"/
+136	  "ZoomOut"/"Dolly"/"Orbit") — those bias the whole clip toward camera movement over a static
+137	  subject, which is exactly the failure mode this is meant to avoid. If only camera-motion LoRAs
+138	  are available in the inventory, skip adding a motion LoRA rather than picking one of those.
+139	  Keep `motion_scale` (or the equivalent strength input) modest — high values often produce more
+140	  scene/camera movement rather than subtler subject animation.
+141	- **LTX-Video**: apply the same principle even though the exact parameter names differ — if the
+142	  node set exposes any explicit camera-motion/trajectory control, leave it at a neutral/static
+143	  default rather than adding a pan/zoom/dolly, so the model's own motion prediction focuses on
+144	  the subject instead of the frame.
+145	- Whichever family: if the workflow supports a context/overlap/clip-length setting, keep it
+146	  short (a few seconds) — this is a profile picture animation, not a video, and shorter/subtler
+147	  is the goal.
+148	
+149	## After writing the file(s)
+150	
+151	Report back: the file path(s) you wrote, the checkpoint you used, any LoRAs picked (with a
+152	one-line reason each), which animation family you targeted (AnimateDiff/LTX-Video/Wan2.x/none), and
+153	whether a GIF workflow was produced. The orchestrating skill will validate your workflow by
+154	running `scripts/check_config.py --backend comfyui --workflow &lt;path&gt;` (and `--gif-workflow
+155	&lt;path&gt;` if applicable) — this checks both that titled nodes resolve correctly (most commonly
+156	fixed by adding a missing `_meta.title` or fixing a broken node-id reference) AND that every
+157	node class_type you referenced is actually installed on the live server (fixed by using only
+158	node types that actually appear in the inventory's `animatediff_nodes`/`ltxv_nodes` lists, not
+159	ones you assumed would be there). Fix whichever it reports and re-validate before generation.
+160	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Now writing the workflow file per the convention, using the Juggernaut XL checkpoint, no LoRA.</div><details><summary><span class="tn">Bash</span> mkdir -p /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "mkdir -p /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield",
+  "description": "Ensure profile directory exists"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Write</span> /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json",
+  "content": "{\n  \"1\": {\"class_type\": \"CheckpointLoaderSimple\",\n        \"inputs\": {\"ckpt_name\": \"sdxl\\\\juggernautXL_ragnarokBy.safetensors\"}},\n  \"2\": {\"class_type\": \"CLIPTextEncode\", \"_meta\": {\"title\": \"ProfileGen Positive\"},\n        \"inputs\": {\"text\": \"\", \"clip\": [\"1\", 1]}},\n  \"3\": {\"class_type\": \"CLIPTextEncode\", \"_meta\": {\"title\": \"ProfileGen Negative\"},\n        \"inputs\": {\"text\": \"\", \"clip\": [\"1\", 1]}},\n  \"4\": {\"class_type\": \"EmptyLatentImage\", \"_meta\": {\"title\": \"ProfileGen Latent\"},\n        \"inputs\": {\"width\": 1024, \"height\": 1024, \"batch_size\": 1}},\n  \"5\": {\"class_type\": \"KSampler\",\n        \"inputs\": {\"seed\": 0, \"steps\": 30, \"cfg\": 6.5, \"sampler_name\": \"dpmpp_2m\",\n                    \"scheduler\": \"karras\", \"denoise\": 1.0,\n                    \"model\": [\"1\", 0], \"positive\": [\"2\", 0], \"negative\": [\"3\", 0],\n                    \"latent_image\": [\"4\", 0]}},\n  \"6\": {\"class_type\": \"VAEDecode\", \"inputs\": {\"samples\": [\"5\", 0], \"vae\": [\"1\", 2]}},\n  \"7\": {\"class_type\": \"SaveImage\", \"inputs\": {\"images\": [\"6\", 0], \"filename_prefix\": \"dana-whitfield\"}}\n}\n"
+}</pre><div class="lbl">result</div><pre>File created successfully at: /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Bash</span> python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/check_config.py --backend comfyui -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/check_config.py --backend comfyui --workflow /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json",
+  "description": "Validate the ComfyUI workflow JSON"
+}</pre><div class="lbl err">result — error</div><pre>Exit code 1
+{"ok": false, "backend": "comfyui", "resolved": null, "errors": ["comfyui_url is not set (env COMFYUI_URL)"], "warnings": []}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Need to set COMFYUI_URL per the global notes.</div><details><summary><span class="tn">Bash</span> export COMFYUI_URL="http://192.168.1.24:8000"
+python3 /Users/warrenthompson/.claude/skills/profile-g</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "export COMFYUI_URL=\"http://192.168.1.24:8000\"\npython3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/check_config.py --backend comfyui --workflow /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json",
+  "description": "Validate the ComfyUI workflow JSON against the live server"
+}</pre><div class="lbl">result</div><pre>{"ok": true, "backend": "comfyui", "resolved": {"image": {"positive_node": "2", "negative_node": "3", "seed_nodes": ["5"], "latent_node": "4", "output_node": "7", "seed_used": 3980011576}}, "errors": [], "warnings": []}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:28 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Validation passed cleanly.
+
+**File written:** `/Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json`
+
+**Checkpoint used:** `sdxl\juggernautXL_ragnarokBy.safetensors` — the suggested general-purpose photoreal SDXL model, well suited to a clean professional headshot; no reason found to deviate from it (no LoRA applied, per the SFW/simplicity guidance — a bare checkpoint is preferred here).
+
+**Workflow shape:** standard still-image graph (CheckpointLoaderSimple → CLIPTextEncode ×2 → EmptyLatentImage → KSampler → VAEDecode → SaveImage), 1024×1024 latent, `dpmpp_2m` sampler with `karras` scheduler, 30 steps, cfg 6.5 — all titled per convention (`ProfileGen Positive`/`ProfileGen Negative`/`ProfileGen Latent`, single `SaveImage` output node).
+
+**Validation output:**
+```json
+{"ok": true, "backend": "comfyui", "resolved": {"image": {"positive_node": "2", "negative_node": "3", "seed_nodes": ["5"], "latent_node": "4", "output_node": "7", "seed_used": 3980011576}}, "errors": [], "warnings": []}
+```
+
+No errors, no nulls, all titled nodes resolved correctly against the live server.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

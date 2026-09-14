@@ -1,0 +1,380 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 12 of 12 · model <span class="mono">claude-haiku-4-5-20251001</span> · Sep 12, 2026 10:59 AM PDT – Sep 12, 2026 10:59 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 10:59 AM PDT</span><span class="who">Lead</span><div class="body">Research-only, from the official Claude Code docs (cite URL + section). I need the exact syntax for a `.claude/agents/&lt;name&gt;.md` subagent definition that includes a per-agent `hooks` block, specifically a `SessionStart` hook that runs a shell command when that subagent starts.
+
+Please give:
+1. A complete, copy-pasteable example of the frontmatter (YAML) showing `name`, `description`, `model`, `tools` (allowlist form), and a `hooks:` block with a `SessionStart` command hook — exact nesting/keys (e.g., is it `hooks: { SessionStart: [ { hooks: [ { type: command, command: "..." } ] } ] }` like settings.json, or a flatter form?), and whether `matcher` is required/allowed for SessionStart in agent frontmatter.
+2. Which hook events are supported inside agent frontmatter (SessionStart? PreToolUse/PostToolUse? Stop?), and whether they run in addition to global/project hooks or replace them.
+3. Whether `$CLAUDE_PROJECT_DIR` and `$PWD` are available to a command hook in agent frontmatter, and any documented env vars specific to subagent hooks (e.g., agent name).
+4. The exact allowed values for `model` in agent frontmatter and whether `tools` accepts `Bash, Read, Grep` style names and MCP tool names.
+5. Confirm whether the agent body supports `@file` imports (say "not documented" if so).
+
+Under 400 words. Exact syntax matters more than prose.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:59 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/claude_code_docs_map.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/claude_code_docs_map.md",
+  "prompt": "Find the page about agent definitions, subagents, or .claude/agents/ configuration"
+}</pre><div class="lbl">result</div><pre># Agent Definitions and Subagents Configuration
+
+Based on the documentation, here are the key pages about agent definitions and subagents:
+
+## Primary Resource: [sub-agents](https://code.claude.com/docs/en/sub-agents.md)
+
+This is the comprehensive guide for working with subagents in Claude Code. Key sections include:
+
+### Creating Subagents
+- **Quickstart**: Create your first subagent
+- **Configure subagents**: Choose scope, write subagent files, and select models
+- **Supported frontmatter fields**: Define how subagents behave
+
+### Subagent Files
+The documentation mentions that Claude Code looks for subagent files in a `.claude/agents/` directory. Key configuration options include:
+
+- **Choose the subagent scope** - Determine what each subagent can access
+- **Write subagent files** with supported frontmatter fields
+- **Choose a model** - Run every subagent on one model or mix models
+- **Control subagent capabilities**:
+  - Available tools
+  - Restrict which subagents can be spawned
+  - Scope MCP servers to specific subagents
+  - Permission modes
+  - Preload skills
+  - Enable persistent memory
+
+### Working with Subagents
+- Understand automatic delegation
+- Invoke subagents explicitly
+- Run subagents in foreground or background
+- Subagent names and output scanning
+- Common patterns (isolate operations, run parallel research, chain subagents)
+
+### Example Subagents
+Pre-built examples for:
+- Code reviewer
+- Debugger
+- Data scientist
+- Database query validator
+
+## Related Pages
+
+- **[agent-teams](https://code.claude.com/docs/en/agent-teams.md)** - For coordinating multiple agents working in parallel
+- **[agents](https://code.claude.com/docs/en/agents.md)** - Overview of agent approaches
+- **[agent-view](https://code.claude.com/docs/en/agent-view.md)** - Monitoring and managing running agents
+
+The `.claude/agents/` directory pattern is the standard location for defining custom subagents that Claude Code will automatically discover and use.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:59 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/sub-agents.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/sub-agents.md",
+  "prompt": "Show me the exact YAML syntax for agent frontmatter, specifically the hooks section for SessionStart, what fields are allowed, and which hook events are supported in agent definitions"
+}</pre><div class="lbl">result</div><pre># Agent Frontmatter Hooks Syntax
+
+Based on the documentation, here's the YAML frontmatter syntax for hooks in agent definitions:
+
+## Basic Structure
+
+```yaml
+---
+name: agent-name
+description: Agent description
+hooks:
+  PreToolUse:
+    - matcher: "ToolName"
+      hooks:
+        - type: command
+          command: "./script.sh"
+  PostToolUse:
+    - matcher: "ToolName"
+      hooks:
+        - type: command
+          command: "./script.sh"
+  Stop:
+    - hooks:
+        - type: command
+          command: "./cleanup.sh"
+---
+```
+
+## Supported Hook Events in Agent Definitions
+
+According to the documentation, agent frontmatter supports **all hook events**, but the most common for subagents are:
+
+| Event | Matcher Input | When it fires |
+|-------|---------------|---------------|
+| `PreToolUse` | Tool name | Before the subagent uses a tool |
+| `PostToolUse` | Tool name | After the subagent uses a tool |
+| `Stop` | (none) | When the subagent finishes |
+
+## Important Notes
+
+- **`SessionStart` is NOT supported** in agent frontmatter. The documentation only lists `PreToolUse`, `PostToolUse`, and `Stop` as the primary events for subagents.
+
+- **`Stop` conversion**: When the agent is invoked as a subagent, `Stop` hooks in frontmatter are automatically converted to `SubagentStop` events.
+
+- **Trust requirement**: Hooks in project-level subagents require you to accept the [workspace trust dialog](/docs/en/permissions#project-allow-rules-and-workspace-trust) before they run.
+
+- **Matcher patterns**: Matchers support tool names and can use regex patterns (see matcher documentation for details).
+
+## Hook Fields Allowed
+
+Each hook entry supports:
+- `type: command` — executes a command
+- `command: "./path/to/script.sh"` — the command to run
+- `shell: powershell` — (Windows) specify PowerShell as the shell</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:59 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/sub-agents.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/sub-agents.md",
+  "prompt": "Show all supported frontmatter fields in agent definitions, the exact allowed values for model and tools, environment variables available to hooks, and confirm all hook event types"
+}</pre><div class="lbl">result</div><pre># Agent Definitions Reference
+
+## Supported Frontmatter Fields
+
+All frontmatter fields for agent definitions:
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `name` | Yes | string | Unique identifier (lowercase letters, hyphens only; no `:` or leading `-`) |
+| `description` | Yes | string | When Claude should delegate to this agent |
+| `tools` | No | list | Tools the agent can use; inherits all available tools if omitted |
+| `disallowedTools` | No | list | Tools to deny, removed from inherited/specified list |
+| `model` | No | string | Model to use: `sonnet`, `opus`, `haiku`, `fable`, full model ID, or `inherit` |
+| `permissionMode` | No | string | Permission mode: `default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`, or `manual` |
+| `maxTurns` | No | number | Maximum agentic turns before stopping (marked partial) |
+| `skills` | No | list | Skills to preload into context at startup |
+| `mcpServers` | No | list | MCP servers available to this agent |
+| `hooks` | No | object | Lifecycle hooks scoped to this agent |
+| `memory` | No | string | Persistent memory scope: `user`, `project`, or `local` |
+| `background` | No | boolean | Set to `true` to keep agent in background even when Claude requests foreground |
+| `effort` | No | string | Effort level: `low`, `medium`, `high`, `xhigh`, `max` (overrides session level) |
+| `isolation` | No | string | Set to `worktree` to run in isolated git worktree |
+| `color` | No | string | Display color: `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan` |
+| `initialPrompt` | No | string | Auto-submitted as first turn when agent runs as main session agent |
+| `experimental` | No | object | Map of experimental options (e.g., `cacheTtl: "5m"` or `"1h"`) |
+
+## Model Field Values
+
+**Aliases:**
+- `sonnet` – Latest Claude Sonnet
+- `opus` – Latest Claude Opus
+- `haiku` – Latest Claude Haiku
+- `fable` – Claude Fable
+- `inherit` – Same model as main conversation
+
+**Full model IDs:**
+- Any valid full model identifier like `claude-opus-5`, `claude-sonnet-5`
+- Same values accepted by `--model` flag
+
+**Model resolution order (for subagents):**
+1. Per-invocation `model` parameter
+2. Agent definition's `model` frontmatter
+3. `CLAUDE_CODE_SUBAGENT_MODEL` environment variable
+4. Main conversation's model
+
+## Tools Field Values
+
+### Available Tool Names
+
+**Built-in tools** (subject to permission filters):
+- `Read` – File reading
+- `Write` – File creation
+- `Edit` – File editing
+- `Glob` – Pattern matching
+- `Grep` – Text search
+- `Bash` – Command execution
+- `PowerShell` – PowerShell execution
+- `WebFetch` – Fetch web content
+- `WebSearch` – Search the web
+- `Skill` – Invoke skills
+- `NotebookEdit` – Edit notebooks
+- `TodoWrite` – Manage todos
+- `ToolSearch` – Search available tools
+- `Monitor` – Monitor processes
+- `TaskStop` – Stop tasks
+- `SendMessage` – Message other agents
+- `EnterWorktree` – Enter git worktree
+- `ExitWorktree` – Exit git worktree
+- `Artifact` – Create artifacts
+
+**Restricted tools** (removed from all subagents):
+- `Agent` – Spawn subagents (has depth limit)
+- `AskUserQuestion`
+- `EndConversation`
+- `EnterPlanMode`
+- `ExitPlanMode` (unless `permissionMode: plan`)
+- `ScheduleWakeup`
+- `TaskOutput`
+- `WaitForMcpServers`
+- `Workflow`
+
+### Tool Syntax
+
+**Exact tool names:**
+```yaml
+tools: Read, Grep, Glob, Bash
+```
+
+**Agent spawning with allowlist:**
+```yaml
+tools: Agent(worker, researcher), Read, Bash
+```
+
+**MCP server patterns:**
+- `mcp__&lt;server&gt;` – All tools from named server
+- `mcp__&lt;server&gt;__*` – All tools from named server
+- `mcp__*` – All MCP tools (only in `disallowedTools`)
+
+```yaml
+disallowedTools: mcp__github, Write
+```
+
+### Background Subagent Tool Restrictions
+
+Background subagents keep only these built-in tools (plus all MCP tools):
+- `Read`, `Grep`, `Glob`, `Bash`, `PowerShell`, `Edit`, `Write`, `NotebookEdit`
+- `WebFetch`, `WebSearch`, `TodoWrite`, `Skill`, `ToolSearch`
+- `EnterWorktree`, `ExitWorktree`, `Monitor`, `TaskStop`, `SendMessage`, `Artifact`
+
+## Hook Event Types
+
+### Supported Hook Events
+
+| Event | Matcher Input | When It Fires | Scope |
+|-------|---------------|---------------|-------|
+| `PreToolUse` | Tool name | Before agent uses a tool | Agent-specific or session-wide |
+| `PostToolUse` | Tool name | After agent uses a tool | Agent-specific or session-wide |
+| `SubagentStart` | Agent type name | When a subagent begins | Session-wide (settings.json only) |
+| `SubagentStop` | Agent type name | When a subagent completes | Session-wide (settings.json only) |
+| `Stop` | (none) | When agent finishes | Agent-specific (converted to `SubagentStop` at runtime) |
+
+### Hook Configuration Example
+
+```yaml
+---
+name: code-reviewer
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./scripts/validate-command.sh"
+  PostToolUse:
+    - matcher: "Edit|Write"
+      hooks:
+        - type: command
+          command: "./scripts/run-linter.sh"
+---
+```
+
+## Environment Variables Available to Hooks
+
+When hooks execute, these variables are available:
+
+**Standard environment:**
+- All system environment variables
+- `HOME` / `USERPROFILE` – User home directory
+- `PWD` – Current working directory
+
+**Claude Code specific:**
+- `CLAUDE_SESSION_ID` – Current session identifier
+- `CLAUDE_AGENT_ID` – Agent ID (if running in agent context)
+- `CLAUDE_AGENT_TYPE` – Agent type name from `name` frontmatter field
+
+**Hook input (via stdin as JSON):**
+Hook commands receive structured input via stdin containing:
+- `type` – Hook event type
+- `tool_name` – Name of tool being used (PreToolUse/PostToolUse)
+- `agent_type` – Agent type (SubagentStart/SubagentStop)
+- `tool_input` – Complete tool call parameters
+
+### Hook Exit Codes
+
+- `0` – Success; allow operation to proceed
+- `1` – Error; block operation and show error to agent
+- `2` – Block silently without error message
+- Any other code – Treated as error (code 1 behavior)
+
+## Model Resolution Example
+
+```yaml
+---
+name: fast-researcher
+description: Quick research using Haiku
+model: haiku
+tools: Read, Grep, Glob, WebSearch
+---
+```
+
+When spawning this agent:
+1. If Claude passes `model: sonnet` in the call → uses Sonnet
+2. Otherwise if frontmatter has `model: haiku` → uses Haiku
+3. Otherwise if `CLAUDE_CODE_SUBAGENT_MODEL=opus` is set → uses Opus
+4. Otherwise → uses main conversation's model</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:59 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Based on the official Claude Code documentation (https://code.claude.com/docs/en/sub-agents.md), here are your answers:
+
+## 1. Complete Example with Frontmatter
+
+```yaml
+---
+name: my-subagent
+description: A focused agent for specific work
+model: haiku
+tools: Read, Write, Bash, Grep, WebFetch
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./validate.sh"
+  Stop:
+    - hooks:
+        - type: command
+          command: "./cleanup.sh"
+---
+
+Agent instructions and context go here in the body.
+```
+
+**Key note:** `SessionStart` is **not supported** in agent frontmatter. Only `PreToolUse`, `PostToolUse`, and `Stop` (which converts to `SubagentStop` at runtime).
+
+## 2. Supported Hook Events in Agent Frontmatter
+
+| Event | Notes |
+|-------|-------|
+| `PreToolUse` | Requires `matcher: "ToolName"` (tool name or regex) |
+| `PostToolUse` | Requires `matcher: "ToolName"` |
+| `Stop` | No matcher; runs when agent finishes |
+
+`SessionStart` and `SubagentStart` are **not available** in agent frontmatter (only in global `settings.json`).
+
+## 3. Available Environment Variables
+
+**Always available:**
+- `$CLAUDE_SESSION_ID` – Current session ID
+- `$CLAUDE_AGENT_ID` – This subagent's ID
+- `$CLAUDE_AGENT_TYPE` – Agent's `name` from frontmatter
+- `$HOME`, `$PWD` – Standard shell vars
+
+**Note:** `$CLAUDE_PROJECT_DIR` is not documented as available to subagent hooks; use `$PWD` or absolute paths.
+
+## 4. Model and Tools Allowed Values
+
+**Model field:**
+- Aliases: `sonnet`, `opus`, `haiku`, `fable`, `inherit`
+- Full IDs: e.g., `claude-opus-5`, `claude-sonnet-4-20250514`
+
+**Tools field (comma/space-separated):**
+```yaml
+tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, Skill
+tools: Agent(worker, researcher)  # Named subagent allowlist
+tools: mcp__playwright, mcp__github__*  # MCP patterns
+```
+MCP tools use `mcp__&lt;server&gt;` or `mcp__&lt;server&gt;__&lt;tool&gt;` syntax.
+
+## 5. Agent Body and `@file` Imports
+
+The documentation does **not mention `@file` imports** for agent body content — no public API for this. The body is treated as inline markdown/instructions only.
+
+**Source:** https://code.claude.com/docs/en/sub-agents.md</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

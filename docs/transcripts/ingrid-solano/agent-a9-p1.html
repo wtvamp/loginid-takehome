@@ -1,0 +1,758 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ingrid Solano — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Ingrid Solano</h1><div class="sub">Hire (track 02) · session 2 of 2 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 9:37 AM PDT – Sep 13, 2026 9:37 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Lead</span><div class="body">Independently review PR #53 on the loginid-takehome repo (branch fix/idp-connector-config-validation): https://github.com/wtvamp/loginid-takehome/pull/53
+
+Context: this is a cross-track review request from Renata Cole (03, engineering lead) — the PM asked that you (02's designated skeptic/standing objector) take the independent review on this alongside 03's own reviewer, since it touches auth-config enforcement, which is 02's domain.
+
+Background: Naomi (01, PO) found in an in-cluster review that idp-connector 401'd every single request because its Kubernetes Deployment never set AUTH_JWKS_URL/AUTH_JWT_ISSUER. Theo (04) already fixed the manifest itself in a separate, already-merged PR (#48). This PR is 03's fix for the other half of that finding: the binary itself let a missing auth config silently start and serve broken requests, with nothing structural to catch a future recurrence. This is the third enforcement-site gap of this exact shape found in one day across this project (after AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE on api-service, and a rate-limit/replica gap) — so the systemic fix matters more than the point fix.
+
+The PR does three things:
+1. Adds `internal/config.RequiredAuthEnvVars(service, mode string) []string` in internal/config/config.go as a single source of truth for which auth env vars a given (service, mode) combination requires.
+2. Adds startup validation to cmd/idp-connector/main.go (refuses to start if AUTH_JWKS_URL, AUTH_JWT_ISSUER, or CONNECTOR_JWT_AUDIENCE is unset) and rewrites cmd/api-service/main.go's existing validateAuthConfig to read from the same RequiredAuthEnvVars source — which also fixes a real pre-existing gap: api-service's verifier mode never actually checked AUTH_JWKS_URL (an earlier PR added the issuer/audience check but missed this one).
+3. Adds internal/config/manifest_test.go — parses the REAL deploy/api-service.yaml and deploy/manifests.yaml Kubernetes manifests directly with gopkg.in/yaml.v3, and asserts every Deployment sets every env var its own (service, mode) requires, per RequiredAuthEnvVars. Meant as a structural CI regression guard.
+
+As 02's standing objector, please bring your usual numbered-objections style, focused specifically on:
+- Whether this enforcement is actually complete from a security-architecture standpoint, or whether there's a gap in what "required" means here — e.g., does the startup check or the manifest test verify anything about the *values* being non-garbage (a real URL, a real issuer string), or only that the env var key exists and is non-empty? Could a Deployment satisfy this check with e.g. AUTH_JWKS_URL="x" and still pass?
+- Whether there's a way this "single source of truth" declaration could itself drift silently from the actual authn code paths it's supposed to gate (i.e., is RequiredAuthEnvVars really read by the runtime authn code, or could someone add a new required var to the authn middleware without ever touching RequiredAuthEnvVars, leaving the enforcement blind to its own drift)?
+- Whether fail-loud-on-startup is the right failure mode here from a security standpoint (vs. e.g. some other posture), and whether crashing on missing config could itself be abused (e.g., as an availability attack via a compromised env/configmap).
+- Any other angle you think 03 is underestimating.
+
+Read the actual code (gh pr diff 53, or check out the branch) before objecting — ground each objection in a specific file:line, not a hypothetical. Report back numbered objections in under 300 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Ingrid Solano</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/02-ai-security-architecture</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- **Before declaring anything handed off, merged-ready, or done, run `git status` and `git diff origin/main -- &lt;your track&gt;/`.** Four times in this project a finished artifact sat unpushed or on a dead branch while its author reported it complete (2026-09-12/13). The author is the worst-placed person to notice, because they can see the work; the reviewer looking at `origin/main` sees the truth. Also check `gh pr view &lt;n&gt; --json state` before pushing to a story branch — once the PM merges, that branch is dead and pushes to it go nowhere.
+69	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+70	
+71	## Status
+72	
+73	Planning (Phases 0–4) closed 2026-09-12: five track plans, 18 hires, three cross-track consistency passes (`decisions/cross-track-consistency.md`), and a Jira backlog (`LT-1`…`LT-52`). Implementation began the same evening as an agile loop (`LOG.md` from "Implementation go" onward). As of 2026-09-13 06:00 PDT: **Done end to end** (deployed to the public URL and PO-reviewed) — LT-34 walking skeleton, LT-32 issuer split-Deployment, LT-52 in-namespace Postgres + migrations. **Live:** `https://loginid-takehome.uplifttech.org/healthz` (build SHA == `main`, `db: ok`); `/profiles/search` and `/profiles/{id}` deployed behind RS256 JWT verification and failing closed; `/auth/token` a 501 placeholder until LT-51. **In Test** awaiting one joint live review with a real token: LT-36/37 (Postgres/CockroachDB and SQLite DAOs), LT-38 (conformance suite), LT-39 (REST search/read), LT-40 (auth middleware). **In dev:** LT-51 (client-credentials issuance; PRs #34 + #36), LT-41 (idp-connector, Q3). PRs #1–#37 merged. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`).
+74	
+75	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+76	@profiles/dana-whitfield/dana-whitfield.md
+77	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+78	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Ingrid Solano</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; gh pr diff 53 --repo wtvamp/l</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; gh pr diff 53 --repo wtvamp/loginid-takehome 2&gt;&amp;1 | head -400"
+}</pre><div class="lbl">result</div><pre>diff --git a/cmd/api-service/main.go b/cmd/api-service/main.go
+index db69913..b705696 100644
+--- a/cmd/api-service/main.go
++++ b/cmd/api-service/main.go
+@@ -9,6 +9,7 @@ import (
+ 	"fmt"
+ 	"log"
+ 	"net/http"
++	"os"
+ 
+ 	"loginid-takehome/internal/api"
+ 	"loginid-takehome/internal/app"
+@@ -42,33 +43,33 @@ func sqlDriverNameFor(daoDriver string) string {
+ 	}
+ }
+ 
+-// validateAuthConfig catches exactly the live-review finding that
+-// motivated it: AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE were never set in the
+-// deployed manifests, so the issuer minted iss-less tokens and the
+-// verifier compared aud against "" — every token "verified" against an
+-// empty audience check, which is a silent authorization hole (any
+-// signed token, for any audience, would have passed), not a visible
+-// failure. A verifier that quietly 401s everything, or an issuer that
+-// mints structurally-incomplete tokens, is worse than a crash-loop that
+-// names the exact missing variable — this is api-service's own
+-// mode-aware check, kept out of internal/config's shared Load() because
+-// AUTH_JWT_AUDIENCE is meaningless to cmd/idp-connector (which has its
+-// own ConnectorJWTAudience instead) and a blanket check in the shared
+-// loader would wrongly fail that binary's startup too.
++// validateAuthConfig catches exactly the two live-review findings that
++// motivated it — first AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE, then
++// AUTH_JWKS_URL, silently absent from the deployed manifests, each time
++// letting a verifier or issuer come up cleanly and fail in a way that
++// looked like an ordinary token-rejection rather than a configuration
++// gap. A verifier that quietly 401s everything, or an issuer that mints
++// structurally-incomplete tokens, is worse than a crash-loop that names
++// the exact missing variable.
+ //
+-// AUTH_JWT_ISSUER is required in BOTH modes: the verifier checks it on
+-// every inbound token, and the issuer stamps it into every token it
+-// mints. AUTH_JWT_AUDIENCE is required only in verifier mode — the
+-// issuer never reads its own audience config; it mints each token's
+-// `aud` from the per-client oauth_client.audience column instead
+-// (tokenhandler.go), so requiring it here would reject a valid issuer
+-// configuration that simply has no use for the variable.
+-func validateAuthConfig(cfg config.Config, mode app.Mode) error {
+-	if cfg.AuthJWTIssuer == "" {
+-		return fmt.Errorf("AUTH_JWT_ISSUER must be set in %s mode", mode)
+-	}
+-	if mode == app.ModeVerifier &amp;&amp; cfg.AuthJWTAudience == "" {
+-		return fmt.Errorf("AUTH_JWT_AUDIENCE must be set in verifier mode")
++// Reads config.RequiredAuthEnvVars(service, mode) — the single source of
++// truth also read by internal/config's own manifest test — rather than
++// hardcoding its own list, so this check and that test can never drift
++// apart from each other. Checks the raw environment directly (not cfg's
++// already-loaded fields): the manifest test checks for the same env var
++// NAMES in the manifest text, so both sides operate on the identical
++// primitive.
++//
++// Kept out of internal/config's shared Load() because AUTH_JWT_AUDIENCE
++// is meaningless to cmd/idp-connector (which has its own
++// ConnectorJWTAudience instead) and a blanket check in the shared loader
++// would wrongly fail that binary's startup too — idp-connector runs the
++// equivalent check itself, against its own required list.
++func validateAuthConfig(mode app.Mode) error {
++	for _, name := range config.RequiredAuthEnvVars("api-service", string(mode)) {
++		if os.Getenv(name) == "" {
++			return fmt.Errorf("%s must be set in %s mode", name, mode)
++		}
+ 	}
+ 	return nil
+ }
+@@ -78,7 +79,7 @@ func main() {
+ 	if err != nil {
+ 		log.Fatalf("api-service: loading config: %v", err)
+ 	}
+-	if err := validateAuthConfig(cfg, app.Mode(cfg.AppMode)); err != nil {
++	if err := validateAuthConfig(app.Mode(cfg.AppMode)); err != nil {
+ 		log.Fatalf("api-service: %v", err)
+ 	}
+ 
+diff --git a/cmd/api-service/main_test.go b/cmd/api-service/main_test.go
+index ef07df0..17b6ecc 100644
+--- a/cmd/api-service/main_test.go
++++ b/cmd/api-service/main_test.go
+@@ -5,50 +5,43 @@ import (
+ 	"testing"
+ 
+ 	"loginid-takehome/internal/app"
+-	"loginid-takehome/internal/config"
+ )
+ 
+ // TestValidateAuthConfig_VerifierMode is the live-review finding's own
+-// enforcement site: AUTH_JWT_ISSUER and AUTH_JWT_AUDIENCE both missing
+-// from the deployed manifests let the verifier silently compare every
+-// token's aud claim against "" — this must fail startup loudly instead,
+-// naming exactly which variable is missing.
++// enforcement site: AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE, and AUTH_JWKS_URL
++// all missing from the deployed manifests (in two separate incidents)
++// let the verifier come up cleanly and fail in a way that looked like an
++// ordinary token rejection — this must fail startup loudly instead,
++// naming exactly which variable is missing. validateAuthConfig reads the
++// process environment directly (via config.RequiredAuthEnvVars), so
++// these tests set/unset real env vars rather than constructing a
++// config.Config.
+ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
++	allSet := func(t *testing.T) {
++		t.Helper()
++		t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++		t.Setenv("AUTH_JWT_AUDIENCE", "loginid-api-service")
++		t.Setenv("AUTH_JWKS_URL", "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json")
++	}
++
+ 	cases := []struct {
+ 		name          string
+-		cfg           config.Config
++		unset         string // one var to blank out after allSet, "" for the all-set case
+ 		wantErr       bool
+ 		wantErrSubstr string
+ 	}{
+-		{
+-			name:    "both set: ok",
+-			cfg:     config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: "loginid-api-service"},
+-			wantErr: false,
+-		},
+-		{
+-			name:          "issuer missing",
+-			cfg:           config.Config{AuthJWTIssuer: "", AuthJWTAudience: "loginid-api-service"},
+-			wantErr:       true,
+-			wantErrSubstr: "AUTH_JWT_ISSUER",
+-		},
+-		{
+-			name:          "audience missing",
+-			cfg:           config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: ""},
+-			wantErr:       true,
+-			wantErrSubstr: "AUTH_JWT_AUDIENCE",
+-		},
+-		{
+-			name:    "both missing",
+-			cfg:     config.Config{},
+-			wantErr: true,
+-			// Either name is acceptable — the point is a loud, named
+-			// failure, not a specific ordering between the two checks.
+-			wantErrSubstr: "AUTH_JWT_ISSUER",
+-		},
++		{name: "all set: ok", wantErr: false},
++		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
++		{name: "audience missing", unset: "AUTH_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "AUTH_JWT_AUDIENCE"},
++		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
+ 	}
+ 	for _, c := range cases {
+ 		t.Run(c.name, func(t *testing.T) {
+-			err := validateAuthConfig(c.cfg, app.ModeVerifier)
++			allSet(t)
++			if c.unset != "" {
++				t.Setenv(c.unset, "")
++			}
++			err := validateAuthConfig(app.ModeVerifier)
+ 			if c.wantErr &amp;&amp; err == nil {
+ 				t.Fatalf("validateAuthConfig() = nil, want an error")
+ 			}
+@@ -63,30 +56,29 @@ func TestValidateAuthConfig_VerifierMode(t *testing.T) {
+ }
+ 
+ // TestValidateAuthConfig_IssuerMode confirms issuer mode only requires
+-// AUTH_JWT_ISSUER — AUTH_JWT_AUDIENCE is meaningless here (the issuer
+-// mints each token's aud from the per-client oauth_client.audience
+-// column, not from global config), so an issuer Deployment with no
+-// AUTH_JWT_AUDIENCE set at all must NOT be rejected.
++// AUTH_JWT_ISSUER — AUTH_JWT_AUDIENCE and AUTH_JWKS_URL are meaningless
++// here (the issuer mints each token's aud from the per-client
++// oauth_client.audience column, not from global config, and never
++// verifies inbound tokens so it has no JWKS to fetch), so an issuer
++// Deployment with neither set at all must NOT be rejected.
+ func TestValidateAuthConfig_IssuerMode(t *testing.T) {
+ 	cases := []struct {
+-		name    string
+-		cfg     config.Config
+-		wantErr bool
++		name      string
++		setIssuer bool
++		wantErr   bool
+ 	}{
+-		{
+-			name:    "issuer set, audience empty: ok",
+-			cfg:     config.Config{AuthJWTIssuer: "https://issuer.example", AuthJWTAudience: ""},
+-			wantErr: false,
+-		},
+-		{
+-			name:    "issuer missing",
+-			cfg:     config.Config{AuthJWTIssuer: ""},
+-			wantErr: true,
+-		},
++		{name: "issuer set, audience/jwks unset: ok", setIssuer: true, wantErr: false},
++		{name: "issuer missing", setIssuer: false, wantErr: true},
+ 	}
+ 	for _, c := range cases {
+ 		t.Run(c.name, func(t *testing.T) {
+-			err := validateAuthConfig(c.cfg, app.ModeIssuer)
++			t.Setenv("AUTH_JWT_ISSUER", "")
++			t.Setenv("AUTH_JWT_AUDIENCE", "")
++			t.Setenv("AUTH_JWKS_URL", "")
++			if c.setIssuer {
++				t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++			}
++			err := validateAuthConfig(app.ModeIssuer)
+ 			if c.wantErr &amp;&amp; err == nil {
+ 				t.Fatalf("validateAuthConfig() = nil, want an error")
+ 			}
+diff --git a/cmd/idp-connector/main.go b/cmd/idp-connector/main.go
+index 5f26a0a..6f28baf 100644
+--- a/cmd/idp-connector/main.go
++++ b/cmd/idp-connector/main.go
+@@ -5,19 +5,44 @@
+ package main
+ 
+ import (
++	"fmt"
+ 	"log"
+ 	"net/http"
++	"os"
+ 
+ 	"loginid-takehome/internal/app"
+ 	"loginid-takehome/internal/config"
+ 	"loginid-takehome/internal/connector"
+ )
+ 
++// validateAuthConfig catches the live-review finding this binary's
++// manifest actually hit: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both
++// silently absent from idp-connector's Deployment, so every request
++// 401'd in a way indistinguishable from an ordinary rejected token — the
++// PM's own postmortem note was that cmd/api-service's equivalent check
++// (added after ITS OWN identical incident) only protects that binary,
++// not this one, since nothing shared the requirement between them until
++// now. Reads config.RequiredAuthEnvVars("idp-connector", "") — the same
++// single source of truth internal/config's own manifest test reads —
++// rather than a hardcoded list of its own, so this check and that test
++// can never drift apart.
++func validateAuthConfig() error {
++	for _, name := range config.RequiredAuthEnvVars("idp-connector", "") {
++		if os.Getenv(name) == "" {
++			return fmt.Errorf("%s must be set", name)
++		}
++	}
++	return nil
++}
++
+ func main() {
+ 	cfg, err := config.Load()
+ 	if err != nil {
+ 		log.Fatalf("idp-connector: loading config: %v", err)
+ 	}
++	if err := validateAuthConfig(); err != nil {
++		log.Fatalf("idp-connector: %v", err)
++	}
+ 
+ 	addr := cfg.HTTPAddr
+ 	if addr == "" {
+diff --git a/cmd/idp-connector/main_test.go b/cmd/idp-connector/main_test.go
+new file mode 100644
+index 0000000..13cf774
+--- /dev/null
++++ b/cmd/idp-connector/main_test.go
+@@ -0,0 +1,50 @@
++package main
++
++import (
++	"strings"
++	"testing"
++)
++
++// TestValidateAuthConfig is the live-review finding's own enforcement
++// site: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both silently absent from
++// idp-connector's Deployment manifest, so every request 401'd in a way
++// indistinguishable from an ordinary rejected token — this must fail
++// startup loudly instead, naming exactly which variable is missing.
++func TestValidateAuthConfig(t *testing.T) {
++	allSet := func(t *testing.T) {
++		t.Helper()
++		t.Setenv("AUTH_JWT_ISSUER", "https://issuer.example")
++		t.Setenv("AUTH_JWKS_URL", "http://api-service-issuer.loginid-takehome.svc.cluster.local:443/.well-known/jwks.json")
++		t.Setenv("CONNECTOR_JWT_AUDIENCE", "idp-connector-service")
++	}
++
++	cases := []struct {
++		name          string
++		unset         string
++		wantErr       bool
++		wantErrSubstr string
++	}{
++		{name: "all set: ok", wantErr: false},
++		{name: "issuer missing", unset: "AUTH_JWT_ISSUER", wantErr: true, wantErrSubstr: "AUTH_JWT_ISSUER"},
++		{name: "jwks url missing", unset: "AUTH_JWKS_URL", wantErr: true, wantErrSubstr: "AUTH_JWKS_URL"},
++		{name: "connector audience missing", unset: "CONNECTOR_JWT_AUDIENCE", wantErr: true, wantErrSubstr: "CONNECTOR_JWT_AUDIENCE"},
++	}
++	for _, c := range cases {
++		t.Run(c.name, func(t *testing.T) {
++			allSet(t)
++			if c.unset != "" {
++				t.Setenv(c.unset, "")
++			}
++			err := validateAuthConfig()
++			if c.wantErr &amp;&amp; err == nil {
++				t.Fatalf("validateAuthConfig() = nil, want an error")
++			}
++			if !c.wantErr &amp;&amp; err != nil {
++				t.Fatalf("validateAuthConfig() = %v, want nil", err)
++			}
++			if c.wantErr &amp;&amp; !strings.Contains(err.Error(), c.wantErrSubstr) {
++				t.Errorf("error = %q, want it to name %q", err, c.wantErrSubstr)
++			}
++		})
++	}
++}
+diff --git a/go.mod b/go.mod
+index 4c0cdcb..c456c7b 100644
+--- a/go.mod
++++ b/go.mod
+@@ -8,6 +8,7 @@ require (
+ 	github.com/jackc/pgx/v5 v5.11.0
+ 	github.com/pressly/goose/v3 v3.28.0
+ 	golang.org/x/crypto v0.57.0
++	gopkg.in/yaml.v3 v3.0.1
+ 	modernc.org/sqlite v1.58.0
+ )
+ 
+@@ -16,10 +17,12 @@ require (
+ 	github.com/jackc/pgpassfile v1.0.0 // indirect
+ 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+ 	github.com/jackc/puddle/v2 v2.2.2 // indirect
++	github.com/kr/text v0.2.0 // indirect
+ 	github.com/mattn/go-isatty v0.0.24 // indirect
+ 	github.com/mfridman/interpolate v0.0.2 // indirect
+ 	github.com/ncruces/go-strftime v1.0.0 // indirect
+ 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
++	github.com/rogpeppe/go-internal v1.16.0 // indirect
+ 	github.com/sethvargo/go-retry v0.4.0 // indirect
+ 	go.uber.org/multierr v1.11.0 // indirect
+ 	golang.org/x/sync v0.23.0 // indirect
+diff --git a/go.sum b/go.sum
+index 56a5ed3..91f7a49 100644
+--- a/go.sum
++++ b/go.sum
+@@ -1,3 +1,4 @@
++github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
+ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
+ github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
+@@ -17,6 +18,10 @@ github.com/jackc/pgx/v5 v5.11.0 h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=
+ github.com/jackc/pgx/v5 v5.11.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
+ github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
+ github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
++github.com/kr/pretty v0.3.0 h1:WgNl7dwNpEZ6jJ9k1snq4pZsg7DOEN8hP9Xw0Tsjwk0=
++github.com/kr/pretty v0.3.0/go.mod h1:640gp4NfQd8pI5XOwp5fnNeVWj67G7CFk/SaSQn7NBk=
++github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
++github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+ github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
+ github.com/mattn/go-isatty v0.0.24/go.mod h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=
+ github.com/mfridman/interpolate v0.0.2 h1:pnuTK7MQIxxFz1Gr+rjSIx9u7qVjf5VOoM/u6BbAxPY=
+@@ -28,6 +33,8 @@ github.com/pressly/goose/v3 v3.28.0 h1:D2M+iL31GmpZxSHOhX8mqyqAT3CXnokUmm0eKoSP+
+ github.com/pressly/goose/v3 v3.28.0/go.mod h1:v26MOuB8bL3kzzrt3Vqhb3R0PRVsl8hFQKdrht/L6Rk=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
++github.com/rogpeppe/go-internal v1.16.0 h1:O9DK+vNMDVGLr2BeZqmpLeMjiMNkuXfcqntWbZV6S5g=
++github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
+ github.com/sethvargo/go-retry v0.4.0 h1:9qy1OoIAxBL+gBYnkTnTnWle5wlfsXQlwRzIbbpdqPw=
+ github.com/sethvargo/go-retry v0.4.0/go.mod h1:tvsjdKG6xfiCx4LSiUZ06kcv38xvdVQwv8R6/VnnVWg=
+ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+@@ -52,7 +59,11 @@ golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
+ golang.org/x/tools v0.49.0 h1:3NI7VXzL9+1WZD52Dx2ttoPwD5DWrFGpl9mFZDlmisI=
+ golang.org/x/tools v0.49.0/go.mod h1:SJNXV9DBKT0UbdttsQjbfJlAE/q+y36++zo3uL3N0Oo=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
++gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
+ gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
++gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
++gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ modernc.org/cc/v4 v4.29.2 h1:h6+9ciCnPKutf4I03CvheAvDLX7+IHlqR6Iy6J+cgd8=
+ modernc.org/cc/v4 v4.29.2/go.mod h1:OnovgIhbbMXMu1aISnJ0wvVD1KnW+cAUJkIrAWh+kVI=
+ modernc.org/ccgo/v4 v4.35.0 h1:F+TUsmw09QxLzmi3aeYYGxjAXarmZaKgj3mKQHNaA8w=
+diff --git a/internal/config/config.go b/internal/config/config.go
+index 55e9409..8c31f4a 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -218,3 +218,51 @@ func resolveDSNFrom(fileEnv, plainEnv string) (string, error) {
+ 	}
+ 	return os.Getenv(plainEnv), nil
+ }
++
++// RequiredAuthEnvVars is the single source of truth for which auth-related
++// env vars a given (service, mode) combination MUST have set to function
++// correctly — read by both this process's own startup validation
++// (cmd/api-service/main.go's validateAuthConfig, cmd/idp-connector/main.go's
++// equivalent) and, independently, by internal/config's own
++// TestManifestsSetRequiredAuthEnvVars, which parses the actual deployed
++// manifests (deploy/api-service.yaml, deploy/manifests.yaml) and asserts
++// every Deployment sets everything its own (service, mode) requires.
++//
++// Exists because of two separate live-review incidents in one day, both
++// the same shape: a real, correctly-signed token failed verification</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Ingrid Solano</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; gh pr diff 53 --repo wtvamp/l</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture &amp;&amp; gh pr diff 53 --repo wtvamp/loginid-takehome 2&gt;&amp;1 | sed -n '400,700p'"
+}</pre><div class="lbl">result</div><pre>+// the same shape: a real, correctly-signed token failed verification
++// because a required auth env var was silently absent from a
++// Deployment's manifest, and nothing caught it before a human noticed
++// the symptom in production. cmd/api-service/main.go's own
++// validateAuthConfig (added after the first incident) only checks the
++// binary it lives in — it has no way to know cmd/idp-connector's
++// Deployment was missing AUTH_JWKS_URL/AUTH_JWT_ISSUER entirely (the
++// second incident), because idp-connector never runs that check at all
++// until this same list is wired into its own main() too. And neither
++// check, however complete, can catch a manifest that's simply missing
++// the variable outright before a real request exercises the gap — only
++// a test that reads the manifest text itself can do that ahead of time,
++// which is what this declaration exists to make possible.
++//
++// service is "api-service" or "idp-connector" — the binary, not the
++// Deployment name (api-service and api-service-issuer are the SAME
++// binary in different modes). mode is "verifier"/"issuer" for
++// api-service (matching AppMode's own two values), or "" for
++// idp-connector, which has no mode concept.
++func RequiredAuthEnvVars(service, mode string) []string {
++	switch {
++	case service == "api-service" &amp;&amp; mode == "verifier":
++		return []string{"AUTH_JWT_ISSUER", "AUTH_JWT_AUDIENCE", "AUTH_JWKS_URL"}
++	case service == "api-service" &amp;&amp; mode == "issuer":
++		// AUTH_JWT_AUDIENCE deliberately absent here — the issuer mints
++		// each token's aud from the per-client oauth_client.audience
++		// column (tokenhandler.go), never from its own config, so
++		// requiring it would reject a valid issuer configuration for a
++		// variable it has no use for (validateAuthConfig's own doc
++		// comment states this same reasoning).
++		return []string{"AUTH_JWT_ISSUER"}
++	case service == "idp-connector":
++		return []string{"AUTH_JWT_ISSUER", "AUTH_JWKS_URL", "CONNECTOR_JWT_AUDIENCE"}
++	default:
++		return nil
++	}
++}
+diff --git a/internal/config/manifest_test.go b/internal/config/manifest_test.go
+new file mode 100644
+index 0000000..dab49c8
+--- /dev/null
++++ b/internal/config/manifest_test.go
+@@ -0,0 +1,186 @@
++package config_test
++
++import (
++	"os"
++	"path/filepath"
++	"runtime"
++	"strings"
++	"testing"
++
++	"gopkg.in/yaml.v3"
++
++	"loginid-takehome/internal/config"
++)
++
++// k8sManifestDoc is the minimal shape this test reads out of a
++// Kubernetes Deployment manifest — just enough to find each container's
++// image, its env var names, and (for APP_MODE specifically) their
++// literal values. A generic map[string]any unmarshal would work too, but
++// a typed struct makes the fields this test actually depends on explicit
++// and greppable.
++type k8sManifestDoc struct {
++	Kind     string `yaml:"kind"`
++	Metadata struct {
++		Name string `yaml:"name"`
++	} `yaml:"metadata"`
++	Spec struct {
++		Template struct {
++			Spec struct {
++				Containers []struct {
++					Image string `yaml:"image"`
++					Env   []struct {
++						Name  string `yaml:"name"`
++						Value string `yaml:"value"` // only ever read for APP_MODE; every other var's value is deliberately never inspected — some are secretKeyRef-sourced with no literal to read at all
++					} `yaml:"env"`
++				} `yaml:"containers"`
++			} `yaml:"spec"`
++		} `yaml:"template"`
++	} `yaml:"spec"`
++}
++
++// parseDeployments reads every "---"-separated YAML document in path and
++// returns just the ones that are Kubernetes Deployments — Services,
++// NetworkPolicies, and everything else in these multi-document manifest
++// files are irrelevant to this test.
++func parseDeployments(t *testing.T, path string) []k8sManifestDoc {
++	t.Helper()
++	f, err := os.Open(path)
++	if err != nil {
++		t.Fatalf("opening %s: %v", path, err)
++	}
++	defer func() { _ = f.Close() }()
++
++	var deployments []k8sManifestDoc
++	dec := yaml.NewDecoder(f)
++	for {
++		var doc k8sManifestDoc
++		if err := dec.Decode(&amp;doc); err != nil {
++			if err.Error() == "EOF" {
++				break
++			}
++			t.Fatalf("decoding a YAML document from %s: %v", path, err)
++		}
++		if doc.Kind == "Deployment" {
++			deployments = append(deployments, doc)
++		}
++	}
++	return deployments
++}
++
++// serviceForImage maps a container image reference to the binary name
++// config.RequiredAuthEnvVars expects — matched by substring on the image
++// path (e.g. ".../api-service:IMAGE_TAG") rather than by Deployment name,
++// so this test doesn't need updating if api-service-issuer is ever
++// renamed — that Deployment runs the exact same api-service IMAGE, just
++// in a different mode, and this test's whole point is checking that
++// mode's own env-var requirements are met regardless of what the
++// Deployment is called.
++func serviceForImage(image string) (service string, recognized bool) {
++	switch {
++	case strings.Contains(image, "/idp-connector:"):
++		return "idp-connector", true
++	case strings.Contains(image, "/api-service:"):
++		return "api-service", true
++	default:
++		return "", false
++	}
++}
++
++// TestManifestsSetRequiredAuthEnvVars is the systemic fix for two
++// separate live-review incidents in one day, both the same shape: a
++// Deployment's manifest silently omitted an auth env var its own
++// running mode required, and nothing caught it until a real request
++// exposed the gap in production. This test makes the requirement itself
++// — not just each binary's own startup check — enforced in CI: it reads
++// config.RequiredAuthEnvVars (the single source of truth cmd/api-service
++// and cmd/idp-connector's own startup validation also reads) and
++// asserts every real Deployment in deploy/api-service.yaml and
++// deploy/manifests.yaml actually sets everything its own mode requires,
++// by parsing the manifest text directly — not by trusting that whoever
++// last edited a Deployment remembered to keep it in sync.
++func TestManifestsSetRequiredAuthEnvVars(t *testing.T) {
++	root := repoRoot(t)
++	var allDeployments []struct {
++		file string
++		doc  k8sManifestDoc
++	}
++	for _, relPath := range []string{
++		filepath.Join("deploy", "api-service.yaml"),
++		filepath.Join("deploy", "manifests.yaml"),
++	} {
++		path := filepath.Join(root, relPath)
++		for _, doc := range parseDeployments(t, path) {
++			allDeployments = append(allDeployments, struct {
++				file string
++				doc  k8sManifestDoc
++			}{relPath, doc})
++		}
++	}
++
++	checked := 0
++	for _, entry := range allDeployments {
++		doc := entry.doc
++		// This test only has an opinion about a container matching a
++		// binary it recognizes — a Deployment could in principle run a
++		// sidecar or an unrelated image in the same pod spec, so every
++		// container is checked, not just the first, so a required var
++		// set on the wrong container in the pod spec doesn't silently
++		// pass just because container[0] happened to be something else.
++		for _, c := range doc.Spec.Template.Spec.Containers {
++			service, recognized := serviceForImage(c.Image)
++			if !recognized {
++				continue
++			}
++
++			envNames := make(map[string]bool, len(c.Env))
++			appMode := ""
++			for _, e := range c.Env {
++				envNames[e.Name] = true
++				if e.Name == "APP_MODE" {
++					appMode = e.Value
++				}
++			}
++			// A Deployment that never sets APP_MODE at all runs in
++			// verifier mode in production exactly as much as one that
++			// sets it explicitly (config.Load()'s own documented
++			// default) — this test's required-var lookup needs to match
++			// that real behavior, not assume every Deployment states its
++			// mode explicitly.
++			mode := appMode
++			if mode == "" {
++				mode = "verifier"
++			}
++
++			required := config.RequiredAuthEnvVars(service, mode)
++			if len(required) == 0 {
++				continue
++			}
++			checked++
++
++			var missing []string
++			for _, name := range required {
++				if !envNames[name] {
++					missing = append(missing, name)
++				}
++			}
++			if len(missing) &gt; 0 {
++				t.Errorf("%s: Deployment %q, container %q (service=%s, mode=%s) is missing required env var(s): %v",
++					entry.file, doc.Metadata.Name, c.Image, service, mode, missing)
++			}
++		}
++	}
++
++	if checked == 0 {
++		t.Fatalf("no recognized Deployment (api-service or idp-connector image) was found in deploy/api-service.yaml or deploy/manifests.yaml — this test's own matching logic may have drifted from the real manifests, silently checking nothing")
++	}
++}
++
++func repoRoot(t *testing.T) string {
++	t.Helper()
++	_, thisFile, _, ok := runtime.Caller(0)
++	if !ok {
++		t.Fatal("could not determine test file location")
++	}
++	// this file: &lt;repoRoot&gt;/internal/config/manifest_test.go
++	return filepath.Join(filepath.Dir(thisFile), "..", "..")
++}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Ingrid Solano</span><details><summary><span class="tn">Bash</span> grep -rn "AUTH_JWKS_URL\|AUTH_JWT_ISSUER\|AUTH_JWT_AUDIENCE\|CONNECTOR_JWT_AUDIENCE" ../internal 2&gt;/</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -rn \"AUTH_JWKS_URL\\|AUTH_JWT_ISSUER\\|AUTH_JWT_AUDIENCE\\|CONNECTOR_JWT_AUDIENCE\" ../internal 2&gt;/dev/null; find / -maxdepth 2 -iname \"loginid-takehome*\" 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>../internal/config/config.go:136:		AuthJWTIssuer:   os.Getenv("AUTH_JWT_ISSUER"),
+../internal/config/config.go:137:		AuthJWTAudience: os.Getenv("AUTH_JWT_AUDIENCE"),
+../internal/config/config.go:138:		AuthJWKSURL:     os.Getenv("AUTH_JWKS_URL"),
+../internal/config/config.go:143:		ConnectorJWTAudience:  os.Getenv("CONNECTOR_JWT_AUDIENCE"),</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 9:37 AM PDT</span><span class="who">Ingrid Solano</span><div class="body">Read PR #53's diff directly (`gh pr diff 53`). Grounding each objection in code.
+
+**1. Empty-string check is the only check — no value validation.**
+`cmd/api-service/main.go` `validateAuthConfig` and `cmd/idp-connector/main.go`'s new `validateAuthConfig` both do `if os.Getenv(name) == ""`. `internal/config/manifest_test.go`'s `envNames[e.Name] = true` also only records presence of the *key*, never inspects the value (comment at line ~40 explicitly says values are "deliberately never inspected" except `APP_MODE`). So `AUTH_JWKS_URL="x"` or `AUTH_JWT_ISSUER="set"` passes both the startup check and the manifest test. This reproduces exactly the shape of bug that motivated the PR — a config that "looks satisfied" but is functionally broken — just moved one field over, from absent to garbage. What would change my mind: a minimum shape check (URL parses, has a scheme; issuer looks like a URI) in `RequiredAuthEnvVars`'s callers, even a weak one — it doesn't need to hit the JWKS endpoint at startup.
+
+**2. The "single source of truth" is not actually wired to the authn code it's meant to gate.** `internal/config/config.go:136-143` reads these env vars directly in `Load()`; `RequiredAuthEnvVars` in the same file is a hand-written, parallel switch statement with no structural link back to `Load()`'s field list. Someone can add a new `os.Getenv("AUTH_FOO")` to `Load()` or to authn middleware without ever touching `RequiredAuthEnvVars`, and nothing — not the startup check, not the manifest test — will notice the enforcement has gone blind. What would change my mind: a test that asserts every field `Load()` populates from an `AUTH_`/`CONNECTOR_JWT_` env var appears in some `RequiredAuthEnvVars` entry (or an explicit allowlist of intentional exceptions), closing the loop in the other direction.
+
+**3. Manifest test's `checked == 0` guard is a floor, not a per-deployment guarantee.** `serviceForImage`'s substring match `continue`s silently on any unrecognized image; the fatal only fires if literally zero deployments matched. Fail-loud-on-startup itself I don't object to — a crash-loop naming the missing var is strictly better than silent 401s, and I don't see it as a meaningful new availability vector since anyone with configmap/secret write access already owns the pod.
+
+Objections 1 and 2 unanswered as of this review; 3 is minor, flag only.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>
