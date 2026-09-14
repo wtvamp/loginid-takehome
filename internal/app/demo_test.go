@@ -154,6 +154,22 @@ func TestDemoPage_SecretOnlySentToAuthToken(t *testing.T) {
 	secretActuallyRead := `+ el("qa-token-input").value` // used (concatenated) to build the Basic-auth header
 	secretCleared := `el("qa-token-input").value = ""`   // reset to empty — a write, not a read
 
+	// Oren Castellan's review of PR #77 flagged that the
+	// total-vs-accounted check below is pure substring counting with
+	// no structural anchor — correct today because secretRead happens
+	// to be a literal substring of both secretActuallyRead and
+	// secretCleared, but a cosmetic quote-style edit or an unrelated
+	// comment quoting this same expression elsewhere in the file would
+	// silently change the counts without changing behavior. This
+	// direct structural check is the one that actually matters: the
+	// real network call site that uses the secret is exactly this one
+	// fetch, to exactly this one endpoint. Don't "simplify" this away
+	// during an unrelated refactor without re-verifying the counts
+	// below still mean what they claim to.
+	if n := strings.Count(body, `fetch(origin + "/auth/token"`); n != 1 {
+		t.Errorf(`fetch(origin + "/auth/token" appears %d times, want exactly 1 — this is the one real network call the secret's value may ever reach`, n)
+	}
+
 	// Exactly one real read (to build the Basic-auth header for the
 	// mint call) — never a second site that could mean "send it
 	// somewhere else too".
