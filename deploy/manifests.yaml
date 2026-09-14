@@ -775,6 +775,13 @@ spec:
           # middleware. JWKS (/.well-known/jwks.json) deliberately has NO
           # rule here — in-cluster only, per handoff-03-auth v6.
           - {path: /profiles, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}
+          # LT-53: demo console, GET /demo (go:embed, served by
+          # api-service same-origin — Naomi's/Renata's story, no new
+          # Secret or ServiceAccount on this side). Prefix, not Exact,
+          # since the page may serve its own static assets under
+          # /demo/* from the same embedded filesystem/handler, not a
+          # single bare route.
+          - {path: /demo, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}
 ---
 # LT-44 (S11): retention sweep. Own ServiceAccount, per the same
 # one-workload-one-identity discipline Amber's LT-46 provisioning
