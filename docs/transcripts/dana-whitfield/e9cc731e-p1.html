@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../t.css">
-<header class="sticky"><div class="wrap"><h1>Dana Whitfield</h1><div class="sub">PM teammate run · session · model <span class="mono">claude-opus-5</span> · Sep 13, 2026 7:44 PM PDT – Sep 13, 2026 8:28 PM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<header class="sticky"><div class="wrap"><h1>Dana Whitfield</h1><div class="sub">PM teammate run · session · model <span class="mono">claude-opus-5</span> · Sep 13, 2026 7:44 PM PDT – Sep 13, 2026 8:37 PM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
 <div class="wrap">
 <div class="msg human"><span class="when">Sep 13, 7:44 PM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead"&gt;
 You are building a static, public-safe HTML archive of Claude Code session transcripts for the LoginID take-home project. Write ONE Python 3 script at /Users/warrenthompson/Source/LoginID/scripts/render-transcripts.py (stdlib only, no pip installs) and run it. Output goes to /Users/warrenthompson/Source/LoginID/docs/transcripts/ . Do NOT commit or push anything; do not touch any other file in the repo. Shell aliases on this machine break `ls`, `du`, `head`, `tail`, `grep`, `cat`; call /bin/ls, /usr/bin/du, /usr/bin/head, /usr/bin/tail, /usr/bin/grep, /bin/cat explicitly or just use Python.
@@ -911,6 +911,213 @@ s=open(p).read()
 s=s.replace('''        key = </summary><div class="inner"><div class="lbl">input</div><pre>{
   "command": "python3 - &lt;&lt;'PYEOF'\np='scripts/render-transcripts.py'\ns=open(p).read()\ns=s.replace('''        key = (fd[\"group\"], fd[\"slug\"], fd[\"persona\"], fd[\"role\"], fd[\"track\"])\n        row = persona_rows[key]''','''        key = (fd[\"group\"], fd[\"slug\"])\n        row = persona_rows[key]\n        row.setdefault(\"persona\", fd[\"persona\"])\n        row.setdefault(\"track\", fd[\"track\"])\n        row.setdefault(\"roles\", [])\n        if fd[\"role\"] not in row[\"roles\"]:\n            row[\"roles\"].append(fd[\"role\"])''')\ns=s.replace('''    for (group, slug, persona, role, track), row in persona_rows.items():\n        mani.append({\"persona\": persona, \"slug\": slug, \"role\": role, \"track\": track,''','''    for (group, slug), row in persona_rows.items():\n        mani.append({\"persona\": row[\"persona\"], \"slug\": slug,\n                     \"role\": \" · \".join(row[\"roles\"]), \"track\": row[\"track\"],''')\nopen(p,'w').write(s)\nPYEOF\npython3 -c \"import ast;ast.parse(open('/Users/warrenthompson/Source/LoginID/scripts/render-transcripts.py').read())\" &amp;&amp; echo ok\nSP=/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID/e9cc731e-704e-41cc-97d4-be5baf34b884/scratchpad\nrm -rf $SP/t4 &amp;&amp; OUT_OVERRIDE=$SP/t4 python3 -c \"\nimport importlib.util,os\nspec=importlib.util.spec_from_file_location('rt','scripts/render-transcripts.py')\nm=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\nm.OUT=os.environ['OUT_OVERRIDE']; m.main()\n\" 2&gt;&amp;1 | /usr/bin/tail -5",
   "timeout": 900000
-}</pre></div></details></div>
+}</pre><div class="lbl">result</div><pre>ok
+  5 password= value            23
+  6 private key block          2
+  7 long base64 run            1
+  8 known token prefix         2
+  9 key/value secret           14</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:28 PM PDT</span><span class="who">Dana Whitfield</span><details><summary><span class="tn">Bash</span> SP=/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID/e9cc731e-704e-41cc-97d4-be5baf34b884</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "SP=/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID/e9cc731e-704e-41cc-97d4-be5baf34b884/scratchpad\nDST=/Users/warrenthompson/Source/LoginID/docs/transcripts\n/usr/bin/rsync -a --delete \"$SP/t4/\" \"$DST/\" &amp;&amp; /usr/bin/du -sh \"$DST\"\npython3 $SP/verify.py \"$DST\" 2&gt;&amp;1 | /usr/bin/tail -14\nrm -rf /Users/warrenthompson/Source/LoginID/scripts/__pycache__",
+  "timeout": 600000
+}</pre><div class="lbl">result</div><pre> 34M	/Users/warrenthompson/Source/LoginID/docs/transcripts
+literal secrets harvested from raw inputs: 138
+literal leaks in output: 0
+pattern hits in output:
+  1 JWT          0 
+  1 JWT frag     0 
+  2 basic        0 
+  2 bearer       0 
+  3 hex          0 
+  4 argon2       0 
+  5 dsn          183 postgres://dev:«REDACTED»@
+  6 pem          0 
+  7 base64-200   0 
+  8 token        0 
+TOTAL residual hits: 183</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:28 PM PDT</span><span class="who">Dana Whitfield</span><details><summary><span class="tn">Bash</span> python3 - &lt;&lt;'EOF'
+import glob,os,re,collections,json,importlib.util
+DST='/Users/warrenthompson/Sourc</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "python3 - &lt;&lt;'EOF'\nimport glob,os,re,collections,json,importlib.util\nDST='/Users/warrenthompson/Source/LoginID/docs/transcripts'\npat=re.compile(r'(postgres(?:ql)?|mysql|redis)://([^:/\\s]+):([^@\\s]+)@')\nc=collections.Counter(); ex=[]\nfor f in glob.glob(os.path.join(DST,'**','*.html'),recursive=True):\n    for m in pat.finditer(open(f,errors='replace').read()):\n        if '«REDACTED»' in m.group(3): c['already-redacted']+=1\n        else: c['RESIDUAL']+=1; ex.append(m.group(0)[:70])\nprint('DSN check:',dict(c), ex[:5])\nspec=importlib.util.spec_from_file_location('rt','/Users/warrenthompson/Source/LoginID/scripts/render-transcripts.py')\nrt=importlib.util.module_from_spec(spec); spec.loader.exec_module(rt)\nm=json.load(open(os.path.join(DST,'manifest.json')))\nprint('\\n%-42s %-9s %-4s %6s %6s %5s'%('persona','group','trk','turns','tools','sess'))\nfor r in sorted(m,key=lambda r:(['pm','lead','hire','planning'].index(r['group']),r['track'],-r['turns'])):\n    print('%-42s %-9s %-4s %6d %6d %5d'%(r['persona'][:42],r['group'],r['track'],r['turns'],r['tool_calls'],len(r['sessions'])))\nslugs={r['slug'] for r in m}\nexp=set(rt.HIRES)|{v[0] for v in rt.LEADS.values()}|{'dana-whitfield'}\nprint('\\nnamed personas expected %d, present %d, missing %s'%(len(exp),len(exp&amp;slugs),sorted(exp-slugs) or 'none'))\nprint('rows %d | sessions %d | turns %d | tool calls %d'%(len(m),sum(len(r['sessions']) for r in m),sum(r['turns'] for r in m),sum(r['tool_calls'] for r in m)))\nfs=glob.glob(os.path.join(DST,'**','*.html'),recursive=True)\nsz=[os.path.getsize(f) for f in fs]\nprint('pages %d | %.1f MB | max page %.2f MB | over 2MB: %d'%(len(fs),sum(sz)/1e6,max(sz)/1e6,sum(1 for s in sz if s&gt;2e6)))\nEOF\ncd /Users/warrenthompson/Source/LoginID &amp;&amp; git status --short | /usr/bin/grep -E 'docs|scripts'"
+}</pre><div class="lbl">result</div><pre>DSN check: {'already-redacted': 183} []
+
+persona                                    group     trk   turns  tools  sess
+Dana Whitfield                             pm        PM     1273   1733     1
+Naomi Voss                                 lead      01     1182   1130     1
+Marcus Ilori                               lead      02      520    479     1
+Renata Cole                                lead      03     3183   3128     1
+Theo Bergman                               lead      04     1783   1642     1
+Priya Nandakumar                           lead      05      379    324     1
+Desmond Okafor                             hire      01      178    193     6
+Tobias Lindqvist                           hire      01       74     51     6
+Imogen Hale                                hire      01       20     18     3
+Research subagent (Naomi Voss's session)   hire      01       15     19     1
+Tomasz Wrede                               hire      02       64     55     1
+Ingrid Solano                              hire      02       45     38     2
+Helena Marsh                               hire      02       41     24     1
+Felix Adebayo                              hire      02       14     12     1
+Oren Castellan                             hire      03      315    421    26
+Nolan Reyes                                hire      03      158    224    15
+Ines Dabrowski                             hire      03       18     19     2
+Marisol Ferran                             hire      03       15     15     2
+Wesley Okonkwo                             hire      04       23     18     3
+Bree Sandoval                              hire      04       15     17     2
+Callum Ferreira                            hire      04       12     14     2
+Beatriz Achterberg                         hire      05       15     11     1
+Anders Vogel                               hire      05       13      9     1
+Yusuf Karadag                              hire      05       13     11     1
+Saoirse Byrne                              hire      05       11      9     1
+Research subagent (Priya Nandakumar's sess hire      05       10     19     2
+Research subagent (Dana Whitfield's sessio hire      PM       74    136    12
+Naomi Voss                                 planning  01       71     84     2
+Marcus Ilori                               planning  02       81    128     2
+Renata Cole                                planning  03       54     59     1
+Theo Bergman                               planning  04       67     65     2
+Priya Nandakumar                           planning  05       81     80     3
+PM-directed utility session                planning  PM       97    347     2
+Dana Whitfield                             planning  PM       30     32     1
+
+named personas expected 24, present 24, missing none
+rows 34 | sessions 110 | turns 9944 | tool calls 10564
+pages 158 | 34.9 MB | max page 1.02 MB | over 2MB: 0
+?? docs/transcripts/
+?? scripts/__pycache__/
+?? scripts/render-transcripts.py</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:29 PM PDT</span><span class="who">Dana Whitfield</span><details><summary><span class="tn">Bash</span> rm -rf /Users/warrenthompson/Source/LoginID/scripts/__pycache__ &amp;&amp; cd /Users/warrenthompson/Source/L</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "rm -rf /Users/warrenthompson/Source/LoginID/scripts/__pycache__ &amp;&amp; cd /Users/warrenthompson/Source/LoginID &amp;&amp; git status --short | /usr/bin/grep -E 'docs|scripts'"
+}</pre><div class="lbl">result</div><pre>?? docs/transcripts/
+?? scripts/render-transcripts.py</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:32 PM PDT</span><span class="who">Dana Whitfield</span><div class="body">Both fixes are in and the archive is rebuilt end to end. Nothing committed or pushed; `git status` shows only `docs/transcripts/` and `scripts/render-transcripts.py` as untracked.
+
+## FIX 1 — identification rewritten
+
+The old rule (directory implies lead) was indeed wrong, but whole-file slug counting alone would also have failed: a lead's own session names its hires constantly because it drafted and spawned them, so raw frequency points at the wrong person. I found a definitive signal instead — **`agent-setting` records**, which name the persona a named-teammate session was launched as. New precedence:
+
+1. **`agent-setting` naming a known slug** → that persona, authoritative. This alone recovered all seven missing hires (helena-marsh, tomasz-wrede, felix-adebayo in `-02-…`; yusuf-karadag, anders-vogel, beatriz-achterberg, saoirse-byrne in `-05-…`) plus moved bree-sandoval, callum-ferreira and wesley-okonkwo out of "planning" into the hire group.
+2. **Whole-file `agents/&lt;slug&gt;` + `profiles/&lt;slug&gt;/` scan** (no 400 KB cap) when no `agent-setting`, with two disambiguators: a track directory implies its lead; in the root slug, a *concentrated* hire signal (one track's hires dominating, other tracks' hires under 25%) identifies that lead's hiring session, and `dana-whitfield` is excluded from the lead vote because the root CLAUDE.md persona reference puts it in every single file.
+3. **Directory fallback** only when no known slug appears at all.
+
+I verified every root-slug attribution against each file's opening prompt: the four "joining a standing team" files resolve to Naomi/Theo/Priya/Marcus, the four hiring sessions to their leads, and the two genuine non-persona utility runs — the cross-track consistency pass and the Jira scribe, which name all eighteen hires evenly and no single lead — are now **"PM-directed utility session"** rather than being misattributed to a lead.
+
+No "Unnamed subagent" rows remain. Three orphan subagent groups are attributed to their spawning session: **Research subagent (Naomi Voss's session)**, **(Priya Nandakumar's session)**, **(Dana Whitfield's session)**.
+
+## FIX 2 — merging
+Rows are now keyed on `(group, slug)`, so a persona that appears in both phases keeps one slug and one row per phase with its distinct roles joined (this also collapsed a duplicate Theo Bergman planning row). All 24 named personas are present; none absent.
+
+## Final counts
+**110 sessions, 158 pages, 34.9 MB, 9,944 turns, 10,564 tool calls.** Max page 1.02 MB, none over 2 MB.
+
+| Persona | Group | Trk | Turns | Sessions |
+|---|---|---|---:|---:|
+| Dana Whitfield | PM | PM | 1,273 | 1 |
+| Renata Cole | lead | 03 | 3,183 | 1 |
+| Theo Bergman | lead | 04 | 1,783 | 1 |
+| Naomi Voss | lead | 01 | 1,182 | 1 |
+| Marcus Ilori | lead | 02 | 520 | 1 |
+| Priya Nandakumar | lead | 05 | 379 | 1 |
+| Oren Castellan | hire | 03 | 315 | 26 |
+| Desmond Okafor | hire | 01 | 178 | 6 |
+| Nolan Reyes | hire | 03 | 158 | 15 |
+| Tobias Lindqvist | hire | 01 | 74 | 6 |
+| Research subagent (Dana Whitfield's session) | hire | PM | 74 | 12 |
+| Tomasz Wrede | hire | 02 | 64 | 1 |
+| Ingrid Solano | hire | 02 | 45 | 2 |
+| Helena Marsh | hire | 02 | 41 | 1 |
+| Wesley Okonkwo | hire | 04 | 23 | 3 |
+| Imogen Hale | hire | 01 | 20 | 3 |
+| Ines Dabrowski | hire | 03 | 18 | 2 |
+| Beatriz Achterberg / Marisol Ferran / Bree Sandoval | hire | 05/03/04 | 15 each | 1–2 |
+| Research subagent (Naomi Voss's session) | hire | 01 | 15 | 1 |
+| Felix Adebayo / Anders Vogel / Yusuf Karadag | hire | 02/05/05 | 14 / 13 / 13 | 1 |
+| Callum Ferreira | hire | 04 | 12 | 2 |
+| Saoirse Byrne | hire | 05 | 11 | 1 |
+| Research subagent (Priya Nandakumar's session) | hire | 05 | 10 | 2 |
+| PM-directed utility session | planning | PM | 97 | 2 |
+| Marcus Ilori / Priya Nandakumar / Naomi Voss / Theo Bergman / Renata Cole / Dana Whitfield | planning | — | 81 / 81 / 71 / 67 / 54 / 30 | 1–3 |
+
+The small hire counts for tracks 02 and 05 are real, not a parsing gap: those leads ran most hire seats as named teammate sessions with a handful of turns each, whereas 03's Oren and Nolan were re-spawned as subagents dozens of times.
+
+## Verification (re-run on the final output)
+138 distinct secret literals harvested from the raw JSONL (patterns 1, 3≥44, 4, 6, 8) and grepped against all 158 pages plus the manifest: **0 leaks**. Detector hits: JWT 0, bearer 0, basic 0, hex 0, argon2 0, PEM 0, base64-200 0, tokens 0. The DSN detector reports 183 matches — all 183 are the already-redacted `postgres://dev:«REDACTED»@` form, confirmed by a separate pass (183 redacted, 0 residual). **Net residual: zero.**
+
+Replacements this run: hex 1,342 · emails 373 · public IPs 322 · DSN passwords 191 · argon2 88 · Authorization headers 79 · `password=` 23 · JWTs 17 · key/value secrets 14 · PEM blocks 2 · tokens 2 · base64 runs 1.
+
+Good catch on the JWKS modulus, by the way — that's the dev container's public key material, and it reads as high-entropy to any detector precisely because it's a real RSA modulus. Leaving it visible is correct.</div></div>
+<div class="msg human"><span class="when">Sep 13, 8:37 PM PDT</span><span class="who">Warren</span><div class="body">&lt;teammate-message teammate_id="team-lead" summary="Status check on the hire-identification fix"&gt;
+Status check: did you receive and act on my follow-up about hire identification? To restate it briefly, because your completion report predates it.
+
+Your conclusion that "hires from track 02 and 05 mostly ran inside their lead's session" is not what the data shows. I inventoried the raw files myself before spawning you. There are TOP-LEVEL session files (not under subagents/) in the track slugs whose dominant persona is a HIRE, not the lead. Concretely, in `-Users-warrenthompson-Source-LoginID-02-ai-security-architecture/` there are separate files dominated by helena-marsh (~1.0 MB, 62 turns), tomasz-wrede (~1.1 MB, 103 turns), felix-adebayo (~286 KB, 22 turns) and ingrid-solano (~673 KB, 64 turns); in `-Users-warrenthompson-Source-LoginID-05-data-ops/` there are files dominated by yusuf-karadag, anders-vogel, beatriz-achterberg and saoirse-byrne (~300-370 KB each, 19-29 turns). Those exist because leads spawned hires as NAMED teammates, which get their own top-level session files in the same directory. Your rule of "top-level file in a track slug means that track's lead" swallowed them.
+
+So: identify every file by counting `agents/&lt;slug&gt;` and `profiles/&lt;slug&gt;/` hits across the WHOLE file against the full 24-name roster (leads and hires alike), and let the dominant slug own the file. Fall back to the directory rule only when no known slug appears. Then all 18 hires should be present, and the two "Unnamed subagent" rows should mostly resolve.
+
+Reply with the updated per-persona table and confirm `docs/transcripts/manifest.json` is regenerated. Re-run your redaction verification on the new output. Do not commit or push.
+&lt;/teammate-message&gt;</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:37 PM PDT</span><span class="who">Dana Whitfield</span><details><summary><span class="tn">Bash</span> python3 - &lt;&lt;'EOF'
+import json,collections
+f='/Users/warrenthompson/.claude/projects/-Users-warrentho</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "python3 - &lt;&lt;'EOF'\nimport json,collections\nf='/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID-02-ai-security-architecture/01db5ea7-33b3-444b-8eae-57a267d4ed1b.jsonl'\nraw=0; ids=set()\nfor line in open(f,errors='replace'):\n    try: r=json.loads(line)\n    except: continue\n    if r.get('type')=='assistant':\n        raw+=1; ids.add((r.get('message') or {}).get('id'))\nprint('helena-marsh file: raw assistant lines =',raw,' distinct message.id =',len(ids))\nEOF"
+}</pre><div class="lbl">result</div><pre>helena-marsh file: raw assistant lines = 62  distinct message.id = 41</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 8:37 PM PDT</span><span class="who">Dana Whitfield</span><div class="body">Yes — received and already done. Your message crossed with my previous report, which covers exactly this. Summary of what changed and the current state:
+
+## Confirmation
+All 18 hires are present. `docs/transcripts/manifest.json` is regenerated, the full archive was re-rendered end to end (110 sessions, 158 pages, 34.9 MB), and the redaction verification was re-run on the new output. Nothing committed or pushed — `git status` shows only `docs/transcripts/` and `scripts/render-transcripts.py` as untracked.
+
+## One deviation from your proposed rule, and why
+Pure dominant-slug counting recovers the hires but misattributes the leads. A lead's own session names its hires constantly — it drafted and spawned them — so in Renata's hiring session `oren-castellan` (34) outranks `renata-cole` (17), and the cross-track consistency pass names all eighteen hires evenly. Slug frequency would have handed those files to the wrong person.
+
+I found a stronger signal in the logs: **`agent-setting` records**, which name the persona a session was launched as. Precedence is now:
+
+1. `agent-setting` naming a known slug → authoritative. This alone recovered all seven missing hires plus ingrid-solano, and moved bree/callum/wesley out of "planning" into the hire group.
+2. Whole-file `agents/&lt;slug&gt;` + `profiles/&lt;slug&gt;/` scan (no 400 KB cap, full 24-name roster) otherwise — with a track directory implying its lead, a *concentrated* hire signal (one track's hires dominating, other tracks under 25%) identifying that lead's hiring session, and `dana-whitfield` excluded from the lead vote since the root CLAUDE.md persona reference puts it in every file.
+3. Directory fallback only when no known slug appears.
+
+I checked every root-slug attribution against each file's opening prompt. The two genuine non-persona runs — the cross-track consistency pass and the Jira scribe — are now **"PM-directed utility session"** rather than misattributed to a lead. No "Unnamed subagent" rows remain; three orphan subagent groups are attributed to their spawning session.
+
+## A note on turn counts
+Your inventory predicted helena-marsh 62 turns, tomasz-wrede 103, ingrid-solano 64, felix-adebayo 22; my table shows 41 / 64 / 45 / 14. Both are right — I verified on the helena-marsh file: **62 raw assistant lines, 41 distinct `message.id`s.** Streaming writes several lines per message; I merge by `message.id` so each message renders once, per the original brief. My "turns" are messages, yours are lines. Flagging so the retrospective doesn't quote two different numbers.
+
+## Final per-persona table
+
+| Persona | Group | Trk | Turns | Tools | Sessions |
+|---|---|---|---:|---:|---:|
+| Dana Whitfield | pm | PM | 1,273 | 1,733 | 1 |
+| Renata Cole | lead | 03 | 3,183 | 3,128 | 1 |
+| Theo Bergman | lead | 04 | 1,783 | 1,642 | 1 |
+| Naomi Voss | lead | 01 | 1,182 | 1,130 | 1 |
+| Marcus Ilori | lead | 02 | 520 | 479 | 1 |
+| Priya Nandakumar | lead | 05 | 379 | 324 | 1 |
+| Oren Castellan | hire | 03 | 315 | 421 | 26 |
+| Desmond Okafor | hire | 01 | 178 | 193 | 6 |
+| Nolan Reyes | hire | 03 | 158 | 224 | 15 |
+| Tobias Lindqvist | hire | 01 | 74 | 51 | 6 |
+| Research subagent (Dana Whitfield's session) | hire | PM | 74 | 136 | 12 |
+| Tomasz Wrede | hire | 02 | 64 | 55 | 1 |
+| Ingrid Solano | hire | 02 | 45 | 38 | 2 |
+| Helena Marsh | hire | 02 | 41 | 24 | 1 |
+| Wesley Okonkwo | hire | 04 | 23 | 18 | 3 |
+| Imogen Hale | hire | 01 | 20 | 18 | 3 |
+| Ines Dabrowski | hire | 03 | 18 | 19 | 2 |
+| Beatriz Achterberg | hire | 05 | 15 | 11 | 1 |
+| Marisol Ferran | hire | 03 | 15 | 15 | 2 |
+| Bree Sandoval | hire | 04 | 15 | 17 | 2 |
+| Research subagent (Naomi Voss's session) | hire | 01 | 15 | 19 | 1 |
+| Felix Adebayo | hire | 02 | 14 | 12 | 1 |
+| Anders Vogel | hire | 05 | 13 | 9 | 1 |
+| Yusuf Karadag | hire | 05 | 13 | 11 | 1 |
+| Callum Ferreira | hire | 04 | 12 | 14 | 2 |
+| Saoirse Byrne | hire | 05 | 11 | 9 | 1 |
+| Research subagent (Priya Nandakumar's session) | hire | 05 | 10 | 19 | 2 |
+| PM-directed utility session | planning | PM | 97 | 347 | 2 |
+| Marcus Ilori | planning | 02 | 81 | 128 | 2 |
+| Priya Nandakumar | planning | 05 | 81 | 80 | 3 |
+| Naomi Voss | planning | 01 | 71 | 84 | 2 |
+| Theo Bergman | planning | 04 | 67 | 65 | 2 |
+| Renata Cole | planning | 03 | 54 | 59 | 1 |
+| Dana Whitfield | planning | PM | 30 | 32 | 1 |
+
+**Totals: 110 sessions, 9,944 turns, 10,564 tool calls, 158 pages, 34.9 MB (max page 1.02 MB, none over 2 MB). 24 named personas expected, 24 present, none missing.** Rows are keyed on `(group, slug)`, so a persona appearing in both phases keeps one slug across both rows for merging.
+
+## Redaction verification (re-run on final output)
+138 secret literals harvested from the raw JSONL (patterns 1, 3≥44, 4, 6, 8), grepped against all 158 pages plus the manifest: **0 leaks**. Detector hits: JWT 0, bearer 0, basic 0, hex 0, argon2 0, PEM 0, base64-200 0, tokens 0. DSN reports 183 matches, all 183 the already-redacted `postgres://dev:«REDACTED»@` form (confirmed by a separate pass: 183 redacted, 0 residual). **Net residual: zero.** This run's replacements: hex 1,342 · emails 373 · public IPs 322 · DSN passwords 191 · argon2 88 · Authorization headers 79 · `password=` 23 · JWTs 17 · key/value secrets 14 · PEM blocks 2 · tokens 2 · base64 runs 1.</div></div>
 <div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
 </div>
