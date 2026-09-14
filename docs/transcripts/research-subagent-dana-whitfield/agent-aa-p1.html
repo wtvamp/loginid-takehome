@@ -1,0 +1,446 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 3 of 12 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 9:24 AM PDT – Sep 12, 2026 9:26 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 9:24 AM PDT</span><span class="who">Lead</span><div class="body">You are contributing research to a take-home interview project directory at /Users/warrenthompson/Source/LoginID. Read /Users/warrenthompson/Source/LoginID/CLAUDE.md and /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/CLAUDE.md first for full context — this is a take-home assignment for a job interview with LoginID (a passwordless/FIDO2 authentication company), and the "02-ai-security-architecture" track owns (a) the story of how AI was used as an architecture/delivery tool for this whole submission, and (b) security architecture for the DAO/REST API/IDP-connector system described in the root CLAUDE.md's assignment text.
+
+Research, using WebSearch and WebFetch, Anthropic's own published guidance on using Claude as an engineering/architecture tool effectively:
+
+1. Anthropic's engineering blog and official best-practices docs on: agentic coding workflows, "Claude Code" best practices, context management, prompt engineering for long-running tasks, subagent/multi-agent orchestration patterns, and tool-use design. Look at anthropic.com/engineering, docs.claude.com / docs.anthropic.com, and the Claude Code documentation.
+2. Anthropic's Claude certification / "Claude Code" or "building with Claude" exam-style materials if publicly documented (e.g., Anthropic Academy, any published certification curriculum) — what competencies they test for in someone using Claude as an architecture tool, so this track can speak that language credibly.
+3. Best practices specifically for efficient token/context usage without losing context across a long multi-phase project — e.g., context compaction, subagent delegation to keep the orchestrator's context small ("forking" or scoped subagents), prompt caching, structured memory files (like this project's CLAUDE.md-per-directory pattern), progressive summarization, and how Anthropic recommends architecting a large agentic project so it doesn't blow its context window.
+4. Concretely: how the five-track CLAUDE.md structure already used in this project's root and each of its five directories maps to or diverges from Anthropic's own recommended patterns for multi-agent/multi-context project architecture. Call out where this project is already doing it well and where it could adopt further recommended techniques (e.g., prompt caching, structured hand-off summaries between subagents, avoiding redundant context reloading).
+
+Distinguish Anthropic's own official guidance (cite the specific blog post/doc URL) from third-party commentary — prioritize primary sources.
+
+Write your findings to a new file: /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/research-claude-architecture-best-practices.md — structured with clear headers, source citations (URLs), and a final "applied to this project" section giving concrete, actionable recommendations for how this specific LoginID take-home submission (a project run via a root CLAUDE.md plus five track-scoped CLAUDE.md files and scoped subagents) should manage context/tokens efficiently for the rest of the work ahead (writing the Go DAO, REST API, and IDP connector code, plus the other four tracks' deliverables).
+
+Do not modify any other files. Do not write code. Report back a brief summary (under 200 words) of the key findings and recommendations.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:24 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Do not start writing code until each track's CLAUDE.md is in place and reviewed.
+48	
+49	## Status
+50	
+51	Scaffolding phase — track directories and their CLAUDE.md files are being established. No implementation work has started yet.
+52	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/02-ai-security-architecture/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: AI Architecture &amp; Security Architecture
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Own two things that are related but distinct: (1) the story of how AI was used as an architecture and delivery tool across this whole submission, and (2) the security architecture for everything the engineering track builds — the DAO, the REST API, and the third-party IDP connector.
+8	
+9	LoginID explicitly asked submitters to describe any tool, framework, or AI used — this track is where that answer lives in full, even though other tracks should each note their own AI usage briefly too.
+10	
+11	## Owns
+12	
+13	- AI architecture narrative: what Claude Code was used for across the project, how the five-track structure itself was designed and orchestrated (root CLAUDE.md + per-track CLAUDE.md + scoped subagents), what was AI-generated vs. human-directed, and why that workflow was chosen.
+14	- Threat modeling for the system: attacker-relevant risks around storing `user_credential` (usernames/passwords), storing and serving `user_profile` PII, and the third-party connector holding vendor `access_token`s.
+15	- API authentication/authorization design for the REST service in question 2 — what "security API authentication" means here (e.g., API keys, OAuth2 client credentials, mTLS, or JWT bearer tokens), and why.
+16	- Credential handling: password storage (hashing/salting strategy), token lifecycle for third-party `access_token`s from question 3, and secrets management for any credentials this service itself needs to call ABC/XYZ.
+17	- Security review of the connector contracts in question 3: what happens to the third-party `access_token` once retrieved, how `/identity` calls are authenticated to the vendor, and what this service should and shouldn't log or persist from a PII/security standpoint.
+18	
+19	## Does not own
+20	
+21	- The industry/product framing for why this system exists — that's `../01-product-industry-research-design/CLAUDE.md`.
+22	- Writing the Go code itself — that's `../03-engineering-delivery/CLAUDE.md`, though this track's design should be specific enough to implement directly.
+23	- Runtime secrets storage mechanics in a deployed environment (e.g., which secrets manager, which CI/CD injects what) — that's `../04-infra-devops/CLAUDE.md`; this track sets the requirement, infra/devops implements it.
+24	- Data retention/governance policy for stored PII — that's `../05-data-ops/CLAUDE.md`; this track covers security of access and transit, not lifecycle/retention.
+25	
+26	## Deliverables
+27	
+28	- A written AI-tooling/workflow summary for the whole project.
+29	- A threat model covering credential storage, PII exposure, and third-party token handling.
+30	- A concrete auth/authz design for the REST API in question 2.
+31	- A security design for the IDP connector in question 3, including token handling and what gets logged.
+32	
+33	## AI tooling note
+34	
+35	This track is itself where the project's AI-usage story is documented in depth — treat it as both a subject-matter track and the place other tracks' brief AI notes get rolled up if useful.
+36	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">ToolSearch</span> select:WebSearch,WebFetch</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "select:WebSearch,WebFetch",
+  "max_results": 5
+}</pre><div class="lbl">result</div><pre>[tool reference: ]
+[tool reference: ]</pre></div></details></div>
+<div class="msg human"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Lead</span><div class="body">Tool loaded.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Agent</span> Research Anthropic agentic architecture best practices</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "subagent_type": "fork",
+  "description": "Research Anthropic agentic architecture best practices",
+  "prompt": "Do NOT write any files. Just research and report back findings as text (this is a fork, so do your own WebSearch/WebFetch calls now).\n\nResearch Anthropic's own official published guidance (primary sources only — anthropic.com/engineering, docs.claude.com, docs.anthropic.com, claude.com/product/claude-code docs, Anthropic Academy) on:\n\n1. Agentic coding workflows and \"Claude Code best practices\" (there is a well-known Anthropic engineering blog post literally titled \"Claude Code: Best Practices for Agentic Coding\" — find and summarize it, with URL).\n2. Context management / context engineering guidance — Anthropic has published pieces on \"effective context engineering for AI agents\", context window management, compaction, and the difference between context engineering and prompt engineering. Find and summarize with URLs.\n3. Subagent / multi-agent orchestration patterns — Anthropic's \"multi-agent research system\" blog post and any Claude Code subagent documentation (the `.claude/agents/*.md` pattern, orchestrator-worker patterns, how subagents keep the orchestrator's context small). Find and summarize with URLs.\n4. Prompt caching — official docs on how it works, cache breakpoints, and best practices for structuring prompts (system prompt / tools stable, conversation appended) to maximize cache hits. Find and summarize with URL.\n5. Tool-use design guidance from Anthropic (tool definitions, minimizing tool count/verbosity, agentic tool design principles). URL.\n6. Any Anthropic-published Claude certification / \"Building with Claude\" / Anthropic Academy curriculum that describes competencies for using Claude as an architecture/engineering tool — what it tests for. If nothing official exists publicly, say so explicitly rather than guessing.\n7. Anthropic guidance (if any) on structured memory files / CLAUDE.md patterns for large or multi-part projects, and progressive summarization / hand-off documents between agent sessions.\n\nFor each item, clearly separate \"Anthropic official primary source\" (blog/docs URL) from any third-party commentary you happen to encounter (label it as such, deprioritize it).\n\nReport back as organized text with headers matching the 7 items above, each with: 1-2 sentence summary of the guidance + the exact URL. Be concrete — I need real URLs and real claims, not vague gestures. Keep total report under 1500 words."
+}</pre><div class="lbl">result</div><pre>Fork started — processing in background</pre></div></details></div>
+<div class="msg human"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Lead</span><div class="body">&lt;fork-boilerplate&gt;
+You are a worker fork. The transcript above is the parent's history — inherited reference, not your situation. You are NOT a continuation of that agent. Execute ONE directive, then stop.
+
+Hard rules:
+- Do NOT spawn subagents with the Agent tool. The "default to forking" guidance is for the parent; you ARE the fork, execute directly.
+- One shot: report once and stop. No follow-up questions, no proposed next steps, no waiting for the user.
+
+Guidelines (your directive may override any of these):
+- Stay in scope. Other forks may be handling adjacent work; if you spot something outside your directive, note it in a sentence and move on.
+- Open with one line restating your task, so the parent can spot scope drift at a glance.
+- Be concise — as short as the answer allows, no shorter. Plain text, no preamble, no meta-commentary.
+- If you committed changes, list the paths and commit hashes in your report.
+&lt;/fork-boilerplate&gt;
+
+Your directive: Do NOT write any files. Just research and report back findings as text (this is a fork, so do your own WebSearch/WebFetch calls now).
+
+Research Anthropic's own official published guidance (primary sources only — anthropic.com/engineering, docs.claude.com, docs.anthropic.com, claude.com/product/claude-code docs, Anthropic Academy) on:
+
+1. Agentic coding workflows and "Claude Code best practices" (there is a well-known Anthropic engineering blog post literally titled "Claude Code: Best Practices for Agentic Coding" — find and summarize it, with URL).
+2. Context management / context engineering guidance — Anthropic has published pieces on "effective context engineering for AI agents", context window management, compaction, and the difference between context engineering and prompt engineering. Find and summarize with URLs.
+3. Subagent / multi-agent orchestration patterns — Anthropic's "multi-agent research system" blog post and any Claude Code subagent documentation (the `.claude/agents/*.md` pattern, orchestrator-worker patterns, how subagents keep the orchestrator's context small). Find and summarize with URLs.
+4. Prompt caching — official docs on how it works, cache breakpoints, and best practices for structuring prompts (system prompt / tools stable, conversation appended) to maximize cache hits. Find and summarize with URL.
+5. Tool-use design guidance from Anthropic (tool definitions, minimizing tool count/verbosity, agentic tool design principles). URL.
+6. Any Anthropic-published Claude certification / "Building with Claude" / Anthropic Academy curriculum that describes competencies for using Claude as an architecture/engineering tool — what it tests for. If nothing official exists publicly, say so explicitly rather than guessing.
+7. Anthropic guidance (if any) on structured memory files / CLAUDE.md patterns for large or multi-part projects, and progressive summarization / hand-off documents between agent sessions.
+
+For each item, clearly separate "Anthropic official primary source" (blog/docs URL) from any third-party commentary you happen to encounter (label it as such, deprioritize it).
+
+Report back as organized text with headers matching the 7 items above, each with: 1-2 sentence summary of the guidance + the exact URL. Be concrete — I need real URLs and real claims, not vague gestures. Keep total report under 1500 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebSearch</span> Anthropic "Claude Code: Best Practices for Agentic Coding" engineering blog</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic \"Claude Code: Best Practices for Agentic Coding\" engineering blog"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic "Claude Code: Best Practices for Agentic Coding" engineering blog"
+
+Links: [{"title":"Claude Code: Practical Best Practices for Agentic Coding | by Habib Mrad | Medium","url":"https://medium.com/@habib.mrad.83/claude-code-practical-best-practices-for-agentic-coding-2be1b62cfeff"},{"title":"GitHub - awattar/claude-code-best-practices: 💻 Best practices and examples for using Claude Code - Anthropic’s terminal-native AI - for writing, editing, and refactoring code with deep project awareness, prompt design, and safe automation.","url":"https://github.com/awattar/claude-code-best-practices"},{"title":"Best practices for Claude Code - Claude Code Docs","url":"https://code.claude.com/docs/en/best-practices"},{"title":"Claude Code Best Practices: 12 Patterns Agentic Engineers Use | by huizhou92 | Level Up Coding","url":"https://levelup.gitconnected.com/claude-code-best-practices-12-patterns-agentic-engineers-use-65264e3eb919?gi=9869c287f74b"},{"title":"How Claude Code is used in practice \\ Anthropic","url":"https://www.anthropic.com/research/claude-code-expertise"},{"title":"Claude Code Best Practices: From Vibe Coding to Agentic Engineering (2026)","url":"https://mcp.directory/blog/claude-code-best-practices"},{"title":"Agentic Coding Guide 2026: Claude Code, Codex &amp; 5 Patterns","url":"https://www.teamday.ai/blog/complete-guide-agentic-coding-2026"},{"title":"www.anthropic.com","url":"https://www.anthropic.com/engineering?p=88"},{"title":"Engineering at Anthropic","url":"https://www.anthropic.com/engineering/claude-code-best-practices"}]
+
+I found the Anthropic engineering blog post on Claude Code best practices! Here are the key details:
+
+Anthropic recently released Claude Code, a command line tool for agentic coding that was developed as a research project to give Anthropic engineers and researchers a more native way to integrate Claude into their coding workflows.
+
+Claude Code is intentionally low-level and unopinionated, providing close to raw model access without forcing specific workflows, creating a flexible, customizable, scriptable, and safe power tool.
+
+The blog post outlines general patterns that have proven effective both for Anthropic's internal teams and for external engineers using Claude Code across various codebases, languages, and environments.
+
+One of the key practices discussed is customization: CLAUDE.md is a special file that Claude automatically pulls into context when starting a conversation, making it ideal for documenting common bash commands, core files and utility functions, code style guidelines, testing instructions, and repository etiquette.
+
+The official blog post can be found at: **https://www.anthropic.com/engineering/claude-code-best-practices**
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic "effective context engineering for AI agents"</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic \"effective context engineering for AI agents\""
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic "effective context engineering for AI agents""
+
+Links: [{"title":"Anthropic Context Engineering - Agentic AI Knowledge Base","url":"https://agentic-ai.readthedocs.io/en/latest/ContextEngineering/anthropic/"},{"title":"Effective context engineering for AI agents \\ Anthropic","url":"https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"},{"title":"Prompt Governance? On Governing Technologies Governed by Natural Language","url":"https://arxiv.org/pdf/2606.07539"},{"title":"Effective Context Engineering for AI Agents: A Developer’s Guide - MachineLearningMastery.com","url":"https://machinelearningmastery.com/effective-context-engineering-for-ai-agents-a-developers-guide/"},{"title":"Written by AI, Managed by AI: Semantic Space Control and Index Sickness Elimination Across 391 Consecutive Sessions","url":"https://arxiv.org/pdf/2606.19121"},{"title":"LOCA-bench: Benchmarking Language Agents Under Controllable and Extreme Context Growth","url":"https://arxiv.org/pdf/2602.07962"},{"title":"Effective Context Engineering for AI Agents: Anthropic's Guide, Read and Highlighted - YouTube","url":"https://www.youtube.com/watch?v=grs8yPUJ8j0"},{"title":"Anthropic’s Approach to Effective Context Engineering for AI Agents | Cronus","url":"https://cr0nu3.github.io/posts/Effective_context_engineering_for_AI_Agents/"}]
+
+Based on the search results, I found relevant information about Anthropic's "Effective Context Engineering for AI Agents."
+
+## Overview
+
+Context engineering has become a prominent term in applied AI, replacing prompt engineering as the focus of attention. Anthropic views context engineering as the natural progression of prompt engineering and refers to it as the set of strategies for curating and maintaining the optimal set of tokens (information) during LLM inference.
+
+## Key Concepts
+
+Context is a critical but finite resource for AI agents. Building with language models is becoming less about finding the right words and phrases for your prompts, and more about answering the broader question of "what configuration of context is most likely to generate our model's desired behavior?"
+
+As agents move from one-shot tasks to multi-turn, long-horizon work, the challenge shifts from "how to write a good prompt" to "what configuration of context is most likely to generate the desired behavior at each step."
+
+## Core Challenge
+
+The core constraint is that LLMs have a finite attention budget, as the transformer architecture creates n² pairwise relationships for n tokens, and as context grows, the model's ability to capture these relationships gets stretched thin.
+
+Anthropic has published comprehensive resources on this topic, including detailed guides and practical implementations for managing context in long-running AI agents.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic engineering "multi-agent research system" blog post</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic engineering \"multi-agent research system\" blog post"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic engineering "multi-agent research system" blog post"
+
+Links: [{"title":"Anthropic’s multi-agent research system raises the bar for open-ended AI reasoning | Centific","url":"https://www.centific.com/blog/anthropic-s-multi-agent-research-system-raises-the-bar-for-open-ended-ai-reasoning"},{"title":"How Anthropic Built a Multi-Agent Research System","url":"https://blog.bytebytego.com/p/how-anthropic-built-a-multi-agent"},{"title":"How and when to build multi-agent systems","url":"https://www.langchain.com/blog/how-and-when-to-build-multi-agent-systems"},{"title":"Anthropic: Building a Multi-Agent Research System for Complex Information Tasks - ZenML LLMOps Database","url":"https://www.zenml.io/llmops-database/building-a-multi-agent-research-system-for-complex-information-tasks"},{"title":"Anthropic's Multi-Agent Research Architecture Explained","url":"https://theaiengineer.substack.com/p/how-anthropic-built-multi-agent-deep"},{"title":"Anthropic: How we built our multi-agent research system","url":"https://simonwillison.net/2025/Jun/14/multi-agent-research-system/"},{"title":"Anthropic's Multi-Agent Blueprint: We Validated It in Production (Here's What Worked)","url":"https://fountaincity.tech/resources/blog/anthropic-multi-agent-blueprint-production/"},{"title":"How we built our multi-agent research system — Anthropic | by Kushal Banda | Artificial Intelligence in Plain English","url":"https://ai.plainenglish.io/how-we-built-our-multi-agent-research-system-5f5e10b2a8d6?gi=a610b8f62c64"},{"title":"Engineering at Anthropic","url":"https://www.anthropic.com/engineering/multi-agent-research-system"}]
+
+Based on the search results, I found Anthropic's official blog post on their multi-agent research system. Here's what I found:
+
+Anthropic published "How we built our multi-agent research system," describing Claude's Research capabilities that allow it to search across the web, Google Workspace, and integrations to accomplish complex tasks.
+
+Their Research feature involves an agent that plans a research process based on user queries, and then uses tools to create parallel agents that search for information simultaneously.
+
+Key findings from the blog post include:
+
+- **Performance Benefits**: A multi-agent system with Claude Opus 4 as the lead agent and Claude Sonnet 4 subagents outperformed single-agent Claude Opus 4 by 90.2% on their internal research evaluation.
+
+- **Use Cases**: Multi-agent research systems excel especially for breadth-first queries that involve pursuing multiple independent directions simultaneously.
+
+- **Engineering Insights**: The journey of this multi-agent system from prototype to production taught them critical lessons about system architecture, tool design, and prompt engineering.
+
+The official blog post is available at: https://www.anthropic.com/engineering/multi-agent-research-system
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic docs prompt caching cache breakpoints best practices</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic docs prompt caching cache breakpoints best practices"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic docs prompt caching cache breakpoints best practices"
+
+Links: [{"title":"Explicit Prompt Caching (Anthropic API) - MiniMax API Docs","url":"https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache"},{"title":"Unlocking Efficiency: A Practical Guide to Claude Prompt Caching | by Mark Craddock | Medium","url":"https://medium.com/@mcraddock/unlocking-efficiency-a-practical-guide-to-claude-prompt-caching-3185805c0eef"},{"title":"Prompt Caching Support in Spring AI with Anthropic Claude","url":"https://spring.io/blog/2025/10/27/spring-ai-anthropic-prompt-caching-blog/"},{"title":"Prompt caching - Claude Platform Docs","url":"https://platform.claude.com/docs/en/build-with-claude/prompt-caching"},{"title":"Claude: How prompt caching actually works","url":"https://www.mager.co/blog/2026-04-29-claude-prompt-caching/"},{"title":"Anthropic Claude API Prompt Caching and Token Efficiency Guide - Cache Breakpoints, Batch Processing, and Context Engineering | hidekazu-konishi.com","url":"https://hidekazu-konishi.com/entry/anthropic_claude_api_prompt_caching_and_token_efficiency.html"},{"title":"Prompt Caching Tutorial Anthropic: Cut API Costs 90% with Cache Control · AI Prompt Generator Hub","url":"https://aipromptshub.co/blog/prompt-caching-anthropic-tutorial"}]
+
+I found several resources on Anthropic's prompt caching with information about cache breakpoints and best practices. Here's what the search revealed:
+
+## Cache Breakpoints Overview
+
+You can define up to 4 cache breakpoints in your prompt. Each breakpoint checkpoints the prefix at that position, and you can use all four: one after the system prompt, one after tool definitions, one after a retrieved document, and one after few-shot examples.
+
+## Best Practices
+
+Place cached content at the beginning of your prompt for optimal performance and use cache breakpoints strategically to separate different cacheable sections. Cache stable, reusable content like system instructions and background information.
+
+You can use just one cache breakpoint at the end of your static content, and the system will automatically find the longest matching prefix.
+
+## Cache Duration
+
+The cache has a 5-minute lifetime (TTL), which is refreshed each time the cached content is used. If you find that 5 minutes is too short, Anthropic also offers a 1-hour cache duration at additional cost.
+
+## Cache Invalidation
+
+Changes to tool_choice or the presence/absence of images anywhere in the prompt will invalidate the cache, requiring a new cache entry to be created.
+
+For the official Anthropic documentation, you can refer to the [Claude Platform Docs on Prompt Caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic Claude Code subagents documentation .claude/agents</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic Claude Code subagents documentation .claude/agents"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic Claude Code subagents documentation .claude/agents"
+
+Links: [{"title":"Claude Code agents: what they actually are","url":"https://joseparreogarcia.substack.com/p/claude-code-agents-explained"},{"title":"Claude Code Subagents: How to Create, Use, and Debug Them","url":"https://www.builder.io/blog/claude-code-subagents"},{"title":"How and when to use subagents in Claude Code | Claude by Anthropic","url":"https://claude.com/blog/subagents-in-claude-code"},{"title":"Claude Code Subagents: The Complete Guide to AI Agent Delegation | by Sathish Raju | Medium","url":"https://medium.com/@sathishkraju/claude-code-subagents-the-complete-guide-to-ai-agent-delegation-d0a9aba419d0"},{"title":"Introduction to subagents - Anthropic Courses","url":"https://anthropic.skilljar.com/introduction-to-subagents"},{"title":"Claude Code Subagents and Multi-Agent Orchestration Guide - Delegation, Parallel Fan-Out, and Custom Agent Definitions | hidekazu-konishi.com","url":"https://hidekazu-konishi.com/entry/claude_code_subagents_and_orchestration_guide.html"},{"title":"Claude Code subagents: the 2026 production playbook (with examples) - Totalum Blog","url":"https://www.totalum.app/blog/claude-code-subagents-totalum"},{"title":"Sub-Agents in Claude Code: The Subagent Orchestration Behind the Response Awareness Methodology","url":"https://responseawareness.substack.com/p/sub-agents-in-claude-code-the-subagent"}]
+
+I found relevant information about Claude Code subagents and the `.claude/agents` directory structure. Here are the key findings:
+
+## What are Claude Code Subagents?
+
+Subagents are "specialized AI assistants that handle specific types of tasks. Each subagent runs in its own context window with a custom system prompt, specific tool access, and independent permissions."
+
+## File Locations
+
+Custom subagents live as markdown files in .claude/agents/ (project-level, shared with the team) or ~/.claude/agents/ (user-level, available across all projects).
+
+## Creating Subagents
+
+You can create Claude Code subagents either from the /agents UI or by writing Markdown files with YAML frontmatter. In practice you create a subagent definition by dropping a markdown file into .claude/agents/ with frontmatter for name, description, tools, model, and a system-prompt body.
+
+## Key Configuration Elements
+
+Each one gets its own system prompt, tool permissions, and optionally its own model. The main things to get right are scope, description, tool access, permission mode, and prompt design.
+
+## Benefits
+
+When the main agent delegates a task to a subagent, the subagent runs independently, does its work, and returns only its final output to the parent. All the intermediate noise — the file reads, the search results, the exploratory tool calls — stays inside the subagent's context and never touches the main conversation.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic Academy certification "building with Claude" curriculum</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic Academy certification \"building with Claude\" curriculum"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic Academy certification "building with Claude" curriculum"
+
+Links: [{"title":"Claude Certification Program by Anthropic - Pearson VUE","url":"https://www.pearsonvue.com/us/en/anthropic.html"},{"title":"Building with the Claude API - Anthropic Courses","url":"https://anthropic.skilljar.com/claude-with-the-anthropic-api"},{"title":"CLAUDE-CERTIFICATIONS/guide/courses.md at main · Amey-Thakur/CLAUDE-CERTIFICATIONS","url":"https://github.com/Amey-Thakur/CLAUDE-CERTIFICATIONS/blob/main/guide/courses.md"},{"title":"Anthropic Courses","url":"https://anthropic.skilljar.com/"},{"title":"Claude Certifications in 2026: Which One Is Right for You?","url":"https://blog.udemy.com/claude-certifications-guide/"},{"title":"The Complete Prep Guide to Anthropic's Claude Certifications (2026)","url":"https://cloud-authority.com/the-complete-prep-guide-to-anthropic-s-claude-certifications-2026"},{"title":"Claude Certification in 2026: What Really Exists — AItomation Academy","url":"https://www.aitomationacademy.com/blog/claude-certification"},{"title":"Anthropic Academy Guide: All 13 Free Claude Courses | Termdock","url":"https://www.termdock.com/en/blog/anthropic-academy-claude-courses-guide"},{"title":"Claude Certified Architect Courses — Claude Code, Agent SDK &amp; MCP","url":"https://www.anthropiccertifications.com/courses"}]
+
+Based on the search results, here's what I found about Anthropic Academy and Claude certification curriculum:
+
+## Anthropic Academy Overview
+
+Anthropic launched Anthropic Academy in March 2026 with thirteen courses, all free and self-paced, with official certificates on completion.
+
+## "Building with Claude" Curriculum
+
+The "Building with the Claude API" course is a comprehensive video course that teaches developers how to integrate Claude AI into applications using the Anthropic API, with curriculum covering fundamental API operations, advanced prompting techniques, tool integration, and architectural patterns for building AI-powered systems. Through hands-on exercises and practical examples, participants learn to implement conversational AI, retrieval-augmented generation, automated workflows, and leverage Claude's multimodal capabilities for processing text, images, and documents.
+
+## Course Structure
+
+Six courses require no coding and work for everyone, while seven are developer-focused, requiring Python or CLI experience. "Building with the Claude API" covers Messages API, tool use, RAG, and agents, and is core for Developer and Architect certifications.
+
+## Certification Program
+
+The Claude Certification Program validates the skills behind advising, designing, and building Claude solutions, with three roles to choose from: Practitioner, Architect, and Developer. Anthropic runs free Academy courses that anyone can take for a completion certificate, and a paid, proctored Claude Certification Program (Associate, Developer, and Architect exams via Pearson VUE) gated to people at organizations in the Claude Partner Network.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Anthropic tool use best practices agentic tool design docs.claude.com</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Anthropic tool use best practices agentic tool design docs.claude.com"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Anthropic tool use best practices agentic tool design docs.claude.com"
+
+Links: [{"title":"Building Effective AI Agents \\ Anthropic","url":"https://www.anthropic.com/engineering/building-effective-agents"},{"title":"Writing effective tools for AI agents—using AI agents \\ Anthropic","url":"https://www.anthropic.com/engineering/writing-tools-for-agents"},{"title":"Tool reference - Claude Platform Docs","url":"https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-reference"},{"title":"Tool use with Claude - Claude Platform Docs","url":"https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"},{"title":"Define tools - Claude Platform Docs","url":"https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools"},{"title":"How to implement tool use - Claude API Docs","url":"https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use"},{"title":"Build with Claude · Claude Academy","url":"https://www.anthropic.com/learn/build-with-claude"},{"title":"www.anthropic.com","url":"https://www.anthropic.com/engineering?p=88"},{"title":"Engineering at Anthropic","url":"https://anthropic.com/engineering/advanced-tool-use"},{"title":"Thinking as a Tool","url":"https://patmcguinness.substack.com/p/thinking-as-a-tool"}]
+
+Based on the search results, I found comprehensive information about Anthropic's tool use best practices and agentic tool design. Here are the key resources and guidance:
+
+## Key Best Practices
+
+Effective tools are intentionally and clearly defined, use agent context judiciously, can be combined together in diverse workflows, and enable agents to intuitively solve real-world tasks.
+
+It is crucial to design toolsets and their documentation clearly and thoughtfully.
+
+## Documentation Resources
+
+For deeper guidance on tool design (consolidation, naming, and response shaping), see Writing tools for agents. Additionally, best practices for tool definitions can be found in the Developer Guide.
+
+## Advanced Tool Use
+
+To build effective agents, they need to work with unlimited tool libraries without stuffing every definition into context upfront, and agents should discover and load tools on-demand, keeping only what's relevant for the current task.
+
+## Tool Input Examples
+
+You can provide concrete examples of valid tool inputs to help Claude understand how to use your tools more effectively, which is particularly useful for complex tools with nested objects, optional parameters, or format-sensitive inputs, by adding an optional input_examples field to your tool definition.
+
+These resources are available on the Claude Platform Docs and Anthropic's Engineering blog for more detailed guidance.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Claude Code CLAUDE.md memory file documentation best practices docs.claude.com</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Claude Code CLAUDE.md memory file documentation best practices docs.claude.com"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Claude Code CLAUDE.md memory file documentation best practices docs.claude.com"
+
+Links: [{"title":"Claude Code Memory: Complete Guide to Persistence","url":"https://vectorize.io/articles/claude-code-memory"},{"title":"How Claude remembers your project - Claude Code Docs","url":"https://code.claude.com/docs/en/memory"},{"title":"The Complete Guide to CLAUDE.md: Memory, Rules, Loading, and Cross-Tool Compression | by Bijit Ghosh | Medium","url":"https://medium.com/@bijit211987/the-complete-guide-to-claude-md-memory-rules-loading-and-cross-tool-compression-97cc12ed037b"},{"title":"CLAUDE.md, Rules, and Memory | Developing with AI Tools | Steve Kinney","url":"https://stevekinney.com/courses/ai-development/claude-dot-md"},{"title":"CLAUDE.md: What It Is, Template &amp; Best Practices (Plain English) – CC for Everyone","url":"https://ccforeveryone.com/fundamentals/project-memory"},{"title":"CLAUDE.md &amp; Memory Management: The Complete Guide (2026) | Product Builder","url":"https://www.productbuilder.net/learn/claude-code-memory"},{"title":"CLAUDE.md in Claude Code: Memory, Rules, and Docs","url":"https://claudecode101.com/en/mechanics/claude-md"},{"title":"github.com","url":"https://github.com/ambient-code/platform/issues/357"}]
+
+I found comprehensive information about Claude Code's CLAUDE.md memory file and documentation best practices. Here's what the search revealed:
+
+## Overview
+
+CLAUDE.md files are markdown files that give Claude persistent instructions for a project, your personal workflow, or your entire organization, which Claude reads at the start of every session.
+
+## Key Best Practices
+
+**Writing Quality Instructions:**
+- The more specific and concise your instructions, the more consistently Claude follows them.
+- Treat CLAUDE.md as the place you write down what you'd otherwise re-explain, adding to it when a new teammate would need the same context to be productive.
+- Keep it short and link to deeper documentation instead of turning the file into a manual.
+
+**Memory Systems:**
+The system has four CLAUDE.md scopes, an Auto Memory subsystem that captures session learnings, a consolidation pipeline built on Anthropic's Dreams primitive that reorganizes those captures, a MEMORY.md index file that anchors the auto-memory directory, and a /memory command for managing the whole thing.
+
+**Team Practices:**
+- For a team repository, treat CLAUDE.md like lightweight engineering documentation, committing the shared project file while keeping local secrets and sandbox URLs in gitignored CLAUDE.local.md.
+- If Claude ignores a rule, run /memory first.
+
+The official Claude Code documentation is available at code.claude.com/docs/en/memory for the most current information.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+  "prompt": "Summarize the key recommendations on context management for long-running agents: context window limits, compaction, structured note-taking, sub-agent architectures, just-in-time retrieval. List concrete techniques mentioned."
+}</pre><div class="lbl">result</div><pre># Context Management for Long-Running Agents
+
+## Core Challenge
+LLMs face inherent limitations managing extended interactions. The article identifies "context pollution and information relevance concerns" that persist regardless of window size.
+
+## Key Recommendations
+
+**1. Compaction**
+Summarize conversation history when approaching context limits, then restart with a condensed summary. The approach "distills the contents of a context window in a high-fidelity manner, enabling the agent to continue with minimal performance degradation." Start by maximizing recall, then improve precision by removing redundant content like old tool outputs.
+
+**2. Structured Note-Taking**
+Agents maintain persistent memory outside the context window through files or dedicated memory systems. This allows tracking progress across complex tasks without consuming immediate context space.
+
+**3. Sub-Agent Architectures**
+Specialized agents handle focused tasks with clean context windows while reporting condensed summaries (typically 1,000-2,000 tokens) to a coordinating agent. This separates detailed exploration work from high-level synthesis.
+
+**4. Just-in-Time Retrieval**
+Rather than pre-loading all data, agents use tools to dynamically retrieve references (file paths, queries, links) at runtime. This mirrors human cognition—maintaining lightweight identifiers instead of exhaustive information.
+
+**5. Hybrid Approach**
+Combine upfront retrieval for speed with autonomous exploration at the agent's discretion, suited to the specific task requirements.
+
+The overarching principle: "find the smallest set of high-signal tokens that maximize the likelihood of your desired outcome."</pre></div></details><details><summary><span class="tn">WebFetch</span> https://www.anthropic.com/engineering/claude-code-best-practices</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://www.anthropic.com/engineering/claude-code-best-practices",
+  "prompt": "Summarize the key best practices for agentic coding with Claude Code: CLAUDE.md usage, workflows, tool permissions, subagents, and any guidance on managing context across long tasks."
+}</pre><div class="lbl">result</div><pre>REDIRECT DETECTED: The URL redirects to a location that was not fetched automatically.
+
+    Original URL: https://www.anthropic.com/engineering/claude-code-best-practices
+    Redirect URL (from the server's Location header — server-supplied, not verified): https://code.claude.com/docs/en/best-practices
+    Status: 308 Permanent Redirect
+
+    To complete your request, I need to fetch content from the redirected URL. Please use WebFetch again with these parameters:
+    - url: "https://code.claude.com/docs/en/best-practices"
+    - prompt: "Summarize the key best practices for agentic coding with Claude Code: CLAUDE.md usage, workflows, tool permissions, subagents, and any guidance on managing context across long tasks."</pre></div></details><details><summary><span class="tn">WebFetch</span> https://www.anthropic.com/engineering/multi-agent-research-system</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://www.anthropic.com/engineering/multi-agent-research-system",
+  "prompt": "Summarize the architectural lessons: orchestrator-worker pattern, how subagents keep context isolated, prompt engineering for multi-agent systems, and how work is handed off/synthesized between agents."
+}</pre><div class="lbl">result</div><pre># Architectural Lessons from Anthropic's Multi-Agent Research System
+
+## Orchestrator-Worker Pattern
+
+Anthropic employs a lead agent that "analyzes [queries], develops a strategy, and spawns subagents to explore different aspects simultaneously." The lead researcher coordinates the workflow while delegating specialized tasks to parallel workers, enabling efficient decomposition of complex research problems.
+
+## Context Isolation in Subagents
+
+Subagents maintain independent context windows, which Anthropic identifies as critical for scaling. Each subagent operates with "separation of concerns—distinct tools, prompts, and exploration trajectories—which reduces path dependency." This isolation prevents cross-contamination and allows parallel exploration of different research dimensions.
+
+## Prompt Engineering Principles
+
+Key strategies include teaching "the orchestrator how to delegate" with detailed task descriptions that specify objectives, output formats, and tool guidance. The system uses "scaling rules in the prompts" to match effort to query complexity, preventing both underinvestment and wasteful overallocation. Extended thinking serves as "a controllable scratchpad" for planning, while heuristics replace rigid rules to encode expert research strategies.
+
+## Handoff and Synthesis
+
+Subagents "return findings to the LeadResearcher," which then "synthesizes these results and decides whether more research is needed." A specialized CitationAgent processes findings to verify source attribution. This staged approach with "lightweight references" prevents information loss during multi-stage handoffs.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:26 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Fetched the two key pages already; the best-practices redirect just confirms code.claude.com/docs/en/best-practices as the canonical URL (content already summarized via search). I have enough concrete material now.
+
+Report — Anthropic official guidance research (fork task)
+
+## 1. Claude Code best practices
+**Anthropic official.** Blog post "Claude Code: Best Practices for Agentic Coding" — https://www.anthropic.com/engineering/claude-code-best-practices (308-redirects to canonical docs at https://code.claude.com/docs/en/best-practices). Claude Code is deliberately low-level/unopinionated ("close to raw model access"). Key patterns: CLAUDE.md is auto-pulled into context at session start — use it for bash commands, core files/utilities, code style, testing instructions, repo etiquette; keep it tight and iterate on it like a prompt. Recommends explore→plan→code→commit workflows, using subagents to verify details/investigate without polluting main context, and course-correcting early rather than letting the agent run unsupervised for a long time.
+
+## 2. Context engineering
+**Anthropic official.** "Effective context engineering for AI agents" — https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents. Frames context engineering as the successor discipline to prompt engineering: curating the optimal token set at each inference step, not just wording one prompt. Core constraint: transformers have finite "attention budget" (n² pairwise cost), so context degrades in quality as it grows regardless of window size ("context rot"). Guiding principle: "find the smallest set of high-signal tokens that maximize the likelihood of your desired outcome." Four concrete techniques: (a) **compaction** — summarize/distill history near the context limit and restart with a condensed version, maximizing recall first then trimming redundant tool output; (b) **structured note-taking** — persist memory to files/external memory outside the context window (e.g. an NOTES.md/progress file) rather than keeping it all live; (c) **sub-agent architectures** — specialized agents do focused work in a clean context window and report back condensed summaries (~1,000–2,000 tokens) to a coordinator; (d) **just-in-time retrieval** — load file paths/queries/refs at runtime instead of pre-loading everything, mirroring how humans keep lightweight pointers rather than full documents in working memory. Recommends a hybrid: some upfront retrieval for speed, autonomous exploration for the rest.
+
+## 3. Multi-agent orchestration
+**Anthropic official.** "How we built our multi-agent research system" — https://www.anthropic.com/engineering/multi-agent-research-system. Uses an orchestrator-worker pattern: a lead agent decomposes the task and spawns parallel subagents with distinct tools/prompts/trajectories ("separation of concerns... reduces path dependency"). Subagents report condensed findings back; the lead synthesizes and decides if more research is needed; a separate CitationAgent handles attribution as a final pass — staged handoffs using lightweight references rather than raw dumps, to avoid information loss. Prompting the orchestrator to delegate well (explicit objectives, output format, tool guidance per subagent) and to scale effort to query complexity was as important as the architecture itself. Measured a 90.2% improvement over single-agent Opus 4 on internal research evals with an Opus-4-lead/Sonnet-4-subagent setup.
+Separately, Claude Code's own subagent docs describe `.claude/agents/*.md` files (project- or user-level) with YAML frontmatter (name, description, tools, model) — each subagent gets its own system prompt, tool permissions, and context window; intermediate noise (file reads, searches) stays inside the subagent and only the final output returns to the parent. (Primary source for this mechanism is Claude Code product docs/blog: https://claude.com/blog/subagents-in-claude-code — official but product-doc rather than engineering-blog register.)
+
+## 4. Prompt caching
+**Anthropic official docs.** https://platform.claude.com/docs/en/build-with-claude/prompt-caching. Up to 4 cache breakpoints per prompt (e.g., after system prompt, after tool defs, after a retrieved doc, after few-shot examples), or a single breakpoint at the end of static content with automatic longest-prefix matching. Best practice: put stable, reusable content (system instructions, tool definitions, background docs) first/cached, and append variable conversation content after the breakpoint. Cache TTL is 5 minutes by default (refreshed on each hit), with a paid 1-hour option. Changing `tool_choice` or adding/removing images anywhere in the prompt invalidates the cache.
+
+## 5. Tool-use design
+**Anthropic official.** "Writing effective tools for AI agents—using AI agents" — https://www.anthropic.com/engineering/writing-tools-for-agents, plus platform docs on tool definition/use (https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview, .../define-tools, .../tool-reference) and a newer post "Advanced tool use" (anthropic.com/engineering/advanced-tool-use). Guidance: tools should be intentionally/clearly defined, consolidated (avoid many overlapping/near-duplicate tools), use agent context judiciously (don't force huge schemas into every call), and be combinable across workflows. Advanced tool use post specifically addresses working with large tool libraries: agents should discover/load tool definitions on-demand rather than stuffing every tool spec into context upfront — directly relevant to a project with many subagents/skills.
+
+## 6. Claude certification / Anthropic Academy
+**Anthropic official, exists but narrow.** Anthropic Academy (launched ~March 2026, skilljar.com/anthropic.com hosted) offers 13 free self-paced courses with completion certificates, including "Building with the Claude API" (anthropic.skilljar.com/claude-with-the-anthropic-api) covering Messages API, tool use, RAG, agents — described as core prep for a separate paid, proctored "Claude Certification Program" (Associate/Developer/Architect roles, via Pearson VUE, gated to Claude Partner Network orgs: pearsonvue.com/us/en/anthropic.html). No public official curriculum doc enumerates exact competencies tested; what's published is course-level topic lists, not a graded competency rubric. Treat the "Architect" framing (advising/designing/building Claude solutions) as the closest official language to "using Claude as an architecture tool," but do not overstate — the granular exam blueprint isn't publicly documented by Anthropic itself.
+
+## 7. Memory files / hand-off documents
+**Anthropic official (Claude Code product docs).** https://code.claude.com/docs/en/memory: CLAUDE.md is read at the start of every session; keep it short, specific, and link out to deeper docs rather than making it a manual; supports project-level, user-level, and local (gitignored) scopes; treat it as living documentation the team edits like code. No official Anthropic engineering-blog post specifically prescribes a "root CLAUDE.md + per-directory CLAUDE.md" fan-out pattern by name — that composition is a natural extension of the documented single-file mechanism plus the context-engineering post's "structured note-taking / persist memory outside the context window" principle (item 2 above), not a distinct named pattern Anthropic has separately blessed. Flag this distinction in the final writeup rather than claiming direct endorsement.
+
+Third-party sources encountered (deprioritized, not cited as authoritative): Medium/Substack/Builder.io/hidekazu-konishi.com explainer posts on subagents, caching, and CLAUDE.md mechanics — useful for corroborating detail but not treated as primary evidence above.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

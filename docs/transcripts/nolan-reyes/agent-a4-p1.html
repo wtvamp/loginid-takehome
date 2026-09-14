@@ -1,0 +1,1233 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nolan Reyes — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Nolan Reyes</h1><div class="sub">Hire (track 03) · session 11 of 15 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 5:30 AM PDT – Sep 13, 2026 5:32 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #34 on github.com/wtvamp/loginid-takehome, branch feature/LT-51, for track 03-engineering-delivery, from your usual production-failure-mode/token-lifecycle lens. This implements LT-51: a real OAuth2 client-credentials grant (RFC 6749 §4.4) at POST /auth/token, a real GET /.well-known/jwks.json, and a Postgres-backed client store, replacing an earlier in-process design after Priya Nandakumar (05) ruled the client store must be a real, persistent Postgres database (a separate `issuer` database) — QA client seeding is explicitly out-of-band (a runbook 04 owns), never a migration or application code. The worktree is at /Users/warrenthompson/Source/LoginID-worktrees/LT-51 (branch feature/LT-51, based on origin/main).
+
+You previously found real production bugs in this track's LT-40 work (JWKS fetch ignoring context/timeout, lock held during I/O, unbounded map growth, a per-kid rate-limit starvation vulnerability) — bring that same lens here.
+
+Key files (new unless noted):
+- migrations/issuer/00001_initial_schema.sql — oauth_client table: client_id PK with a charset CHECK, client_secret_hash nullable + secret_state (none/set/revoked) with a tying CHECK, granted_scopes TEXT[] constrained to exactly 1 element, audience, status (active/disabled), created_at/updated_at. No PII columns, no retention sweep on this table (deliberate — it's not a person's data).
+- internal/api/clientstore.go — Argon2id hashSecret/verifySecret (constant-time via crypto/subtle), a fixed dummyHash computed once at package init from a hardcoded plaintext, PostgresClientStore.Get querying via database/sql (pgx), with a hand-rolled parsePostgresTextArray for the TEXT[] column (deliberately restricted to plain unquoted elements — this project's scope values never contain commas/braces/quotes).
+- internal/api/tokenhandler.go — NewTokenHandler: GrantLimiter.Allow gates before ever touching the client store; store.Get; secret comparison branch is `if found &amp;&amp; rec.ClientSecretHash != "" { verify against real hash } else { verify against dummyHash; fail }` — this covers unknown client_id, found-but-secret_state!=set, AND found-but-wrong-secret uniformly for timing purposes; RecordFailure/RecordSuccess after; mints an RS256 JWT via jwt/v5 with a 10-minute fixed TTL, no refresh tokens (by design — client re-authenticates with its own secret on expiry).
+- internal/api/signingkey.go — LoadSigningKey: reads a PEM file, tries PKCS1 then PKCS8, derives a kid deterministically from sha256(marshaled public key DER), so the kid should be stable across process restarts as long as the underlying key file doesn't change.
+- internal/app/issuer_router.go (new) — NewIssuerRouter: constructs a fresh InProcessGrantLimiter per process (in-process, not shared across replicas — same limitation the rest of this codebase's rate-limiting components have, by the same "mechanism is this track's call" reasoning) with hardcoded backoff constants (base 1s, max 5m, alert threshold 5 consecutive failures) that are an engineering default, not a 02-ruled number. Builds a PostgresClientStore over a *sql.DB that main.go opens once at process startup and keeps for the process's whole lifetime.
+- cmd/api-service/main.go — ModeIssuer: LoadSigningKey failure is Fatal (process won't start at all without a valid signing key — no partial-degraded story here, unlike the DB-repository nil-fallback pattern used elsewhere in this codebase); the issuer *sql.DB is opened once (sql.Open never dials) and handed to NewIssuerRouter — if the issuer database is down at that moment, or later goes down mid-process-lifetime, what actually happens to in-flight /auth/token requests?
+- Tests already added: tokenhandler_test.go (RFC 6749 shapes, byte-identical error bodies, GrantLimiter-deny-before-store-touch ordering, nil-store fail-closed), clientstore_pg_test.go (real Postgres via TEST_POSTGRES_DSN, migration + CHECK constraints + Get all verified against a real throwaway container already), signingkey_test.go (kid stability across reloads), issuer_verifier_integration_test.go (real mint through real LT-40 JWT middleware over a real JWKS HTTP fetch).
+
+Please run `go build ./...`, `go vet ./...`, and `go test ./...` yourself in that worktree, then focus on:
+1. Token lifecycle/production-failure-mode concerns: what happens when the issuer's Postgres connection is lost mid-process (not at startup, but hours into running)? Does *sql.DB's own pooling/retry behavior make /auth/token degrade sanely (503-ish server_error per request) or is there a failure mode (goroutine pile-up, hung requests, connection exhaustion) this doesn't guard against? Compare against how LT-40 handles a similar DB-loss scenario for the verifier side (nil-repo fail-closed pattern) — is there an equivalent gap here for the issuer side that wasn't caught?
+2. GrantLimiter is in-process and per-replica (not shared) — is that a real production gap worth flagging now, or an acceptable, already-understood limitation given every other rate-limiting/backoff component in this codebase makes the same trade-off? Does the PR/code say so explicitly, or does it read as if backed by something more robust than it is?
+3. The 10-minute fixed token TTL with no refresh mechanism, no revocation beyond flipping oauth_client.status to 'disabled' or secret_state to 'revoked' at the row level — does the code correctly ensure a revoked/disabled client's ALREADY-ISSUED tokens still verify successfully until they expire (this is a deliberate design point per the refinement doc, not a bug) — confirm this is actually true given how AuthContext/JWTMiddleware works, since a naive implementation might accidentally check client status per-request somewhere it shouldn't.
+4. Does opening the issuer *sql.DB once at process start (not per-request) create any resource leak or connection-pool starvation risk over a long process lifetime, especially combined with the GrantLimiter's own in-memory backoff state also living for the process's full lifetime?
+5. Kid derivation and rotation: if the signing key file is ever rotated (new key deployed), does the kid change correctly, and is there any window where tokens signed with an old kid become unverifiable in a way that's worse than what LT-40's kid-rotation support already handles gracefully (LT-40 supports multiple kids in the JWKS response simultaneously) — or is this entirely outside this PR's scope because JWKS serving here only ever serves ONE key at a time (single-key issuer, not multi-key)? If it's single-key-only, is that a real production gap (no zero-downtime key rotation possible) worth naming explicitly, even if out of scope to fix now?
+6. Anything else from your usual pattern-matching on production failure modes.
+
+Report your findings in plain prose to Renata Cole (03 lead), as you'd normally report a review. If everything holds up as a reasonable take-home-scope trade-off, say so plainly — distinguish "this is a real bug" from "this is a known, acceptable scope limitation that should just be named explicitly," since those get different treatment.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Bash</span> cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md 2&gt;/dev/null | head -100</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md 2&gt;/dev/null | head -100"
+}</pre><div class="lbl">result</div><pre># Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+
+## Context
+
+Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+waste, state the dependency order this track already committed to in
+`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+`CLAUDE.md`'s org section. No code is written in this phase.
+
+## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+
+*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+
+| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+|---|---|---|---|---|
+| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+
+## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+
+All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+profile-gen text-first, after "hiring go".
+
+**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+
+*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+
+**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+
+*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+
+**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+
+*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+
+**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+
+*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+
+Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+reviewer, a different function — allowed per variance rule 2).
+
+## 3. Debate plan
+
+- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+  Decision recorded in `decisions/go-layout-debate.md`.
+- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+  S2–S4.
+
+  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+  performed by the actual receiver instead of a proxy.
+- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+
+## 4. Dependencies (and the Service boundaries output for 04)
+
+**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+anything.
+
+**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+
+*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+Service boundaries section is the current, authoritative version — it has since gained</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; git log --oneline -5 &amp;&amp; echo --- &amp;&amp; git d</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; git log --oneline -5 &amp;&amp; echo --- &amp;&amp; git diff origin/main...HEAD --stat"
+}</pre><div class="lbl">result</div><pre>c9457ab LT-51: real OAuth2 client-credentials grant, Postgres-backed client store
+6462394 Merge PR #32: Ingress route /profiles (Prefix) → api-service; JWKS stays in-cluster
+405b668 Add Ingress route for /profiles (LT-39/LT-40's protected routes)
+3005d78 LT-40 deployed; Ingress gap found by probing; LT-51 client-store ruling; LOG
+6f01bec Merge PR #28: fix stale S3 citation in context-propagation.md
+---
+ cmd/api-service/main.go                          |  48 +++-
+ go.mod                                           |   7 +-
+ go.sum                                           |  10 +
+ internal/api/clientstore.go                      | 229 +++++++++++++++++
+ internal/api/clientstore_pg_test.go              | 200 +++++++++++++++
+ internal/api/clientstore_test.go                 |  92 +++++++
+ internal/api/issuer_verifier_integration_test.go |  84 +++++++
+ internal/api/jwksendpoint.go                     |  33 +++
+ internal/api/jwksendpoint_test.go                |  62 +++++
+ internal/api/signingkey.go                       | 110 +++++++++
+ internal/api/signingkey_test.go                  | 128 ++++++++++
+ internal/api/tokenhandler.go                     | 223 +++++++++++++++++
+ internal/api/tokenhandler_test.go                | 300 +++++++++++++++++++++++
+ internal/app/issuer_router.go                    |  69 ++++++
+ internal/config/config.go                        |  44 +++-
+ migrations/issuer/00001_initial_schema.sql       |  77 ++++++
+ 16 files changed, 1703 insertions(+), 13 deletions(-)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/tokenhandler.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/tokenhandler.go"
+}</pre><div class="lbl">result</div><pre>// tokenhandler.go implements POST /auth/token — RFC 6749 §4.4's
+// client-credentials grant. This is the one endpoint in the API that
+// follows OAuth2's own wire format (form-encoded, HTTP Basic client
+// auth) rather than this project's usual JSON convention, because it's
+// the one endpoint implementing a named external grant type — and, per
+// Tobias Lindqvist's objection (LT-51 refinement), the endpoint most
+// likely to be pattern-matched against known real-world OAuth2
+// timing-oracle bugs by an outside reviewer.
+package api
+
+import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+)
+
+// tokenTTL is this issuer's fixed token lifetime — the middle of
+// handoff-03-auth.md's 5-15 minute range. No refresh tokens: a client
+// re-authenticates with its own client secret on expiry, per
+// api-auth-design.md's standing TTL-only-revocation design (this
+// story's own non-goal list; not re-litigated here).
+const tokenTTL = 10 * time.Minute
+
+// tokenErrorResponse is RFC 6749 §5.2's error body shape.
+type tokenErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// tokenResponse is RFC 6749 §5.1's success body shape.
+type tokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	Scope       string `json:"scope"`
+}
+
+func writeTokenError(w http.ResponseWriter, status int, errCode string) {
+	if status == http.StatusUnauthorized {
+		// RFC 6749 §5.2: invalid_client with a 401 MUST carry
+		// WWW-Authenticate identifying the auth scheme this endpoint
+		// expects — the same header any HTTP Basic-protected resource
+		// returns, not something specific to OAuth2 error semantics.
+		w.Header().Set("WWW-Authenticate", `Basic realm="token"`)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = jsonEncode(w, tokenErrorResponse{Error: errCode})
+}
+
+// jsonEncode is a one-line indirection kept trivial and named for
+// clarity rather than inlined at each of this file's two call sites.
+func jsonEncode(w http.ResponseWriter, v any) error {
+	return json.NewEncoder(w).Encode(v)
+}
+
+// NewTokenHandler implements POST /auth/token. deps bundles the
+// collaborators this handler wires to rather than reimplements per
+// refinement/LT-51.md's explicit instruction: store is the client
+// datastore (this story's own, new); limiter is PR #30's already-built
+// GrantLimiter, called exactly as its own doc comment specifies (Allow
+// before authentication, RecordFailure/RecordSuccess after); key is the
+// loaded signing key this story mints tokens with.
+func NewTokenHandler(store ClientStore, limiter GrantLimiter, key *SigningKey, issuer string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		// store is nil when the issuer database was never configured
+		// (config.Config.IssuerDBDSN empty) — fail every grant closed
+		// with server_error rather than panic on a nil ClientStore, the
+		// same fail-closed shape NewVerifierRouter uses for a nil
+		// dao.Repository. This deliberately runs before ParseForm/
+		// BasicAuth so a misconfigured issuer fails identically for
+		// every request shape, not just the ones that get far enough to
+		// reach store.Get.
+		if store == nil {
+			writeTokenError(w, http.StatusInternalServerError, "server_error")
+			return
+		}
+
+		// RFC 6749 §4.4: form-encoded, not JSON. r.ParseForm reads the
+		// body as application/x-www-form-urlencoded regardless of a
+		// caller's declared Content-Type, which is deliberately
+		// permissive here — this handler's job is accepting the one wire
+		// format the spec names, not policing a header a legitimate
+		// client-credentials implementation might send inconsistently.
+		if err := r.ParseForm(); err != nil {
+			writeTokenError(w, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		if r.PostForm.Get("grant_type") != "client_credentials" {
+			writeTokenError(w, http.StatusBadRequest, "unsupported_grant_type")
+			return
+		}
+
+		clientID, clientSecret, hasBasicAuth := r.BasicAuth()
+		if !hasBasicAuth {
+			// No Authorization header at all: reject before ever
+			// touching the client store or GrantLimiter — there is no
+			// client_id yet to key either by.
+			writeTokenError(w, http.StatusUnauthorized, "invalid_client")
+			return
+		}
+
+		sourceIP := sourceIPFrom(r)
+
+		allowed, err := limiter.Allow(ctx, clientID, sourceIP)
+		if err != nil {
+			writeTokenError(w, http.StatusInternalServerError, "server_error")
+			return
+		}
+		if !allowed {
+			// RFC 6749 doesn't name a status for endpoint-level
+			// throttling (it's a brute-force control this project adds
+			// on top of the spec, not part of it) — 429 matches this
+			// API's own convention elsewhere (internal/api/ratelimit.go,
+			// internal/api/touchcounter.go) for the same class of
+			// decision.
+			writeTokenError(w, http.StatusTooManyRequests, "slow_down")
+			return
+		}
+
+		rec, found, err := store.Get(ctx, clientID)
+		if err != nil {
+			writeTokenError(w, http.StatusInternalServerError, "server_error")
+			return
+		}
+
+		// Both branches run the SAME Argon2id comparison at the SAME
+		// cost before deciding anything — a found client with a real
+		// secret on file (secret_state = "set") compares against its own
+		// hash; every other case (client_id not found at all, OR found
+		// but secret_state is "none"/"revoked" and ClientSecretHash is
+		// empty) compares against the fixed dummyHash instead of
+		// skipping the comparison or short-circuiting on a malformed
+		// hash. Whichever branch runs, exactly one verifySecret call
+		// happens before the outcome is known, so an unknown client_id,
+		// a not-yet-secreted or revoked client, and a wrong secret for a
+		// fully provisioned one all take statistically indistinguishable
+		// time (Tobias Lindqvist's objection, LT-51 refinement) —
+		// closing the timing side-channel the identical response body
+		// alone leaves open.
+		var secretOK bool
+		if found &amp;&amp; rec.ClientSecretHash != "" {
+			secretOK = verifySecret(clientSecret, rec.ClientSecretHash)
+		} else {
+			_ = verifySecret(clientSecret, dummyHash)
+			secretOK = false
+		}
+
+		if !found || !secretOK || !rec.Active {
+			limiter.RecordFailure(ctx, clientID, sourceIP)
+			writeTokenError(w, http.StatusUnauthorized, "invalid_client")
+			return
+		}
+		limiter.RecordSuccess(ctx, clientID, sourceIP)
+
+		// scope is optional per RFC 6749 §4.4: omitted means issue the
+		// client's full granted set, which — per ClientRecord's own doc
+		// comment on why GrantedScope is singular, not a set — is
+		// exactly one scope. A requested scope must equal that one
+		// scope exactly; anything else (a different scope, an empty
+		// string when one is explicitly passed, more than one
+		// space-delimited value) is invalid_scope. This is stricter than
+		// "subset of a set" only because the set this system provisions
+		// is never larger than one element to begin with.
+		requested := strings.TrimSpace(r.PostForm.Get("scope"))
+		if requested != "" &amp;&amp; Scope(requested) != rec.GrantedScope {
+			writeTokenError(w, http.StatusBadRequest, "invalid_scope")
+			return
+		}
+
+		now := time.Now()
+		c := claims{
+			Scope: string(rec.GrantedScope),
+			RegisteredClaims: jwt.RegisteredClaims{
+				Issuer:    issuer,
+				Subject:   clientID,
+				Audience:  jwt.ClaimStrings{rec.Audience},
+				IssuedAt:  jwt.NewNumericDate(now),
+				ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
+				// jti: audit-correlation aid only, per handoff-03-auth.md
+				// v4 — never checked against a denylist at verification
+				// time (this design's TTL-only revocation stands).
+				ID: uuid.NewString(),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodRS256, c)
+		token.Header["kid"] = key.Kid
+		signed, err := token.SignedString(key.Private)
+		if err != nil {
+			writeTokenError(w, http.StatusInternalServerError, "server_error")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store") // RFC 6749 §5.1: token responses must not be cached
+		w.WriteHeader(http.StatusOK)
+		_ = jsonEncode(w, tokenResponse{
+			AccessToken: signed,
+			TokenType:   "Bearer",
+			ExpiresIn:   int(tokenTTL.Seconds()),
+			Scope:       string(rec.GrantedScope),
+		})
+	}
+}
+
+// sourceIPFrom extracts the caller's address for GrantLimiter's
+// per-source-IP key. r.RemoteAddr is the direct TCP peer — if this
+// service ever sits behind a proxy that needs X-Forwarded-For honored
+// instead, that's a deployment-topology decision for whoever wires the
+// proxy, not assumed here.
+func sourceIPFrom(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Good — token status per grant, not checked at verification. Let me continue reading remaining files.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/clientstore.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/clientstore.go"
+}</pre><div class="lbl">result</div><pre>// clientstore.go implements the token-issuer's client store per
+// handoff-03-auth.md v6/LT-51: client_id, name, an Argon2id-hashed
+// secret (same floor as threat-model.md Asset 1's password hashing),
+// granted scope, audience, and status.
+//
+// Backed by a real, persistent PostgreSQL database — a separate
+// "issuer" database (migrations/issuer/00001_initial_schema.sql), not
+// an in-process map — per Priya Nandakumar's (05) explicit ruling on
+// this story: unlike every other in-process component this track has
+// built (RateLimiter, TouchCounter, GrantLimiter), a client credential
+// has to survive a pod restart, and the QA client seeded for the PO's
+// live-URL review has to be seeded out-of-band (04's runbook), never by
+// this application's own code or a migration — "migrations carry
+// reference data, never credentials." Lives in its own database, not
+// 05's main DAO schema, so a cross-database join to user_profile is
+// structurally impossible, not just policy-forbidden (F8 resolution,
+// handoff-03-auth.md v3).
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+
+	"golang.org/x/crypto/argon2"
+)
+
+// Argon2id parameters — one fixed cost profile for every client secret
+// (and the fixed dummy hash timing-parity depends on, below). Matches
+// threat-home.md Asset 1's own floor: this is not a separate, weaker
+// hashing decision for machine credentials, it's the same discipline
+// applied to a second credential class.
+const (
+	argon2Time    = 1
+	argon2Memory  = 64 * 1024 // 64 MiB
+	argon2Threads = 4
+	argon2KeyLen  = 32
+	argon2SaltLen = 16
+)
+
+// hashSecret returns an Argon2id hash of secret, encoded as
+// "&lt;base64-salt&gt;$&lt;base64-hash&gt;" — self-contained, no separate parameter
+// storage needed since every hash in this store uses the same fixed
+// profile above.
+func hashSecret(secret string) (string, error) {
+	salt := make([]byte, argon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("api: generating salt: %w", err)
+	}
+	hash := argon2.IDKey([]byte(secret), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	return base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(hash), nil
+}
+
+// verifySecret reports whether secret matches encodedHash, produced by
+// hashSecret. Comparison is constant-time (crypto/subtle) — Argon2id's
+// own cost already dominates timing versus a plain []byte equality, but
+// there is no reason to reintroduce a length/byte-position side channel
+// on top of it for free.
+func verifySecret(secret, encodedHash string) bool {
+	parts := strings.SplitN(encodedHash, "$", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	want, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	got := argon2.IDKey([]byte(secret), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+// dummyHash is computed once, at package init, from a fixed (not
+// secret — its value doesn't matter, only that it's fixed and uses the
+// SAME cost parameters as every real hash) salt and secret. The
+// unknown-client_id path in the token handler runs verifySecret against
+// this exact value before returning invalid_client, so an unknown
+// client_id and a wrong-secret-for-a-known-client_id take
+// statistically indistinguishable time (Tobias Lindqvist's objection,
+// LT-51 refinement — RFC 6749 §5.2's identical-response-body
+// requirement closes the content side channel; this closes the timing
+// one, which the body requirement alone leaves wide open).
+var dummyHash = mustHashSecret("dummy-fixed-secret-never-issued-to-any-real-client")
+
+func mustHashSecret(secret string) string {
+	h, err := hashSecret(secret)
+	if err != nil {
+		// Only reachable if crypto/rand itself fails at process start —
+		// a condition this process cannot usefully continue past anyway
+		// (every real hashSecret call would fail identically).
+		panic(fmt.Sprintf("api: computing fixed dummy Argon2id hash: %v", err))
+	}
+	return h
+}
+
+// ClientRecord is one row in the client store.
+type ClientRecord struct {
+	ClientID         string
+	Name             string // accountability — no shared credentials across a team
+	ClientSecretHash string // Argon2id, hashSecret's encoding
+	GrantedScope     Scope  // exactly one — see ClientStore's doc comment
+	Audience         string // the JWT aud this client's tokens are minted for
+	Active           bool
+}
+
+// ClientStore is the token-issuer's client datastore — client
+// authentication and scope/audience lookup, keyed by client_id.
+//
+// GrantedScope is a single Scope, not a set, even though
+// handoff-03-auth.md v6 describes "granted_scopes" as a provisioned
+// subset of the four possible values: this project's own provisioning
+// model (decisions/search-authz-scoping.md; LT-40's singleScope) commits
+// to exactly one scope per credential — "a client is provisioned for the
+// one use case its credential exists for" — and AuthContext (LT-39)
+// carries exactly one Scope per token by the same design. A client
+// record holding more than one granted scope would have no way to
+// produce a token LT-40's verifier accepts (which rejects a multi-scope
+// token outright, deliberately, not an oversight this story should route
+// around). So provisioning is one client credential per scope a caller
+// needs, not one client holding several — consistent with, not a
+// deviation from, the system's existing single-scope-per-token
+// commitment.
+type ClientStore interface {
+	// Get returns the record for clientID, ok=false if no such client
+	// exists at all (a different outcome from an inactive client, which
+	// Get still returns — the token handler decides what "not usable"
+	// means, this interface only reports what's on file).
+	Get(ctx context.Context, clientID string) (rec ClientRecord, ok bool, err error)
+}
+
+// PostgresClientStore is a real, persistent ClientStore backed by the
+// issuer database's oauth_client table (migrations/issuer/
+// 00001_initial_schema.sql). Constructed once at startup from a *sql.DB
+// dialed against config.Config.IssuerDBDSN — always the "pgx" driver,
+// since the issuer database has no SQLite/CockroachDB peer to abstract
+// over (unlike 05's main DAO schema), so this reaches for
+// database/sql directly rather than routing through dao.New's
+// multi-backend factory, which was never asked to know about this
+// table.
+type PostgresClientStore struct {
+	db *sql.DB
+}
+
+// NewPostgresClientStore wraps an already-opened *sql.DB. Opening (and
+// its lifetime) is cmd/api-service/main.go's responsibility, same
+// pattern as LT-52's separate /healthz ping handle — this type never
+// calls sql.Open itself.
+func NewPostgresClientStore(db *sql.DB) *PostgresClientStore {
+	return &amp;PostgresClientStore{db: db}
+}
+
+// Get deliberately does not distinguish "no such client_id",
+// "provisioned but secret_state != 'set'", or "status = 'disabled'" in
+// its ok/err results — all three come back as ok=true with whatever's
+// on file (or ok=false only for a genuinely absent row), and it's
+// tokenhandler.go's job to decide what counts as usable. This keeps
+// every one of those states on the same code path through
+// verifySecret/dummyHash, so none of them becomes a second timing
+// signal alongside the unknown-client_id one dummyHash already closes.
+func (s *PostgresClientStore) Get(ctx context.Context, clientID string) (ClientRecord, bool, error) {
+	var rec ClientRecord
+	var secretHash sql.NullString
+	var scopesRaw string
+	var status string
+
+	row := s.db.QueryRowContext(ctx, `
+		SELECT client_id, name, client_secret_hash, granted_scopes, audience, status
+		FROM oauth_client
+		WHERE client_id = $1
+	`, clientID)
+	err := row.Scan(&amp;rec.ClientID, &amp;rec.Name, &amp;secretHash, &amp;scopesRaw, &amp;rec.Audience, &amp;status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ClientRecord{}, false, nil
+	}
+	if err != nil {
+		return ClientRecord{}, false, fmt.Errorf("api: querying oauth_client: %w", err)
+	}
+	scopes, err := parsePostgresTextArray(scopesRaw)
+	if err != nil {
+		return ClientRecord{}, false, fmt.Errorf("api: parsing granted_scopes for %q: %w", clientID, err)
+	}
+	if len(scopes) != 1 {
+		// The migration's own CHECK (ck_oauth_client_granted_scopes_single)
+		// makes this unreachable in practice — surfaced as an error rather
+		// than silently taking scopes[0] of an empty slice, in case that
+		// constraint is ever relaxed without this code being revisited.
+		return ClientRecord{}, false, fmt.Errorf("api: oauth_client row %q has %d granted scopes, want exactly 1", clientID, len(scopes))
+	}
+
+	rec.ClientSecretHash = secretHash.String // "" when NULL (secret_state != "set")
+	rec.GrantedScope = Scope(scopes[0])
+	rec.Active = status == "active"
+	return rec, true, nil
+}
+
+// parsePostgresTextArray decodes Postgres's default text output format
+// for a TEXT[] column (e.g. "{profile:search}") into its elements. This
+// project's own scope values are plain identifiers — letters, digits,
+// ":" — never containing a comma, brace, backslash, or double quote, so
+// this deliberately does not implement the general Postgres array
+// literal grammar (quoted elements, backslash escaping, NULL elements):
+// pgx/v5's stdlib driver has no built-in database/sql Scanner for array
+// types, and a hand-rolled general parser would be untested complexity
+// this table's actual value domain never exercises. Any input outside
+// that domain is an error, not a best-effort guess.
+func parsePostgresTextArray(raw string) ([]string, error) {
+	if len(raw) &lt; 2 || raw[0] != '{' || raw[len(raw)-1] != '}' {
+		return nil, fmt.Errorf("not a Postgres array literal: %q", raw)
+	}
+	inner := raw[1 : len(raw)-1]
+	if inner == "" {
+		return nil, nil
+	}
+	elems := strings.Split(inner, ",")
+	for _, e := range elems {
+		if e == "" || strings.ContainsAny(e, `{}"\`) {
+			return nil, fmt.Errorf("unsupported array element %q in %q — only plain unquoted values are supported", e, raw)
+		}
+	}
+	return elems, nil
+}</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/app/issuer_router.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/app/issuer_router.go"
+}</pre><div class="lbl">result</div><pre>package app
+
+import (
+	"database/sql"
+	"log"
+	"net/http"
+	"time"
+
+	"loginid-takehome/internal/api"
+	"loginid-takehome/internal/config"
+)
+
+// grantLimiterBaseBackoff/maxBackoff/alertThreshold are this story's own
+// engineering defaults for api.GrantLimiter (handoff-03-auth.md v3
+// requires the mechanism — failed-grant rate limiting/backoff per
+// client_id and per source IP, plus alerting on a sustained run against
+// one client_id — but names no specific numbers, unlike LT-40's
+// touch-cap and JWKS-staleness constants, which 02 ruled explicitly).
+// Doubling from 1s, capped at 5m, mirrors this codebase's other
+// exponential-backoff component (InProcessRateLimiter's own doc
+// comment); alerting after 5 consecutive failures against one client_id
+// is a deliberately low bar — a real client mistyping a secret twice is
+// not the failure mode this exists to catch, five in a row without an
+// intervening success is. Flagged for 02's review rather than treated
+// as a closed decision.
+const (
+	grantLimiterBaseBackoff    = 1 * time.Second
+	grantLimiterMaxBackoff     = 5 * time.Minute
+	grantLimiterAlertThreshold = 5
+)
+
+// NewIssuerRouter builds api-service's issuer-mode router — LT-51's real
+// token-issuance handler and JWKS-serving endpoint, replacing the plain
+// NewRouter's placeholder /auth/token (LT-32) on this Deployment only.
+// The verifier Deployment never calls this — it has no signing key, no
+// client store, and no legitimate use for either (LT-32's
+// physical-absence criterion).
+//
+// key must be non-nil (cmd/api-service/main.go's config.Load already
+// fails startup in issuer mode if JWT_SIGNING_KEY_FILE is missing or
+// unreadable — see resolveSigningKeyPath's own doc comment — so by the
+// time this function runs, a missing key is a startup bug, not a
+// runtime condition this router needs to degrade gracefully for).
+//
+// issuerDB is the *sql.DB dialed against config.Config.IssuerDBDSN — may
+// be nil if IssuerDBDSN was never configured, in which case /auth/token
+// fails every grant closed with server_error rather than panicking on a
+// nil ClientStore, the same fail-closed shape NewVerifierRouter uses for
+// a nil dao.Repository.
+func NewIssuerRouter(cfg config.Config, key *api.SigningKey, issuerDB *sql.DB) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthHandler("api-service"))
+	mux.HandleFunc("/.well-known/jwks.json", api.NewJWKSHandler(key))
+
+	limiter := api.NewInProcessGrantLimiter(
+		grantLimiterBaseBackoff, grantLimiterMaxBackoff, grantLimiterAlertThreshold,
+		func(clientID string, consecutiveFailures int) {
+			log.Printf("api-service: ALERT sustained failed grants against client_id=%s (%d consecutive)", clientID, consecutiveFailures)
+		},
+	)
+
+	var store api.ClientStore
+	if issuerDB != nil {
+		store = api.NewPostgresClientStore(issuerDB)
+	}
+	mux.Handle("POST /auth/token", api.NewTokenHandler(store, limiter, key, cfg.AuthJWTIssuer))
+
+	return mux
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat cmd/api-service/main.go"
+}</pre><div class="lbl">result</div><pre>// Command api-service is the client-facing binary (Q1 DAO + Q2 REST API,
+// bearer-token auth). Per decisions/go-layout-debate.md, this file is a
+// thin wrapper — route registration and config loading live in
+// internal/app and internal/config, not here.
+package main
+
+import (
+	"database/sql"
+	"log"
+	"net/http"
+
+	"loginid-takehome/internal/api"
+	"loginid-takehome/internal/app"
+	"loginid-takehome/internal/config"
+	"loginid-takehome/internal/dao"
+
+	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
+	// registers the "pgx" database/sql driver this file uses directly
+	// for the issuer database below — Go dedupes an import by package
+	// path, so this isn't a second registration, and no separate blank
+	// import of that package is needed here.
+	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+)
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("api-service: loading config: %v", err)
+	}
+
+	addr := cfg.HTTPAddr
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
+
+	var handler http.Handler
+	switch app.Mode(cfg.AppMode) {
+	case app.ModeVerifier:
+		// The verifying Deployment is the one that talks to the
+		// database (LT-39's search/retrieve handlers) — the issuer
+		// Deployment (below) never needs a Repository at all, since it
+		// only mints tokens.
+		//
+		// A failure here does NOT Fatal: on a cluster where the database
+		// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
+		// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
+		// misconfigured, this process must still come up and serve
+		// /healthz rather than crash-loop the whole verifying Deployment
+		// over a dependency only two of its routes need. repo stays nil;
+		// NewVerifierRouter fails those two routes closed with 503
+		// instead of panicking on a nil Repository.
+		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+		if err != nil {
+			log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+			repo = nil
+		}
+		handler = app.NewVerifierRouter(cfg, repo)
+	case app.ModeIssuer:
+		// config.Load already fails startup if JWT_SIGNING_KEY_FILE is
+		// missing/unreadable in issuer mode (resolveSigningKeyPath) —
+		// LoadSigningKey failing here means the file is readable but not
+		// a valid RSA private key, a genuine misconfiguration this
+		// process cannot usefully run past (there is no "serve /healthz,
+		// fail closed" story for a router with no key at all: both of
+		// its routes need one). Fatal, not degrade — unlike the DAO
+		// repository above, which has a real story for "not there yet."
+		key, err := api.LoadSigningKey(cfg.JWTSigningKeyPath)
+		if err != nil {
+			log.Fatalf("api-service: loading JWT signing key: %v", err)
+		}
+
+		// issuerDB, like the verifier's pingDB, is opened independently
+		// of whether it can be reached yet — sql.Open never dials. Empty
+		// IssuerDBDSN (not configured yet) leaves issuerDB nil;
+		// NewIssuerRouter's /auth/token then fails every grant closed
+		// with server_error rather than panicking on a nil ClientStore.
+		var issuerDB *sql.DB
+		if cfg.IssuerDBDSN != "" {
+			issuerDB, err = sql.Open("pgx", cfg.IssuerDBDSN)
+			if err != nil {
+				log.Printf("api-service: opening issuer database: %v — /auth/token will return server_error until this is resolved", err)
+				issuerDB = nil
+			}
+		} else {
+			log.Printf("api-service: ISSUER_DB_DSN/ISSUER_DB_DSN_FILE not set — /auth/token will return server_error until this is resolved")
+		}
+
+		handler = app.NewIssuerRouter(cfg, key, issuerDB)
+	default:
+		// The unrecognized-mode fallback (NewRouter itself already logs
+		// loudly and treats it as verifier — see app.NewRouter's own doc
+		// comment) doesn't need the full verifier stack; NewRouter's
+		// /healthz alone covers it, matching the safer of the two route
+		// sets.
+		handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))
+	}
+
+	if err := http.ListenAndServe(addr, handler); err != nil {
+		log.Fatalf("api-service: %v", err)
+	}
+}</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/signingkey.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/signingkey.go"
+}</pre><div class="lbl">result</div><pre>// signingkey.go loads the issuer's RSA private key (LT-32's
+// JWT_SIGNING_KEY_FILE) and derives its kid — the one piece both the
+// token-minting handler and the JWKS-serving handler need. Nothing in
+// this package outside this file (and the two handlers that hold a
+// *SigningKey by value) ever touches private-key material — the
+// verifying binary never imports this file's actual key bytes at all
+// (LT-40's own structural guarantee is unaffected: KeySource/JWKSCache
+// there only ever handle public keys).
+package api
+
+import (
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
+	"fmt"
+	"os"
+)
+
+// SigningKey bundles the parsed private key with its derived kid, so
+// every caller (the token handler, the JWKS handler) uses the exact same
+// kid a verifier fetching this key's JWKS entry will look up.
+type SigningKey struct {
+	Private *rsa.PrivateKey
+	Kid     string
+}
+
+// LoadSigningKey reads and parses an RSA private key from path (PEM,
+// PKCS#1 or PKCS#8 — either is accepted since key-generation tooling
+// varies in which it emits, and this isn't a place to add friction over).
+//
+// kid is derived deterministically from the public key's own bytes
+// (SHA-256 of its PKIX DER encoding, base64url, first 16 characters) —
+// not a separately configured value. This means a key rotation (a new
+// JWT_SIGNING_KEY_FILE, LT-32's existing mechanism) automatically
+// produces a new kid with no separate "bump the kid" step to forget, and
+// two different key files can never silently collide on the same kid.
+func LoadSigningKey(path string) (*SigningKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("api: reading signing key %q: %w", path, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("api: signing key %q is not valid PEM", path)
+	}
+
+	priv, err := parseRSAPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("api: parsing signing key %q: %w", path, err)
+	}
+
+	pubDER, err := x509.MarshalPKIXPublicKey(&amp;priv.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("api: marshaling public key for kid derivation: %w", err)
+	}
+	sum := sha256.Sum256(pubDER)
+	kid := base64.RawURLEncoding.EncodeToString(sum[:])[:16]
+
+	return &amp;SigningKey{Private: priv, Kid: kid}, nil
+}
+
+func parseRSAPrivateKey(der []byte) (*rsa.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+	keyAny, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("not a PKCS#1 or PKCS#8 RSA private key: %w", err)
+	}
+	rsaKey, ok := keyAny.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("PKCS#8 key is not an RSA private key")
+	}
+	return rsaKey, nil
+}
+
+// JWKS renders this key's public component as a single-key RFC 7517
+// JSON Web Key Set document — the exact shape internal/api/jwks.go's
+// client-side parser (parseJWKS) expects, since that's the contract
+// this handler must satisfy for LT-40's verifier to consume it.
+func (k *SigningKey) JWKS() jwksResponse {
+	pub := k.Private.PublicKey
+	return jwksResponse{
+		Keys: []jwk{{
+			Kty: "RSA",
+			Kid: k.Kid,
+			Alg: jwtAlgorithm,
+			Use: "sig",
+			N:   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+			E:   base64.RawURLEncoding.EncodeToString(bigEndianExponentBytes(pub.E)),
+		}},
+	}
+}
+
+// bigEndianExponentBytes encodes e as the minimal big-endian byte string
+// a JWK's "e" member expects (RFC 7518 §6.3.1) — mirrors the same
+// encoding this package's own tests already use to build a JWK from an
+// *rsa.PublicKey (internal/api/jwks_test.go's bigEndianExponent), kept as
+// its own small function here since production code (unlike a test
+// helper) shouldn't reach across a _test.go file.
+func bigEndianExponentBytes(e int) []byte {
+	b := []byte{byte(e &gt;&gt; 16), byte(e &gt;&gt; 8), byte(e)}
+	i := 0
+	for i &lt; len(b)-1 &amp;&amp; b[i] == 0 {
+		i++
+	}
+	return b[i:]
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Confirms single-key JWKS only. Let me check the migration schema and run build/vet/test.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat migrations/issuer/00001_initial_schem</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat migrations/issuer/00001_initial_schema.sql"
+}</pre><div class="lbl">result</div><pre>-- +goose Up
+-- The token issuer's client store (LT-51), per Priya Nandakumar's (05)
+-- ruling on this story: a separate `issuer` database — same PostgreSQL
+-- instance as the main DAO's database, but a distinct database so a
+-- cross-database join to user_profile/user_credential is structurally
+-- impossible, not just policy-forbidden. Its own goose invocation
+-- (GOOSE_DBSTRING pointed at this database) and its own version table
+-- (goose_db_version_issuer), run as a third invocation alongside the
+-- existing backend-directory + shared/ pair (05-data-ops/
+-- migration-approach.md §"Mechanism 04 needs"). issuer_migrator/
+-- issuer_runtime roles carry over the same DDL-vs-DML privilege split
+-- LT-52's postgres-in-namespace.md already established for the main
+-- database — provisioning those roles is 04's manifest/runbook
+-- responsibility, not this file's.
+--
+-- oauth_client has no PII columns, ever (Priya's ruling) — client_id and
+-- name identify a machine client application, not a person, so there is
+-- no retention clock on this table (contrast user_profile/
+-- user_credential's retention sweep, dao.Repository.DeleteExpired).
+--
+-- secret_state mirrors user_credential.secret_state's own lesson (05's
+-- ruling, cited directly): three states (none/set/revoked) must be
+-- asserted explicitly by a named CHECK, never collapsed into an
+-- incidental "hash IS NULL" inference — a row can be `revoked` with a
+-- NULL hash for a reason distinct from `none` never having had one.
+--
+-- client_id's charset CHECK is this table's own identifier rule —
+-- 05-data-ops/multi-db-strategy.md amendment A4 (canonical UUID
+-- validation) is explicitly NOT applied here, since client_id is a
+-- human/CI-assigned slug (e.g. issued by the QA seeding runbook), not a
+-- generated UUID primary key like every other table in this project.
+--
+-- granted_scopes is TEXT[] — deliberately PostgreSQL-only, unlike the
+-- main DAO schema's portability requirement (05-data-ops/
+-- multi-db-strategy.md), since the issuer database has no SQLite/
+-- CockroachDB peer to stay portable against.
+--
+-- name and audience are additions beyond Priya's explicitly named column
+-- list (client_id, client_secret_hash/secret_state, granted_scopes,
+-- status, created_at/updated_at, no PII) — both operationally necessary
+-- (name: a human-readable label for which application a row is, for
+-- anyone reading this table directly; audience: LT-51's token claims
+-- need a per-client `aud` value, since idp-connector and api-service are
+-- different audiences) and neither is PII. Flagged explicitly for
+-- Priya's DDL review rather than assumed silently.
+
+CREATE TABLE oauth_client (
+	client_id TEXT NOT NULL,
+	name TEXT NOT NULL,
+	client_secret_hash TEXT,
+	secret_state TEXT NOT NULL,
+	granted_scopes TEXT[] NOT NULL,
+	audience TEXT NOT NULL,
+	status TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	CONSTRAINT pk_oauth_client PRIMARY KEY (client_id),
+	CONSTRAINT ck_oauth_client_id_charset CHECK (client_id ~ '^[A-Za-z0-9._-]{8,64}$'),
+	CONSTRAINT ck_oauth_client_name_nonempty CHECK (length(trim(name)) &gt; 0),
+	CONSTRAINT ck_oauth_client_secret_state_enum CHECK (secret_state IN ('none', 'set', 'revoked')),
+	CONSTRAINT ck_oauth_client_secret_state CHECK (
+		(secret_state = 'set' AND client_secret_hash IS NOT NULL)
+		OR
+		(secret_state IN ('none', 'revoked') AND client_secret_hash IS NULL)
+	),
+	-- Exactly one scope, not merely a nonempty set: this project's
+	-- provisioning model is one client credential per scope a caller
+	-- needs (decisions/search-authz-scoping.md; LT-40's singleScope
+	-- rejects a multi-scope token outright), so the DB-level invariant
+	-- matches the Go-level one instead of merely allowing it.
+	CONSTRAINT ck_oauth_client_granted_scopes_single CHECK (array_length(granted_scopes, 1) = 1),
+	CONSTRAINT ck_oauth_client_audience_nonempty CHECK (length(trim(audience)) &gt; 0),
+	CONSTRAINT ck_oauth_client_status CHECK (status IN ('active', 'disabled'))
+);
+
+-- +goose Down
+DROP TABLE oauth_client;</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go build ./... 2&gt;&amp;1 | tail -60</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go build ./... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:30 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Build passes. Now vet and test.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -60</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go test ./... 2&gt;&amp;1 | tail -100</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; go test ./... 2&gt;&amp;1 | tail -100"
+}</pre><div class="lbl">result</div><pre>?   	loginid-takehome/cmd/api-service	[no test files]
+?   	loginid-takehome/cmd/idp-connector	[no test files]
+ok  	loginid-takehome/internal/api	(cached)
+ok  	loginid-takehome/internal/app	(cached)
+ok  	loginid-takehome/internal/config	(cached)
+ok  	loginid-takehome/internal/dao	(cached)
+ok  	loginid-takehome/internal/dao/conformance	(cached)
+ok  	loginid-takehome/internal/dao/postgres	(cached)
+ok  	loginid-takehome/internal/dao/sqlite	(cached)
+?   	loginid-takehome/internal/model	[no test files]</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:31 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; grep -n "TEST_POSTGRES_DSN\|SetMaxOpen\|S</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; grep -n \"TEST_POSTGRES_DSN\\|SetMaxOpen\\|SetConnMaxLifetime\\|SetMaxIdle\" internal/api/*.go cmd/api-service/main.go internal/app/*.go"
+}</pre><div class="lbl">result</div><pre>internal/api/clientstore_pg_test.go:16:// setupIssuerDB connects to TEST_POSTGRES_DSN (skipping the test if
+internal/api/clientstore_pg_test.go:24:	dsn := os.Getenv("TEST_POSTGRES_DSN")
+internal/api/clientstore_pg_test.go:26:		t.Skip("TEST_POSTGRES_DSN not set — skipping issuer-database integration test")
+internal/api/clientstore_pg_test.go:31:		t.Fatalf("opening TEST_POSTGRES_DSN: %v", err)
+internal/api/clientstore_pg_test.go:34:	db.SetMaxOpenConns(1)</pre></div></details><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/grantlimiter.go 2&gt;/dev/n</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; cat internal/api/grantlimiter.go 2&gt;/dev/null | head -150"
+}</pre><div class="lbl">result</div><pre>package api
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+// GrantLimiter enforces the token-issuing endpoint's own failed-grant
+// rate limiting and progressive backoff — handoff-03-auth.md v3:
+// "Token-endpoint brute-force protection, separate from the resource-API
+// rate limits ... failed-grant rate limiting and progressive backoff per
+// client_id and per source IP on the token-issuing endpoint itself, plus
+// alerting on a sustained run of failed grants against one client_id."
+//
+// This is genuinely separate from RateLimiter (ratelimit.go): that type
+// gates the resource API by an already-authenticated sub, at a fixed
+// per-minute rate; this one gates the endpoint that issues the
+// credential in the first place, keyed independently by client_id AND
+// by source IP — a distributed brute force (many IPs, one client_id)
+// and a single-source credential-stuffing run (one IP, many client_ids)
+// are both attack shapes this is meant to slow down, and either key
+// exceeding its own backoff blocks the attempt.
+//
+// Not wired to a live endpoint by this story: /auth/token's real grant
+// logic is LT-51's scope (this story's non-goals). This is the
+// ready-to-use component LT-51 constructs and calls from the real
+// handler — building it now, tested in isolation, means LT-51 doesn't
+// also have to design a backoff/alerting scheme under its own deadline.
+type GrantLimiter interface {
+	// Allow reports whether a grant attempt for clientID from sourceIP
+	// may proceed right now — false while either key is in backoff.
+	Allow(ctx context.Context, clientID, sourceIP string) (bool, error)
+	// RecordFailure records a failed grant attempt for both clientID and
+	// sourceIP, advancing each key's backoff state independently.
+	// Crossing the alert threshold for a given client_id (not source IP
+	// — the requirement names client_id specifically) fires alert
+	// exactly once per crossing, not once per subsequent failure.
+	RecordFailure(ctx context.Context, clientID, sourceIP string)
+	// RecordSuccess clears backoff state for both clientID and
+	// sourceIP — a successful grant resets the count, standard
+	// exponential-backoff practice: this deters sustained brute force,
+	// it does not permanently degrade a legitimate client that mistyped
+	// a secret once.
+	RecordSuccess(ctx context.Context, clientID, sourceIP string)
+}
+
+// grantBackoffState is one key's (a client_id's, or a source IP's)
+// consecutive-failure bookkeeping.
+type grantBackoffState struct {
+	consecutiveFailures int
+	blockedUntil        time.Time
+	alerted             bool
+}
+
+// InProcessGrantLimiter is an in-process implementation. As with
+// RateLimiter/TouchCounter's in-process implementations, a shared store
+// is the multi-instance replacement behind the same interface — the
+// mechanism is this track's call, per handoff-03-auth.md v3.
+//
+// Both maps are swept periodically (see sweepLocked) rather than left to
+// grow forever: this component's own doc comment names "a distributed
+// brute force (many IPs, one client_id)" as a defended attack shape, and
+// that is exactly the traffic pattern that would otherwise grow
+// bySourceIP without bound — every distinct attacking IP earns a
+// permanent entry that only a matching RecordSuccess would remove, which
+// an attacking IP by definition never triggers (Nolan Reyes, PR #30
+// review — the same unbounded-growth shape an earlier PR's TouchCounter
+// review already found and fixed once).
+type InProcessGrantLimiter struct {
+	mu             sync.Mutex
+	byClientID     map[string]*grantBackoffState
+	bySourceIP     map[string]*grantBackoffState
+	baseBackoff    time.Duration
+	maxBackoff     time.Duration
+	alertThreshold int
+	alertFn        func(clientID string, consecutiveFailures int)
+	now            func() time.Time
+	lastSweep      time.Time
+}
+
+// grantSweepInterval and grantEntryTTL bound how long a key's state
+// survives with no further failures against it. A blocked key is never
+// swept before its own backoff has elapsed (sweeping mid-block would
+// silently un-block it early); grantEntryTTL is generous past any
+// realistic maxBackoff so a legitimately still-escalating attacker isn't
+// reset early either.
+const (
+	grantSweepInterval = time.Minute
+	grantEntryTTL      = time.Hour
+)
+
+// NewInProcessGrantLimiter constructs a limiter with exponential backoff
+// starting at baseBackoff (doubling per consecutive failure, capped at
+// maxBackoff) and alertFn called once per client_id crossing
+// alertThreshold consecutive failures. alertFn may be nil (no alerting —
+// tests use this; production wiring passes a real sink).
+func NewInProcessGrantLimiter(baseBackoff, maxBackoff time.Duration, alertThreshold int, alertFn func(clientID string, consecutiveFailures int)) *InProcessGrantLimiter {
+	return &amp;InProcessGrantLimiter{
+		byClientID:     make(map[string]*grantBackoffState),
+		bySourceIP:     make(map[string]*grantBackoffState),
+		baseBackoff:    baseBackoff,
+		maxBackoff:     maxBackoff,
+		alertThreshold: alertThreshold,
+		alertFn:        alertFn,
+		now:            time.Now,
+	}
+}
+
+func (l *InProcessGrantLimiter) Allow(_ context.Context, clientID, sourceIP string) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	l.sweepLocked(now)
+	return !isBlocked(l.byClientID[clientID], now) &amp;&amp; !isBlocked(l.bySourceIP[sourceIP], now), nil
+}
+
+// sweepLocked drops any entry whose blockedUntil is at least
+// grantEntryTTL in the past — called with l.mu already held, at most
+// once per grantSweepInterval, so it adds no per-call cost beyond a
+// single time comparison on every other call.
+func (l *InProcessGrantLimiter) sweepLocked(now time.Time) {
+	if now.Sub(l.lastSweep) &lt; grantSweepInterval {
+		return
+	}
+	l.lastSweep = now
+	sweepMap(l.byClientID, now)
+	sweepMap(l.bySourceIP, now)
+}
+
+func sweepMap(m map[string]*grantBackoffState, now time.Time) {
+	for key, s := range m {
+		if now.Sub(s.blockedUntil) &gt;= grantEntryTTL {
+			delete(m, key)
+		}
+	}
+}
+
+func isBlocked(s *grantBackoffState, now time.Time) bool {
+	return s != nil &amp;&amp; now.Before(s.blockedUntil)
+}
+
+func (l *InProcessGrantLimiter) RecordFailure(_ context.Context, clientID, sourceIP string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+
+	cs := l.advance(l.byClientID, clientID, now)
+	l.advance(l.bySourceIP, sourceIP, now)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:31 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; grep -rn "ReadTimeout\|WriteTimeout\|http</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; grep -rn \"ReadTimeout\\|WriteTimeout\\|http.Server{\" cmd/api-service/main.go internal/app/*.go; echo ---; sed -n '1,80p' internal/config/config.go | grep -n \"Issuer\\|DSN\""
+}</pre><div class="lbl">result</div><pre>---
+28:	DBDSN    string // resolved value: DB_DSN_FILE content takes precedence over DB_DSN
+30:	AuthJWTIssuer   string
+50:	// IssuerDBDSN is the token issuer's own database connection string —
+55:	// same way DBDSN is (ISSUER_DB_DSN_FILE takes precedence over
+56:	// ISSUER_DB_DSN), matching handoff-04-secrets.md's discipline. Only
+63:	IssuerDBDSN string</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:31 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompath/Source/LoginID-worktrees/LT-51 2&gt;/dev/null; cd /Users/warrenthompson/Source</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompath/Source/LoginID-worktrees/LT-51 2&gt;/dev/null; cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; grep -rn \"SetMaxOpenConns\\|SetConnMaxLifetime\\|SetMaxIdleConns\\|sql.Open\" internal/dao/postgres/*.go"
+}</pre><div class="lbl">result</div><pre>internal/dao/postgres/postgres.go:36:	db, err := sql.Open("pgx", dsn)
+internal/dao/postgres/testutil_test.go:77:	db, err := sql.Open("pgx", dsn)
+internal/dao/postgres/testutil_test.go:87:	db.SetMaxOpenConns(1)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:31 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; sed -n '1,60p' internal/api/tokenhandler_</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-51 &amp;&amp; sed -n '1,60p' internal/api/tokenhandler_test.go | head -40"
+}</pre><div class="lbl">result</div><pre>package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+// fakeClientStore implements ClientStore, per decisions/test-double-strategy.md.
+type fakeClientStore struct {
+	records map[string]ClientRecord
+	getErr  error
+	gotIDs  []string // records every clientID Get was called with, for call-shape assertions
+}
+
+func (f *fakeClientStore) Get(_ context.Context, clientID string) (ClientRecord, bool, error) {
+	f.gotIDs = append(f.gotIDs, clientID)
+	if f.getErr != nil {
+		return ClientRecord{}, false, f.getErr
+	}
+	rec, ok := f.records[clientID]
+	return rec, ok, nil
+}
+
+// fakeGrantLimiter implements GrantLimiter.
+type fakeGrantLimiter struct {
+	allow           bool
+	allowErr        error
+	failedClientIDs []string
+	succeededIDs    []string
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:32 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">I have what I need. Here's my review, for Renata.
+
+---
+
+**PR #34 (LT-51) review — Nolan Reyes**
+
+Ran `go build ./...`, `go vet ./...`, `go test ./...` in the worktree — all clean (Postgres-dependent tests correctly skip without `TEST_POSTGRES_DSN`, same pattern as the rest of the suite). No build/vet complaints.
+
+**1. Issuer DB loss mid-process — this is the gap, and it's worse than the verifier's.** The verifier side's nil-repo pattern only covers the DB being *absent at startup*. What I actually got paged for once was the DB being *fine at startup and gone three hours later* — that's the scenario that matters, and it's not equivalent here to LT-40's fail-closed story at all. `issuerDB` is a `*sql.DB` opened once in `main.go` with no `SetMaxOpenConns`, no `SetConnMaxLifetime`, no `SetConnMaxIdleTime` — and I checked, the main DAO's `postgres.go` has the same gap, so this isn't new to LT-51, but it's inherited into a second, security-critical code path. `database/sql`'s default `MaxOpenConns` is 0 (unlimited). When the issuer Postgres actually goes away mid-lifetime (network partition, failover, connection pool on the DB side exhausted), every `/auth/token` request calls `store.Get` → `QueryRowContext`, and each of those either blocks on a fresh TCP dial (pgx's own dial timeout, not bounded by this code) or blocks on the query itself. There's no `http.Server{ReadTimeout, WriteTimeout}` set anywhere in this codebase either — I grepped, nothing — so nothing upstream caps how long a stuck request lives. Under sustained load during an outage that's goroutine pile-up plus unbounded new-connection attempts, not a clean 503. Contrast the verifier: a nil `Repository` there returns 503 *synchronously, no I/O attempted*. The issuer path attempts real I/O against a database that may be dead, every single request, for the process's whole life. That's the exact shape of my card-issuing incident — not identical trigger, but identical progression (dead dependency, no circuit breaker, request pile-up until the pod falls over). I'd flag this as a real gap, not scope-accepted, precisely because the PR explicitly modeled the nil-DB-at-startup case carefully and then didn't extend the same care to DB-loss-in-flight — it reads like the fail-closed story was solved once and assumed to cover both.
+
+Minimum fix I'd actually ask for before calling this production-ready: `SetMaxOpenConns` on `issuerDB` (bounds concurrent dial/query attempts) and a query timeout via `context.WithTimeout` wrapped around the `Get` call inside the handler (bounds per-request blocking regardless of request context). Neither requires touching the schema or the grant logic. If this is being deliberately deferred as a known trade-off, say so in the PR description — right now it reads as "this DB access is safe" by omission, the same trap the JWKS-fetch bug had.
+
+**2. GrantLimiter per-replica, in-process — acceptable, and stated.** Same trade-off as `RateLimiter`/`TouchCounter` elsewhere in this codebase, and the comment in `issuer_router.go` says so plainly ("mechanism is this track's call... same limitation the rest of this codebase's rate-limiting components have"). I don't need this fixed now — a distributed brute force spread across replicas dilutes the backoff, but that's a known, named limitation with a real remediation path (shared store) already implied by the interface boundary. No objection.
+
+**3. Revoked/disabled clients and already-issued tokens — confirmed correct.** Traced it: `rec.Active` (from `oauth_client.status`) is checked exactly once, at grant time, inside `NewTokenHandler`. Nothing in the JWT claims carries client status, and `AuthContext`/`JWTMiddleware` (LT-40 side, not touched by this PR) verifies signature/exp/aud/kid only — no client-store lookup at verification time, no `jti` denylist check (the comment on `ID: uuid.NewString()` explicitly disclaims that). So a disabled client's already-minted tokens verify fine until natural expiry, which is the stated design (TTL-only revocation). This is exactly right and matches what the refinement doc commits to — no naive "check status per-request" bug snuck in anywhere I could find.
+
+**4. Single long-lived `*sql.DB` + long-lived `GrantLimiter` state — not itself a leak, but see #1.** Opening once at startup is the correct pattern (matches how the main DAO does it) — the resource-leak risk isn't from holding the handle long-term, it's from the missing pool bounds under #1. The `GrantLimiter`'s in-memory maps are already swept (`grantSweepInterval`/`grantEntryTTL`), which is the exact unbounded-map bug I'm on record catching in PR #30 — good, that lesson stuck. No new leak here.
+
+**5. Single-key JWKS, no rotation support — real gap, correctly out of scope, should be named.** `LoadSigningKey`/`JWKS()` serve exactly one key, always. A key rotation (new `JWT_SIGNING_KEY_FILE`, pod restart) is a hard cutover: the moment the new key is loaded, the old kid disappears from JWKS entirely. Any token minted under the old kid that hasn't yet expired (up to the full 10-minute TTL) becomes unverifiable the instant the new process is live — LT-40's verifier will fetch JWKS, find no matching kid, and reject. That's strictly worse than LT-40's own multi-kid JWKS support, which this PR doesn't reuse on the issuer side. This is a real production gap (no zero-downtime key rotation), but I'd call it legitimately out of scope for LT-51 rather than a bug in what's here — the story built a single-key issuer, consistently, everywhere. I'd just want it named explicitly in the PR body or a follow-up ticket, because right now nothing documents that rotating the signing key causes up to 10 minutes of legitimate 401s for anyone holding a token minted just before the swap.
+
+**Overall:** timing-side-channel work (dummy hash, constant-time compare, identical error bodies) is solid and shows the LT-40 lessons were internalized. Items 2, 3, 4 are fine as-is or already correctly designed. Item 5 is a real, known gap worth a line in the PR description or a fast-follow ticket, not a blocker. Item 1 is the one I'd hold the PR on — the issuer path has no bound on what happens when its database goes away mid-flight, and that's the specific incident shape I've actually lived through, not a hypothetical.
+
+Files reviewed: `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/api/tokenhandler.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/api/clientstore.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/api/signingkey.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/api/grantlimiter.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/app/issuer_router.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/cmd/api-service/main.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/migrations/issuer/00001_initial_schema.sql`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-51/internal/dao/postgres/postgres.go` (comparison).</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The LT backlog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#0A0F1E;--bg2:#0F1629;--panel:#131C33;--ink:#EAF0FA;--ink2:#AEBBD3;--ink3:#6F7E9C;--rule:#263352;
+--agent:#3DD6C8;--done:#5BE49B;--deploy:#FFC857;--sec:#9D8CFF;
+--display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;--body:"Manrope",ui-sans-serif,system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;
+padding-block:48px 100px;padding-inline:clamp(16px,4vw,48px)}
+.wrap{max-width:1080px;margin:0 auto}
+a{color:var(--agent)}
+h1{font-family:var(--display);font-size:clamp(30px,4.4vw,48px);font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+h2{font-family:var(--display);font-size:20px;font-weight:600;margin:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)}
+p.lede{color:var(--ink2);max-width:70ch;font-size:17px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:26px 0 34px}
+.kpi{border:1px solid var(--rule);border-radius:11px;padding:13px 15px;background:var(--bg2)}
+.kpi .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.kpi .v{font-family:var(--display);font-size:28px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+.epic{margin-top:38px;padding:16px 18px;border:1px solid var(--rule);border-left:3px solid var(--sec);border-radius:11px;background:var(--bg2);
+display:flex;justify-content:space-between;gap:14px;align-items:baseline;flex-wrap:wrap}
+.epic .n{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.tblwrap{overflow-x:auto;margin-top:12px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);
+text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--rule);font-weight:500}
+td{padding:10px 12px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink2)}
+td.k{font-family:var(--mono);white-space:nowrap}
+td.s{color:var(--ink)}
+.pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+padding:2px 8px;border-radius:999px;background:rgba(91,228,155,.13);color:var(--done);white-space:nowrap}
+.pill.task{background:rgba(255,200,87,.13);color:var(--deploy)}
+td.t{font-family:var(--mono);font-size:12px;color:var(--ink3);white-space:nowrap}
+.back{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:12px;text-decoration:none;
+border:1px solid var(--rule);border-radius:999px;padding:8px 14px;margin-bottom:26px}
+footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--rule);color:var(--ink3);font-size:13px}
+@media (max-width:600px){td.t{font-size:11px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="index.html">&larr; Back to the retrospective</a>
+<span class="eyebrow">Jira project LT &middot; snapshot</span>
+<h1>The backlog, start to finish</h1>
+<p class="lede">Every issue in the project, as it stood when the work closed. The live board is at <a href="https://uplifttech.atlassian.net/jira/software/projects/LT/boards/1">uplifttech.atlassian.net</a>, which needs an Atlassian account; this page needs nothing. Each key links through to the real issue, where the comments record who did the work, which pull request carried it, and who reviewed it live before it closed.</p>
+<div class="kpis"><div class="kpi"><div class="k">Issues</div><div class="v">53</div></div><div class="kpi"><div class="k">Stories &amp; tasks</div><div class="v">48</div></div><div class="kpi"><div class="k">Done</div><div class="v">48</div></div><div class="kpi"><div class="k">Epics</div><div class="v">5</div></div><div class="kpi"><div class="k">Reopened</div><div class="v">19</div></div></div>
+<div class="epic"><h2><a href="https://uplifttech.atlassian.net/browse/LT-1">LT-1</a> &middot; 01 Product &amp; Industry Research (incl. Design)</h2><span class="n">8 issues</span></div>
+<div class="tblwrap"><table><thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead><tbody>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-6">LT-6</a></td><td class="s">Audit every claim in the framing/rationale docs for evidence</td><td class="t">Task</td><td><span class="pill task">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-7">LT-7</a></td><td class="s">Resolve whether the password baseline is a deliberate framing choice or an over-read</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-8">LT-8</a></td><td class="s">Harden the connector/API rationale as the single source of truth for 03</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-9">LT-9</a></td><td class="s">State product requirements for search authorization</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-10">LT-10</a></td><td class="s">Write UX notes for the two surfaces on top of this backend</td><td class="t">Task</td><td><span class="pill task">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-11">LT-11</a></td><td class="s">Evaluator-legibility cold read of the industry framing thesis</td><td class="t">Task</td><td><span class="pill task">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-12">LT-12</a></td><td class="s">Track 01 housekeeping: hiring, registry, status</td><td class="t">Task</td><td><span class="pill task">Done</span></td><td class="t">Sat 12 Sep, 14:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-13">LT-13</a></td><td class="s">Address cross-track consistency pass findings assigned to 01</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:23</td></tr>
+</tbody></table></div>
+<div class="epic"><h2><a href="https://uplifttech.atlassian.net/browse/LT-2">LT-2</a> &middot; 02 AI Architecture &amp; Security Architecture</h2><span class="n">13 issues</span></div>
+<div class="tblwrap"><table><thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead><tbody>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-21">LT-21</a></td><td class="s">Ratify the orchestration-pattern catalog and add the attack-tree template</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-22">LT-22</a></td><td class="s">Harness-constraints addendum to planning-approach.md</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-23">LT-23</a></td><td class="s">Red/blue: connector token lifecycle</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-24">LT-24</a></td><td class="s">Adversarial pair: search-API authorization scoping</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-25">LT-25</a></td><td class="s">Structured written debate: ai-workflow-narrative.md&#x27;s core claim</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-26">LT-26</a></td><td class="s">Hand-off 02→03: auth scheme, validation point, authz requirements</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-27">LT-27</a></td><td class="s">Hand-off 02→04: secrets inventory and never-log list</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-28">LT-28</a></td><td class="s">Independent second review of the security-graded documents</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-29">LT-29</a></td><td class="s">Revise ai-workflow-narrative.md for the org layer</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-30">LT-30</a></td><td class="s">threat-model.md maintenance</td><td class="t">Task</td><td><span class="pill task">Done</span></td><td class="t">Sat 12 Sep, 15:11</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-31">LT-31</a></td><td class="s">Independent review of 03&#x27;s auth middleware and connector token code</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:42</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-32">LT-32</a></td><td class="s">Split the token issuer into an isolated Deployment</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 21:30</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-33">LT-33</a></td><td class="s">Wire api-service&#x27;s client credential for the connector call</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 10:18</td></tr>
+</tbody></table></div>
+<div class="epic"><h2><a href="https://uplifttech.atlassian.net/browse/LT-3">LT-3</a> &middot; 03 Engineering &amp; Delivery (Go implementation)</h2><span class="n">13 issues</span></div>
+<div class="tblwrap"><table><thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead><tbody>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-34">LT-34</a></td><td class="s">Scaffolding: Go module, entrypoints, bootstrap, config loading</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 20:55</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-35">LT-35</a></td><td class="s">DAO interface, domain types, sentinels, factory</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-36">LT-36</a></td><td class="s">Postgres/CockroachDB DAO implementation</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-37">LT-37</a></td><td class="s">SQLite DAO implementation</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-38">LT-38</a></td><td class="s">Conformance suite (05&#x27;s requirement, cross-backend)</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-39">LT-39</a></td><td class="s">REST handlers: search/retrieve user_profile (Q2)</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 07:25</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-40">LT-40</a></td><td class="s">Auth middleware (JWT validation)</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 07:06</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-41">LT-41</a></td><td class="s">Connector: /auth + /identity (Q3)</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:25</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-42">LT-42</a></td><td class="s">Handler and connector unit tests</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:38</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-43">LT-43</a></td><td class="s">README: implemented vs. stubbed, AI workflow, test strategy</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 10:24</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-44">LT-44</a></td><td class="s">Retention sweep: DeleteExpired / DeleteProfile wiring</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 11:43</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-51">LT-51</a></td><td class="s">Token issuance: OAuth2 client-credentials grant at /auth/token on the issuer Deployment</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 07:06</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-53">LT-53</a></td><td class="s">Demo console: a static page served by api-service at /demo that drives the live API</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 19:18</td></tr>
+</tbody></table></div>
+<div class="epic"><h2><a href="https://uplifttech.atlassian.net/browse/LT-4">LT-4</a> &middot; 04 Infra &amp; DevOps</h2><span class="n">7 issues</span></div>
+<div class="tblwrap"><table><thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead><tbody>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-20">LT-20</a></td><td class="s">Configure log-sink retention for the audit trail</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 14:28</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-45">LT-45</a></td><td class="s">Containerize api-service and idp-connector</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-46">LT-46</a></td><td class="s">Deliver secrets to both services per 02&#x27;s inventory</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 11:44</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-47">LT-47</a></td><td class="s">CI/CD pipeline: build, lint, test, scan, migrate, deploy</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 09:33</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-48">LT-48</a></td><td class="s">Local dev-loop: compose profiles for SQLite and Postgres</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 12:40</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-49">LT-49</a></td><td class="s">Observability: logging, metrics, never-log, sweep alerting</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 15:00</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-52">LT-52</a></td><td class="s">Database provisioning in-namespace: Postgres, DB credentials Secret, migration Job, DB_DSN_FILE wiring</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sun 13 Sep, 05:23</td></tr>
+</tbody></table></div>
+<div class="epic"><h2><a href="https://uplifttech.atlassian.net/browse/LT-5">LT-5</a> &middot; 05 Data Ops</h2><span class="n">7 issues</span></div>
+<div class="tblwrap"><table><thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Closed</th></tr></thead><tbody>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-14">LT-14</a></td><td class="s">Rule the multi-database abstraction shape</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:57</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-15">LT-15</a></td><td class="s">Settle the Search() query shape</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:57</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-16">LT-16</a></td><td class="s">Deliver the Go-shaped DAO contract to track 03</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:58</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-17">LT-17</a></td><td class="s">Cold-read the 05→03 hand-off and fix what fails</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:58</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-18">LT-18</a></td><td class="s">Set PII retention windows and the deletion mechanism</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:58</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-19">LT-19</a></td><td class="s">Deliver the migration approach to track 04</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 14:58</td></tr>
+<tr><td class="k"><a href="https://uplifttech.atlassian.net/browse/LT-50">LT-50</a></td><td class="s">Add the retention/deletion methods to the DAO contract</td><td class="t">Story</td><td><span class="pill ">Done</span></td><td class="t">Sat 12 Sep, 15:17</td></tr>
+</tbody></table></div>
+<footer>Snapshot taken 13 September 2026, after the last story closed. The five epics stay in Refinement because they are containers, not work items. Nineteen stories failed their first live review and were sent back before they passed.</footer>
+</div>
+</body>
+</html>

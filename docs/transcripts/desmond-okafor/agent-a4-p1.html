@@ -1,0 +1,1235 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desmond Okafor — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Desmond Okafor</h1><div class="sub">Hire (track 01) · session 3 of 6 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 10:19 AM PDT – Sep 13, 2026 10:20 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Lead</span><div class="body">You are Desmond Okafor, claims auditor for track 01. Naomi (PO) needs a claims check on the newly-written `03-engineering-delivery/README.md` (Renata's LT-43 deliverable, PR merged as commit 541235c, in the actual Go repo cloned at /tmp/lt34review — NOT this docs-only working tree, which doesn't have the Go source).
+
+Task: verify every checkable factual claim in the README against ground truth in /tmp/lt34review (run `git fetch &amp;&amp; git reset --hard origin/main` first if it looks stale — HEAD should be 541235c). Specifically:
+
+1. **Model/effort claims**: README says every implementation story in 03's backlog runs `sonnet, high` except the connector (`opus, high`). Check this against `03-engineering-delivery/backlog.md`'s own `Model/effort:` lines (in the docs tree at /Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.md) — count how many stories say `sonnet, high` and confirm exactly one (the connector) says `opus, high`.
+
+2. **Decision docs cited**: README cites `decisions/go-layout-debate.md`, `decisions/error-semantics.md`, `decisions/context-propagation.md`, `decisions/test-double-strategy.md` with specific claimed outcomes (three-hats debate ruling to keep two binaries but share `internal/app`; Oren's rotating devil's-advocate closing the sentinel-error set; Nolan's pass on transaction/context-cancellation scoping; Marisol's pass on hand-written fakes vs codegen). Read each file (in /tmp/lt34review/decisions/ or wherever they live in that repo) and confirm the README's summary of each matches what the file actually says — not just that the files exist.
+
+3. **PR template claim**: confirm `.github/pull_request_template.md` exists in /tmp/lt34review and contains a literal checklist line about updating hand-written fakes when `dao.Repository` (or sub-interfaces) changes in the same PR.
+
+4. **The four live-tested findings** (CI skip fixed via real service containers + fail-loud fixtures; cross-replica rate-limit fixed via 1-replica + Recreate; api-service issuer/verifier AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE fix + startup check + URL-shape check; idp-connector's separate AUTH_JWKS_URL outage + startup check + the manifest-vs-config test in `internal/config/manifest_test.go`): I've already independently confirmed via `go build`/`go test` that cmd/api-service, cmd/idp-connector, and internal/config all build and pass, and that manifest_test.go really does parse k8s Deployment YAML and check env vars. Your job is to confirm the CI-service-container fix (check `.github/workflows/pr-check.yml` or equivalent for real Postgres/CockroachDB service containers) and the 1-replica/Recreate strategy claim (check the relevant Deployment manifests under `deploy/` for `replicas: 1` and `strategy: {type: Recreate}` on api-service and api-service-issuer).
+
+5. **Package layout claim**: confirm `cmd/api-service` and `cmd/idp-connector` really are thin (just main()/arg-parsing) and that `internal/app`/`internal/config` hold the shared logic, per the README's package-layout paragraph.
+
+Report back: for each of the 5 areas, PASS or a specific, precise discrepancy (quote the README claim and the actual file content that contradicts it). Do not just say "looks fine" — cite line numbers/file paths for anything you confirm or flag. Keep total report under 500 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details><details><summary><span class="tn">Bash</span> cd /tmp/lt34review 2&gt;/dev/null &amp;&amp; git fetch origin &amp;&amp; git reset --hard origin/main &amp;&amp; git log -1 --o</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /tmp/lt34review 2&gt;/dev/null &amp;&amp; git fetch origin &amp;&amp; git reset --hard origin/main &amp;&amp; git log -1 --oneline || echo \"NO REPO AT /tmp/lt34review\""
+}</pre><div class="lbl">result</div><pre>From https://github.com/wtvamp/loginid-takehome
+   541235c..2ebf511  main                    -&gt; origin/main
+ * [new branch]      docs/03-refinement-notes -&gt; origin/docs/03-refinement-notes
+ * [new branch]      docs/05-a3-fk-enforcement -&gt; origin/docs/05-a3-fk-enforcement
+ * [new branch]      docs/05-a6-validation-parity -&gt; origin/docs/05-a6-validation-parity
+ * [new branch]      docs/05-credential-verification-forward-req -&gt; origin/docs/05-credential-verification-forward-req
+ * [new branch]      docs/05-ddl-review-and-migration-order -&gt; origin/docs/05-ddl-review-and-migration-order
+ * [new branch]      docs/context-propagation-s3-fix -&gt; origin/docs/context-propagation-s3-fix
+ * [new branch]      docs/pr-template        -&gt; origin/docs/pr-template
+ * [new branch]      feature/LT-32           -&gt; origin/feature/LT-32
+ * [new branch]      feature/LT-32-infra     -&gt; origin/feature/LT-32-infra
+ * [new branch]      feature/LT-33           -&gt; origin/feature/LT-33
+ * [new branch]      feature/LT-35           -&gt; origin/feature/LT-35
+ * [new branch]      feature/LT-36           -&gt; origin/feature/LT-36
+ * [new branch]      feature/LT-37           -&gt; origin/feature/LT-37
+ * [new branch]      feature/LT-38           -&gt; origin/feature/LT-38
+ * [new branch]      feature/LT-39           -&gt; origin/feature/LT-39
+ * [new branch]      feature/LT-39-demo-data -&gt; origin/feature/LT-39-demo-data
+ * [new branch]      feature/LT-40           -&gt; origin/feature/LT-40
+ * [new branch]      feature/LT-41           -&gt; origin/feature/LT-41
+ * [new branch]      feature/LT-45           -&gt; origin/feature/LT-45
+ * [new branch]      feature/LT-46-vault-prep -&gt; origin/feature/LT-46-vault-prep
+ * [new branch]      feature/LT-47           -&gt; origin/feature/LT-47
+ * [new branch]      feature/LT-51           -&gt; origin/feature/LT-51
+ * [new branch]      feature/LT-51-infra     -&gt; origin/feature/LT-51-infra
+ * [new branch]      feature/LT-51-infra-clean -&gt; origin/feature/LT-51-infra-clean
+ * [new branch]      feature/LT-52           -&gt; origin/feature/LT-52
+ * [new branch]      feature/LT-52-healthz-db -&gt; origin/feature/LT-52-healthz-db
+ * [new branch]      feature/gitleaks-scoped-scan -&gt; origin/feature/gitleaks-scoped-scan
+ * [new branch]      fix/LT-35-checksum      -&gt; origin/fix/LT-35-checksum
+ * [new branch]      fix/LT-A6-phone-username -&gt; origin/fix/LT-A6-phone-username
+ * [new branch]      fix/LT-checksum-narrow  -&gt; origin/fix/LT-checksum-narrow
+ * [new branch]      fix/api-service-replicas-1 -&gt; origin/fix/api-service-replicas-1
+ * [new branch]      fix/authz-qa-vars       -&gt; origin/fix/authz-qa-vars
+ * [new branch]      fix/ci-db-services      -&gt; origin/fix/ci-db-services
+ * [new branch]      fix/ci-secret-mount-guard -&gt; origin/fix/ci-secret-mount-guard
+ * [new branch]      fix/ci-skip-not-pass    -&gt; origin/fix/ci-skip-not-pass
+ * [new branch]      fix/deploy-concurrency-matrix -&gt; origin/fix/deploy-concurrency-matrix
+ * [new branch]      fix/deploy-inject-commit-sha -&gt; origin/fix/deploy-inject-commit-sha
+ * [new branch]      fix/deploy-kubectl-install -&gt; origin/fix/deploy-kubectl-install
+ * [new branch]      fix/deploy-manifest-namespace-runasuser -&gt; origin/fix/deploy-manifest-namespace-runasuser
+ * [new branch]      fix/deploy-paths-ignore -&gt; origin/fix/deploy-paths-ignore
+ * [new branch]      fix/deploy-resourcequota-headroom -&gt; origin/fix/deploy-resourcequota-headroom
+ * [new branch]      fix/deploy-runson-scaleset -&gt; origin/fix/deploy-runson-scaleset
+ * [new branch]      fix/errcheck-app-test   -&gt; origin/fix/errcheck-app-test
+ * [new branch]      fix/idp-connector-config-validation -&gt; origin/fix/idp-connector-config-validation
+ * [new branch]      fix/idp-connector-jwks-env -&gt; origin/fix/idp-connector-jwks-env
+ * [new branch]      fix/ingress-profiles-routes -&gt; origin/fix/ingress-profiles-routes
+ * [new branch]      fix/jwks-fetch-observability -&gt; origin/fix/jwks-fetch-observability
+ * [new branch]      fix/jwks-url-port       -&gt; origin/fix/jwks-url-port
+ * [new branch]      fix/jwt-config-validation -&gt; origin/fix/jwt-config-validation
+ * [new branch]      fix/migration-job-dns-wait -&gt; origin/fix/migration-job-dns-wait
+ * [new branch]      fix/oauth-client-phc-hash -&gt; origin/fix/oauth-client-phc-hash
+ * [new branch]      fix/test-db-isolation   -&gt; origin/fix/test-db-isolation
+HEAD is now at 2ebf511 LOG: LT-33 Done — onboarding mediator deployed ec09f3e; LT-43 In Test; LT-46 awaiting Vault names
+2ebf511 LOG: LT-33 Done — onboarding mediator deployed ec09f3e; LT-43 In Test; LT-46 awaiting Vault names</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> find /tmp/lt34review -iname "README.md" -path "*03*"; echo "---"; find /tmp/lt34review -iname "READM</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /tmp/lt34review -iname \"README.md\" -path \"*03*\"; echo \"---\"; find /tmp/lt34review -iname \"README.md\" | head -20"
+}</pre><div class="lbl">result</div><pre>/tmp/lt34review/03-engineering-delivery/README.md
+---
+/tmp/lt34review/03-engineering-delivery/README.md</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.md"
+}</pre><div class="lbl">result</div><pre>1	# Backlog — Track 03: Engineering &amp; Delivery
+2	
+3	Lead: Renata Cole. Epic: "Engineering &amp; Delivery — Go implementation of DAO, REST API, and IDP connector" (Jira key: LT-3).
+4	
+5	Split note on the DAO: the two-package abstraction (`postgres` serving Postgres+CockroachDB, `sqlite` separate — `05-data-ops/decisions/multi-db-abstraction.md`) plus the interface/composite layer plus the cross-backend conformance suite are four genuinely separate PR-sized units, not one story with three criteria — each backend package merges independently once the interface (S2) exists, and the conformance suite (S5) only makes sense once at least two backends exist to run it against. Splitting them keeps each story reviewable on its own and matches how the work will actually land as commits.
+6	
+7	---
+8	
+9	## S1. Scaffolding: Go module, entrypoints, shared bootstrap, config loading (LT-34)
+10	
+11	**Description:** Stand up the Go module and the two-binary skeleton the org already committed to in `PLANNING.md`'s Service boundaries section: `cmd/api-service`, `cmd/idp-connector`, both thin wrappers over a shared `internal/app` bootstrap package (route registration, config wiring) per `decisions/go-layout-debate.md`. `internal/config` loads the env-var surface named in `PLANNING.md` (`DB_DRIVER`, `DB_DSN`/`DB_DSN_FILE`, `HTTP_ADDR`, `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE`, `IDP_ABC_*`). Stub handlers only — no DAO, no auth, no connector logic yet; this story's job is a buildable skeleton other stories attach to.
+12	
+13	**Acceptance criteria:**
+14	- [ ] The receiving track (04, reading this for containerization) can act on the resulting layout without re-deriving the reasoning in `PLANNING.md` or `decisions/go-layout-debate.md`.
+15	- [ ] Both `cmd/*/main.go` are thin wrappers over `internal/app`; no route-registration or config-loading logic duplicated between them — enforcement site: code review against `decisions/go-layout-debate.md`'s ruling.
+16	- [ ] `internal/config` loads every variable named in `PLANNING.md`'s Service boundaries section, with `DB_DSN_FILE` taking precedence over `DB_DSN` when both are set — enforcement site: a config-loading unit test asserting precedence.
+17	- [ ] Module builds and both binaries start (against stub handlers) with no real backend configured.
+18	
+19	**Depends on:** none.
+20	**Model/effort:** sonnet, high.
+21	**Type:** Story.
+22	**Labels:** `track-03`, `no-code-yet`.
+23	
+24	---
+25	
+26	## S2. DAO interface, domain types, sentinels, factory (LT-35)
+27	
+28	**Description:** Implement the interface layer from `05-data-ops/multi-db-strategy.md`'s Go-shaped contract (§1–§4, §3c): the `Repository` composite (`Profiles()`, `Credentials()`, `Methods()`, `CreateProfileWithCredential()`, `DeleteExpired()`, `DeleteProfile()`, `Close()`), the three sub-interfaces, the domain structs (`UserProfile`, `UserCredential`, `AuthMethod`, `ProfileQuery`), the seven sentinel errors, and the `dao.New(driver, dsn)` factory signature. `DeleteExpired`/`DeleteProfile` are defined here as part of the composite skeleton; S11 owns the code that calls them, not their signatures. No backend logic yet — this is the shape both backend packages implement against, plus the fakes S9's tests use per `decisions/test-double-strategy.md`.
+29	
+30	**Acceptance criteria:**
+31	- [ ] A hire or reviewer unfamiliar with 05's reasoning can implement a backend against this package without re-reading `multi-db-strategy.md` — the Go types here are the contract, not a paraphrase of it.
+32	- [ ] Every sentinel in 05's §4 is defined verbatim (name and wrapped message), including `ErrAlreadyExists`'s status as an internal-error signal with no caller-reachable path — enforcement site: `dao` package source, doc comment on `ErrAlreadyExists` stating that status explicitly (per Oren's finding #1, ruled by 05).
+33	- [ ] `CreateProfileWithCredential(ctx, p, c)` exists on the composite per 05's §3b resolution, with `c.UserID` ignored on input — enforcement site: method signature plus a unit test asserting the input `UserID` is overwritten.
+34	- [ ] Pointer fields follow "absent, never empty" — a non-nil, empty `*string` is rejected as `ErrInvalidArgument` at the boundary, not silently accepted — enforcement site: input-validation unit test per field.
+35	
+36	**Depends on:** S1; **05: DAO Go-shaped contract** (`multi-db-strategy.md`, stable, accepted).
+37	**Model/effort:** sonnet, high.
+38	**Type:** Story.
+39	**Labels:** `track-03`, `no-code-yet`.
+40	
+41	---
+42	
+43	## S3. Postgres/CockroachDB DAO implementation (LT-36)
+44	
+45	**Description:** The `postgres` package implementing all three `Repository` sub-interfaces for both PostgreSQL and CockroachDB, per `multi-db-strategy.md`'s engine-aware retry-and-error seam requirement (§4). Includes the `crdb.ExecuteTx`-style retry wrapper on every write (CockroachDB stays at SERIALIZABLE per 05's ruling — READ COMMITTED was considered and rejected), SQLSTATE-plus-our-own-constraint-name error translation, and the transactional `CreateProfileWithCredential`.
+46	
+47	**Acceptance criteria:**
+48	- [ ] Implements against S2's interfaces with no re-derivation of 05's schema or error-translation reasoning.
+49	- [ ] Every write (`Create`, `Update`, `Upsert`, `Delete`, `CreateProfileWithCredential`) runs through the retry wrapper — enforcement site: the wrapper is the single call path every write method uses, verified by the conformance suite (S5) exercising a retryable condition against CockroachDB.
+50	- [ ] Driver errors translate to sentinels by structured code (SQLSTATE) plus our own named DDL constraints, never free-text matching — enforcement site: the translation table in `multi-db-strategy.md` §4, one `switch`/lookup per condition, no `strings.Contains` on an error message anywhere in this package.
+51	- [ ] `Upsert`'s `ON CONFLICT DO UPDATE SET` list explicitly excludes `created_at` — enforcement site: the SQL statement itself plus a unit test asserting `created_at` survives a re-hydration Upsert unchanged (per Oren's finding #3, ruled by 05).
+52	- [ ] Fuzzy name search uses the `LOWER(name) LIKE ?` form matching the GIN expression index, with explicit `%`/`_`/`\` escaping — enforcement site: query construction plus a unit test with a `%`-containing search term.
+53	
+54	**Depends on:** S2.
+55	**Model/effort:** sonnet, high.
+56	**Type:** Story.
+57	**Labels:** `track-03`, `no-code-yet`.
+58	
+59	---
+60	
+61	## S4. SQLite DAO implementation (LT-37)
+62	
+63	**Description:** The `sqlite` package implementing all three `Repository` sub-interfaces, per `multi-db-strategy.md`'s dialect-difference table: app-side UUID generation before insert, `LIKE`-based fuzzy search with explicit case folding to match Postgres row sets for ASCII input, extended-result-code error translation (`SQLITE_CONSTRAINT_*`) disambiguated by the same DDL constraint names as the Postgres package.
+64	
+65	**Acceptance criteria:**
+66	- [ ] Implements against S2's interfaces with no re-derivation of 05's schema or dialect reasoning.
+67	- [ ] `Create` generates the UUID in Go (SQLite has no server-side generation) before insert — enforcement site: the `Create` implementation, verified by the conformance suite asserting a populated `ID` comes back identically to the Postgres path.
+68	- [ ] Search folds case explicitly (`LOWER(col) LIKE LOWER(pattern)`) rather than relying on SQLite's default ASCII case-insensitivity, so behavior is asserted rather than incidental — enforcement site: the query construction plus the conformance suite's cross-backend result-set comparison.
+69	- [ ] `SQLITE_CONSTRAINT_UNIQUE`/`FOREIGNKEY`/`CHECK`/`PRIMARYKEY` map to the same sentinels as the Postgres package's SQLSTATE codes, disambiguated by the same constraint names — enforcement site: the translation table, verified by the conformance suite's sentinel-parity assertion.
+70	
+71	**Depends on:** S2.
+72	**Model/effort:** sonnet, high.
+73	**Type:** Story.
+74	**Labels:** `track-03`, `no-code-yet`.
+75	
+76	---
+77	
+78	## S5. Conformance suite (05's requirement, cross-backend) (LT-38)
+79	
+80	**Description:** One suite, written once against the `Repository` interfaces, run against every backend implementation (postgres, cockroachdb, sqlite) — not per-package unit tests, per `multi-db-strategy.md` §7 and `decisions/multi-db-abstraction.md`. This is the enforcement site for every guarantee in 05's contract that can't be a DDL constraint: identical `Search` result sets/ordering across backends (closing the documented SQLite `LIKE` case-sensitivity correctness gap, not a performance one), sentinel parity via `errors.Is` for every condition in §4, the secret-state rules (§5/§6.11), `is_active` enforcement (§6.10), and empty-string rejection on every `*string` filter.
+81	
+82	**Acceptance criteria:**
+83	- [ ] The suite is written once against the interface and executed against all three backends from one test file/table, not duplicated per package.
+84	- [ ] Asserts identical `Search` result sets and ordering across backends for ASCII input — enforcement site: this suite is the enforcement site named in `multi-db-strategy.md` for this guarantee; there is no other.
+85	- [ ] Asserts `errors.Is` sentinel parity for every condition in the §4 translation table, across all three backends.
+86	- [ ] Asserts the `requires_secret`/`secret_state` relationship (§6.11) and `is_active` (§6.10) — the two conditions 05 named as unable to have a DDL enforcement site.
+87	- [ ] CI (04's pipeline) runs this suite against every backend including CockroachDB, not just Postgres+SQLite — flagged to 04 if their pipeline doesn't.
+88	
+89	**Depends on:** S3, S4.
+90	**Model/effort:** sonnet, high.
+91	**Type:** Story.
+92	**Labels:** `track-03`, `no-code-yet`.
+93	
+94	---
+95	
+96	## S6. REST handlers: search/retrieve user_profile (Q2) (LT-39)
+97	
+98	**Description:** The client-facing handlers in `internal/api` implementing the assignment's Q2 (search and retrieve `user_profile`), built against S2's interfaces (fakes stand in for a real backend per `decisions/test-double-strategy.md`, so this doesn't wait on S3/S4). Implements the object-level `authorize(sub, scope, target)` call as an explicit in-handler step, not a second middleware, per the ruling in `handoff-03-auth.md` v3 (my own answer, confirmed by 02).
+99	
+100	**Acceptance criteria:**
+101	- [ ] Implements `handoff-03-auth.md` v3's scope vocabulary and pagination/rate-limit numbers without re-deriving 02's authz-scoping reasoning.
+102	- [ ] `authorize()` runs as an explicit call inside each handler after request parsing, before the DAO call — enforcement site: handler code structure, per the go-layout-debate.md-adjacent ruling recorded in this track's reply to 02. `authorize()` checks the `caller_referral`/caller-role data against the token-issuer's own datastore, not against 05's schema — 05 was never assigned that table (`handoff-03-auth.md` v3, F8).
+103	- [ ] `profile:search` responses carry masked PII fields by default (e.g. phone as `***-***-1234`, address reduced to `locality`/`region` only); unmasked detail requires a separate, separately-audited follow-up call under `profile:read:own` or `profile:read:any` against the specific record id — enforcement site: the search-response serialization path, distinct from the read-response one (`handoff-03-auth.md` v3, resolves F6).
+104	- [ ] Cursor-based pagination only, default page size 20, hard ceiling 50 — enforcement site: the pagination parameter parsing, rejecting any offset-based parameter. **The handler's 20/50 is the authoritative clamp, enforced before the DAO is ever called** — the DAO's own `Limit` bound (1..100, default 50 per `multi-db-strategy.md`) is a second, independent backstop only reachable if the handler clamp is bypassed, not a second policy a caller can rely on (consistency-pass F10: no document previously said which of the two governs).
+105	- [ ] A search request with no filter field at all is rejected by this handler before it reaches the DAO — the DAO itself treats an all-nil `ProfileQuery` as legal (`multi-db-strategy.md`), so this handler-layer rejection is the only enforcement site for "no bare unconstrained search" (consistency-pass F10, other half owned by 02 in `handoff-03-auth.md`).
+106	- [ ] A `profile:search` query is rejected outright, not truncated, if it would exceed the result cap unconstrained (e.g. a bare wildcard) — enforcement site: this handler's query-validation step, per `handoff-03-auth.md` v3's scope table (consistency-pass F52).
+107	- [ ] Unmapped DAO errors never surface `err.Error()` to the client; only the mapped sentinels' safe messages do — enforcement site: the boundary translation function from `decisions/error-semantics.md`. Authn failures (missing/invalid token) return 401; scope failures and `authorize()` policy denials both return 403 with an identical client body, distinguished only in the audit log (`decisions/error-semantics.md`, consistency-pass F7).
+108	- [ ] `profile:read:any` requests carry a `reason_code` from the closed enum on every call, logged with the audit record.
+109	- [ ] When `api-service` calls `idp-connector` on a caller's behalf, it obtains a `connector:identity-lookup`-scoped token first, using its own `CONNECTOR_CLIENT_ID`/`CONNECTOR_CLIENT_SECRET` credential (`PLANNING.md` config surface) — enforcement site: this handler-side outbound-client code, distinct from S8's idp-connector-side handlers, which only validate that token, not issue or hold this credential.
+110	
+111	**Depends on:** S2; **02: Auth scheme and authorization hand-off** (`handoff-03-auth.md` v3, accepted).
+112	**Model/effort:** sonnet, high.
+113	**Type:** Story.
+114	**Labels:** `track-03`, `security-graded`, `no-code-yet`.
+115	
+116	---
+117	
+118	## S7. Auth middleware (JWT validation) (LT-40)
+119	
+120	**Description:** The middleware at the `cmd/api-service` edge validating the client-credentials JWT scheme from `handoff-03-auth.md` v3 — public-key-only verification, `sub`/`scope`/`exp`/`iat`/`aud` claim checks, `kid`-based key rotation, no denylist (TTL-only revocation, a deliberate trade-off not to be re-litigated). Also covers the `APP_MODE=verifier|issuer` split (`PLANNING.md`) — this Deployment mode never mounts the signing key regardless of `APP_MODE`'s value, since `verifier` is this story's own code path and `issuer` is a separate mode of the same binary the F13 fix depends on to keep the two isolated by Deployment, not just by RBAC.
+121	
+122	**Acceptance criteria:**
+123	- [ ] Implements 02's token scheme without re-deriving the no-refresh/no-denylist reasoning in `api-auth-design.md`.
+124	- [ ] Rejects any token whose `aud` doesn't match this service's audience — enforcement site: the claim-validation step, with a unit test using a mismatched-audience token.
+125	- [ ] Verifies with the public key only; the private signing key never touches this binary's code path — enforcement site: dependency/import check (no signing-key material referenced in `internal/api`).
+126	- [ ] **Pins the expected signing algorithm and rejects any token whose header claims a different one**, including `alg: none` and a symmetric-algorithm downgrade using the public key as an HMAC secret (RFC 8725 §3.1) — enforcement site: explicit algorithm check in the JWT verification call, not left to the library's default (`handoff-03-auth.md` v3 names this as a common library footgun).
+127	- [ ] The token-issuing endpoint (the `APP_MODE=issuer` mode) has its own failed-grant rate limiting and progressive backoff per `client_id` and per source IP, separate from the resource-API limits below, with alerting on a sustained run of failed grants against one `client_id` — enforcement site: issuer-mode middleware, distinct from the verifier-mode rate limiter (`handoff-03-auth.md` v3).
+128	- [ ] Per-client-credential rate limits (60 req/min read, 10 req/min search) and the cumulative distinct-record-touch counter (rolling 24h) are enforced and alert on sustained near-limit usage, not just throttle — enforcement site: the rate-limit middleware plus its own test.
+129	- [ ] The deadline budget for a request (context propagation into the DAO layer) is sized to cover realistic p99 DAO latency, per `decisions/context-propagation.md`'s ruling — stated as a concrete number in this story's implementation, not left as "some deadline."
+130	
+131	**Depends on:** S1; **02: Auth scheme and authorization hand-off** (`handoff-03-auth.md` v3, accepted); **04: `APP_MODE` Deployment split** (`containerization-design.md`, F13).
+132	**Model/effort:** sonnet, high.
+133	**Type:** Story.
+134	**Labels:** `track-03`, `security-graded`, `no-code-yet`.
+135	
+136	---
+137	
+138	## S7a. Token issuance: real `/auth/token` grant logic (LT-51)
+139	
+140	**Status: new** — created from Tobias's (01) objection during LT-40's refinement (`01-product-industry-research-design/refinement/LT-40.md`), which found the gap was unscheduled, not pending: LT-32 built `/auth/token`'s route (a 501 placeholder on the issuer Deployment) and LT-40 builds the verifier side, but nothing implemented the grant itself. Without it, "done = deployed and reviewable at a public URL" would have quietly weakened into "reviewable by an engineer with cluster access" — a materially different and less credible bar than the one this project has held since LT-34.
+141	
+142	**Description:** OAuth2 client-credentials grant at `POST /auth/token` on the issuer Deployment (`APP_MODE=issuer`), per Marcus's `handoff-03-auth.md` v4 addendum:
+143	- **Client authentication:** HTTP Basic, `client_id`/`client_secret`, form-encoded `client_credentials` grant per RFC 6749 §4.4.
+144	- **Client store:** the issuer's own datastore (not 05's schema — same F8 boundary as `caller_referral`), secrets hashed with Argon2id, never stored or logged in plaintext.
+145	- **Responses:** RFC 6749 §5.1 (success) / §5.2 (error) shape. An unknown `client_id` and a wrong secret for a known `client_id` return the **identical** `invalid_client` error — no oracle letting a caller distinguish "doesn't exist" from "exists, wrong secret."
+146	- **Token:** short-lived RS256 JWT, `iss`/`aud`/`scope`/`exp`/`sub` claims per `handoff-03-auth.md` v3, algorithm/`kid` header per RFC 8725 pinning (matches LT-40's verifier-side allowlist). A `jti` claim is recommended for audit correlation only — **not** a revocation mechanism; TTL-only revocation stands per `api-auth-design.md`, not re-litigated here.
+147	- **Public-key distribution:** a JWKS endpoint served by the issuer's in-cluster `ClusterIP` `Service` — **no public `Ingress` route** for it; only the verifying middleware inside the cluster (LT-40) needs it, and exposing it publicly is unnecessary attack surface for a machine-to-machine API with no external relying parties.
+148	
+149	**Acceptance criteria:**
+150	- [ ] `POST /auth/token` implements RFC 6749 §4.4 client-credentials grant with HTTP Basic client auth and form-encoded body, without re-deriving 02's scheme reasoning in `handoff-03-auth.md` v4.
+151	- [ ] Client secrets are stored Argon2id-hashed in the issuer's own datastore; never logged, never returned in any response, never present in plaintext outside the initial provisioning step — enforcement site: log-call review against `handoff-04-secrets.md`'s never-log list, plus a test asserting the stored representation isn't the plaintext secret.
+152	- [ ] An unknown `client_id` and a wrong secret for a known `client_id` return byte-identical `invalid_client` error responses — enforcement site: a test comparing both response bodies for equality, not just "both return 401."
+153	- [ ] The issued JWT's claims (`iss`, `aud`, `scope`, `exp`, `sub`) and algorithm/`kid` header match what LT-40's verifier middleware expects and validates — enforcement site: an integration test that mints a token here and verifies it through LT-40's actual middleware, not two independently-trusted unit tests that never touch each other.
+154	- [ ] The JWKS endpoint is served only on the issuer's in-cluster `ClusterIP` 
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">All "sonnet, high" except S8 (LT-41 connector) which is "opus, high." Count: S1,S2,S3,S4,S5,S6,S7,S7a,S9,S10,S11 = 11 stories sonnet/high; S8 = opus/high. Matches README claim. Now let's check the README itself and the cited decision files.</div><details><summary><span class="tn">Read</span> /tmp/lt34review/03-engineering-delivery/README.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/03-engineering-delivery/README.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03: Engineering &amp; Delivery
+2	
+3	Go implementation of all three assignment questions — the DAO layer (Q1), the REST search/retrieve API with authentication (Q2), and the third-party identity connector (Q3) — plus the glue between Q2 and Q3. See root `../CLAUDE.md` for the full assignment text and how this track fits the other four; this file covers only what this track built, what's stubbed, and how.
+4	
+5	## What's implemented — live, deployed, verified against the running system
+6	
+7	- **Q1 — DAO layer** (`internal/dao`, `internal/dao/postgres`, `internal/dao/sqlite`): `user_profile`/`user_credential` storage behind one `Repository` interface, real implementations for Postgres/CockroachDB and SQLite. Verified against the actually-deployed Postgres database, and in CI against real Postgres and CockroachDB service containers (not mocked) — a cross-backend conformance suite (LT-38) asserts all three backends behave identically, not just that their Go signatures match.
+8	- **Q2 — REST API** (`internal/api`, `internal/app`): `POST /profiles/search`, `GET /profiles/{id}`, and a real RFC 6749 client-credentials `POST /auth/token` grant, all behind RS256 JWT verification. Verified live at `https://loginid-takehome.uplifttech.org` with real minted tokens, including rate-limiting, masked-vs-full-read scoping, and pagination.
+9	- **Q3 — connector** (`internal/connector`, `cmd/idp-connector`): the third-party IDP connector's own inbound `/auth`/`/identity` contract. Verified in-cluster via `kubectl port-forward` with a real vendor stub backing it — happy path, audience rejection, fail-closed identical-content error responses, a timing floor on the three internal failure branches, and a failure-ratio rate limiter actually firing under a live failed-auth burst, not just asserted in a unit test.
+10	- **api-service → idp-connector integration** (`internal/onboarding`, LT-33): api-service's own outbound call to the connector, closing the loop between Q2 and Q3 — its own cached, refreshed OAuth2 client-credentials token; bounded timeouts and retry-with-backoff on connector calls; a generic upward failure on any connector-unreachable condition, with own-token-acquisition failures logged as a distinct class.
+11	- CI/CD, containerization, secrets delivery, and database provisioning (04's stories, LT-45/46/47/52) are all Done and live — `pr-check` runs this track's tests against real Postgres and CockroachDB service containers on every PR, not just SQLite.
+12	
+13	## Deliberately stubbed — stated plainly, not left to infer
+14	
+15	- **The third-party vendor (ABC/XYZ) is an in-process `StubVendorClient`**, not a real HTTP integration. `idp-connector` falls back to it whenever `IDP_ABC_BASE_URL` is unset, and says so explicitly on startup. The assignment names the vendor generically — a real integration was never in scope (`refinement/LT-41.md`'s own stated non-goal).
+16	- **The `authorize()` object-level policy hook is a `StopgapAuthorizer`**, a hard-coded, default-deny stand-in — not the real caller-referral datastore `../02-ai-security-architecture/handoff-03-auth.md`'s own design describes. A stated seam, not a hidden gap.
+17	- **CockroachDB and SQLite are exercised in CI only, never deployed live.** Only Postgres runs in the actual cluster (LT-52's explicit scope limit) — don't go looking for a running CockroachDB instance anywhere.
+18	- **No `POST /profiles` write endpoint exists or is planned.** Q2 is search/retrieve by the assignment's own text; a write path was ruled out as scope creep. Review/demo data enters via a version-controlled, idempotent SQL file (`deploy/demo-data/001-review-profiles.sql`), applied as a documented runbook step, never through the API.
+19	- **Rate limiting, the touch counter, and the token issuer's grant limiter are in-process and single-replica-only.** Their own code comments say a shared store (Redis) would be needed for a genuine multi-instance deployment — this project runs `api-service`/`api-service-issuer` at 1 replica with a `Recreate` rollout strategy *specifically* so this simplification holds correctly rather than silently degrading under a rolling update. That constraint exists because of a real bug this project found live (see below), not as a hypothetical caveat.
+20	- **The retention sweep (LT-44) is designed and enforced at the schema/DAO level, but not yet operationally running.** `DeleteExpired`/`DeleteProfile` exist on the DAO composite and are tested there directly; nothing yet schedules or calls them against the live database. `../05-data-ops/pii-governance.md`'s retention policy is a real, tracked, backlogged story, not an abandoned requirement.
+21	
+22	## Package layout
+23	
+24	`cmd/api-service` and `cmd/idp-connector` are both thin wrappers — argument parsing and `main()` only. Route registration and config loading live once, in `internal/app` and `internal/config`, shared by both binaries rather than duplicated per binary (see `decisions/go-layout-debate.md` below). `internal/api` holds Q2's HTTP handlers, JWT middleware, rate limiting, and the token issuer; `internal/connector` holds Q3's inbound handlers and outbound vendor client; `internal/onboarding` holds LT-33's mediating client from `api-service` to the connector; `internal/dao` and its `postgres`/`sqlite` subpackages hold Q1, behind one `Repository` interface `internal/dao/conformance` tests identically across backends.
+25	
+26	## Test strategy
+27	
+28	Unit-heavy; integration deliberately stubbed where the assignment itself doesn't require full end-to-end coverage. Hand-written interface fakes, not generated mocks, for DAO/handler tests (`decisions/test-double-strategy.md`) — small enough interfaces that a fake struct per test case beats adopting a codegen dependency at this project's scale. The rule that any change to `dao.Repository` (or its sub-interfaces) updates its hand-written fake in the same PR is now a literal checklist line in `.github/pull_request_template.md`, not just prose in a design doc — LT-42's own review found the design doc alone insufficient (a PR landed an interface change without updating its fake, caught only in a later pass), so the checklist line is the actual enforcement site now, and the design doc explains why. Real-backend correctness (Postgres/CockroachDB/SQLite conformance, the CockroachDB serialization-retry path) is proven against real databases, in CI, not mocked — `internal/dao/conformance`'s own suite is the one enforcement site for "do the backends behave alike," distinct from a signature-matching test that proves nothing about behavior.
+29	
+30	## AI tooling and workflow
+31	
+32	Every implementation story in this track's backlog runs at `sonnet, high` except the connector (`idp-connector`'s `/auth`/`/identity`, Q3), which runs at `opus, high` — the one seat above sonnet in this track, per `../02-ai-security-architecture/planning-approach.md`'s connector-token-lifecycle exception: a subtle bug in that specific code path (a leaked or misscoped vendor token) directly contradicts this project's own threat model in a way most of this track's other code doesn't.
+33	
+34	Beyond model selection, implementation decisions in this track ran through structured adversarial review rather than being decided unilaterally:
+35	- `decisions/go-layout-debate.md` — a three-hats debate (optimist/pessimist/pragmatist) on one binary vs. two, ruling to keep two binaries (already published and built against by 04) but merge the *authoring* cost via a shared `internal/app` package, plus a concrete requirement (bounded timeouts, no tight-looping retries on outbound calls) adopted from the pessimist's production-incident pattern-matching.
+36	- `decisions/error-semantics.md` — a rotating devil's-advocate pass (Oren Castellan) that closed the sentinel-error set, forced a translation boundary so wrapped DB errors never leak driver text to an API client, and added explicit handling for `context.DeadlineExceeded`/`Canceled`.
+37	- `decisions/context-propagation.md` — a second rotating devil's-advocate pass (Nolan Reyes, drawing on production-incident pattern-matching) that scoped multi-statement writes to a transaction under context cancellation, and named which write paths deliberately detach from the inbound context for durability.
+38	- `decisions/test-double-strategy.md` — a third rotating devil's-advocate pass (Marisol Ferran) that weighed hand-written fakes against generated mocks; hand-written fakes stood, with the interface-drift risk closed procedurally (the PR-template checklist line above), not by adopting a codegen tool.
+39	
+40	This project is also a broader org-orchestration exercise — a PM agent coordinating five track leads, each running a small hired sub-team with deliberately varied personalities, using patterns like adversarial pairs, red/blue, and structured written debate (`../PLAN.md`, `../CASTING.md`) — the four decisions above are this track's own instance of that same structure, not a separate practice invented for engineering work alone.
+41	
+42	## Real, live-tested findings
+43	
+44	This track's own delivery process included live acceptance review against the actually-deployed system, not only code review and unit tests — and that process found and helped fix four real, distinct production-shaped bugs, each named individually rather than lumped together:
+45	
+46	1. **A CI coverage gap**, where `pr-check` silently *skipped* every Postgres and CockroachDB conformance test — only SQLite genuinely ran — while still reporting an overall green build. Fixed two ways: real Postgres/CockroachDB service containers added to the CI job, and every affected test fixture changed to fail loudly (not skip) when a required backend DSN is absent specifically in CI.
+47	2. **A cross-replica rate-limiting bug** in `api-service`'s own resource-API rate limiter, reproduced by actually crossing its 10 req/min cap live against 2 running replicas — each replica's in-process limiter had no visibility into the other's request count, so the effective cap was silently doubled. Fixed by moving `api-service`/`api-service-issuer` to a single replica with a `Recreate` rollout strategy (04's story), a deliberate scope limit stated plainly above, not a silent workaround.
+48	3. **`api-service`'s own Q2 token issuer/verifier wiring shipped with `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` unset** in its Kubernetes manifest — minted tokens carried no `iss` and were checked against an empty `aud`, "verifying" successfully for the wrong reason rather than failing loudly. Fixed in the manifest, plus a startup check (`cmd/api-service`) that now refuses to start with either unset, and a URL-shape check on the JWKS/issuer values specifically (a non-empty but garbage value is caught too, not just an absent one).
+49	4. **A separate, later total outage in `idp-connector`'s (Q3's) own inbound auth** — its Deployment manifest never set `AUTH_JWKS_URL` at all, so every request, including a genuinely valid token, failed identically with a JWKS-fetch error. Distinct from finding 3: a different service, a different missing variable, found in a separate in-cluster review pass. Fixed the same way: the manifest, plus a startup check in `cmd/idp-connector` itself, plus a systemic test (`internal/config`'s manifest-vs-config test) that now parses every real Kubernetes Deployment manifest and asserts it sets everything its own mode requires — closing this specific class of gap structurally, in CI, rather than relying on a fourth live incident to catch the next occurrence.
+50	
+51	Naming these precisely — which subsystem, which variable, which fix — is itself part of what this AI-workflow note is meant to demonstrate: verification against the live, deployed system, not only against a test suite or a design doc.
+52	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Now let's check the decision docs, PR template, CI workflow, and deploy manifests.</div><details><summary><span class="tn">Bash</span> find /tmp/lt34review -iname "*.md" -path "*decisions*" | grep -E "go-layout-debate|error-semantics|c</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /tmp/lt34review -iname \"*.md\" -path \"*decisions*\" | grep -E \"go-layout-debate|error-semantics|context-propagation|test-double-strategy\""
+}</pre><div class="lbl">result</div><pre>/tmp/lt34review/03-engineering-delivery/decisions/go-layout-debate.md
+/tmp/lt34review/03-engineering-delivery/decisions/error-semantics.md
+/tmp/lt34review/03-engineering-delivery/decisions/context-propagation.md
+/tmp/lt34review/03-engineering-delivery/decisions/test-double-strategy.md</pre></div></details><details><summary><span class="tn">Bash</span> cat /tmp/lt34review/.github/pull_request_template.md 2&gt;/dev/null || find /tmp/lt34review -iname "pul</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat /tmp/lt34review/.github/pull_request_template.md 2&gt;/dev/null || find /tmp/lt34review -iname \"pull_request_template.md\""
+}</pre><div class="lbl">result</div><pre>## Summary
+
+## Who did the work
+&lt;!-- Lead, hires and seats, reviewers (including 02's independent reviewer where applicable), and models. --&gt;
+
+## Links
+&lt;!-- Refinement doc path, Jira key. --&gt;
+
+## Checklist
+- [ ] Any change to `dao.Repository` or its sub-interfaces updates the hand-written fake in this PR (decisions/test-double-strategy.md)
+- [ ] Any new env var read in config.go is set in every Deployment whose APP_MODE uses it (handoff-03-auth.md v9)
+- [ ] No secret or token in code, tests, or comments (gitleaks runs on this PR's commits)
+- [ ] `git diff origin/main` reviewed before requesting merge</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">PR template confirmed — checklist line exists at line 9. Now the four decisions docs.</div><details><summary><span class="tn">Read</span> /tmp/lt34review/03-engineering-delivery/decisions/go-layout-debate.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/03-engineering-delivery/decisions/go-layout-debate.md"
+}</pre><div class="lbl">result</div><pre>1	# Decision: Go layout — one binary vs. two
+2	
+3	Pattern: three hats (Marisol Ferran, optimist · Nolan Reyes, pessimist · Renata Cole, pragmatist). Diagram: Ines Dabrowski (pending, will be appended when delivered).
+4	
+5	## Optimist (Marisol Ferran)
+6	
+7	Argued for one binary on take-home-appropriate grounds: every extra binary is authoring/wiring/README ceremony that doesn't teach the reader anything, for a submission graded on demonstrated reasoning. Conceded the isolation argument is real and already published as stable in `PLANNING.md` with 04 building against it, so declined to relitigate the boundary itself. Actual proposal: **keep two binaries, merge the ceremony, not the process boundary** — both `cmd/api-service/main.go` and `cmd/idp-connector/main.go` become thin wrappers around one shared `internal/app` package (route registration, config loading), so the deployables stay two but the authored code stays close to one. Would yield even that if a shared-bootstrap bug risked taking both down at once.
+8	
+9	## Pessimist (Nolan Reyes)
+10	
+11	Pattern-matched to a production incident: a shared process/connection pool let a slowly-timing-out downstream partner exhaust the pool and take down an unrelated inbound API — 40 minutes of a partner's problem becoming the platform's outage. Confirmed two binaries closes the *shared-fate* version of that failure (a stalled vendor can't starve `api-service`'s own pool). Flagged what it does **not** close: host/deploy colocation (same node, same FD/CPU budget, same on-call page) is a 04 question, not implied by the binary split; and a self-inflicted retry storm in the connector's token-refresh logic (no backoff) is a failure mode independent of process boundaries entirely. Explicitly not arguing against two binaries — arguing that the boundary alone doesn't buy safety without `context.WithTimeout` on every outbound call and a bounded worker pool.
+12	
+13	## Ruling (Renata Cole, pragmatist)
+14	
+15	**Two binaries stands** — this was already published in `PLANNING.md`'s Service boundaries section as stable, 04 is building against it, and neither hat argued for reopening it. Confirmed rather than relitigated.
+16	
+17	**Adopting Marisol's shared-`internal/app` proposal.** Both `cmd/*/main.go` become thin wrappers over `internal/app`: route registration and config loading live once, not twice. This gets the authoring-cost win she argued for without touching the process boundary 04 depends on. Package layout in `PLANNING.md` gets a note added (not a structural change — `internal/app` slots alongside the existing `internal/` packages).
+18	
+19	**Adopting Nolan's requirement, not just noting it.** Carrying into S4's spec (connector `/auth` + `/identity`): every outbound HTTP call to a vendor must set a `context.WithTimeout` (no unbounded outbound calls), and the connector's HTTP client uses a bounded connection pool. Token-refresh/retry logic must back off, never tight-loop against a failing vendor endpoint. This is now a stated acceptance criterion for S4, not an assumption riding on "it's a separate binary."
+20	
+21	**Flagging to 04, not deciding here (Nolan's other point):** whether `api-service` and `idp-connector` are deployed to the same host/node is 04's call, and the isolation this decision buys is *process*-level, not necessarily *host*-level, unless 04 also separates deployment. Will note this explicitly when the Service boundaries section is next touched, so 04 doesn't read "two binaries" as "two hosts" by default.
+22	
+23	## Diagram (Ines Dabrowski)
+24	
+25	```
+26	================================================================================
+27	GO LAYOUT — TWO BINARIES, DEPENDENCY DIRECTION
+28	================================================================================
+29	
+30	External callers
+31	  │
+32	  │ HTTPS + bearer token (JWT, iss=https://auth.loginid-takehome.internal,
+33	  │                             aud=loginid-api-service)
+34	  ▼
+35	┌──────────────────────────────┐        ┌──────────────────────────────┐
+36	│   cmd/api-service            │        │   cmd/idp-connector          │
+37	│   (client-facing, inbound)   │        │   (outbound-only to vendors) │
+38	│                               │        │                               │
+39	│  main.go                     │        │  main.go                     │
+40	│    │                         │        │    │                         │
+41	│    ▼                         │        │    ▼                         │
+42	│  internal/api                │        │  internal/connector          │
+43	│   - router                   │        │   - POST /auth  (client)     │
+44	│   - auth middleware ─────────┼──┐     │   - POST /identity (client)  │
+45	│   - handlers (search/get     │  │     │   - token lifecycle          │
+46	│     user_profile)            │  │     │     (no-cache-by-default,    │
+47	│    │                         │  │     │      fetch-per-call,         │
+48	│    ▼                         │  │     │      per 02 connector-       │
+49	│  internal/dao                │  │     │      security.md)            │
+50	│   - Repository (composite):  │  │     │    │                         │
+51	│     Profiles()               │  │     └────┼─────────────────────────┘
+52	│     Credentials()            │       vendor XYZ/ABC (POST /auth,     │
+53	│     Methods()                │       /identity — assignment-fixed)   │
+54	│   - postgres / cockroachdb /  │
+55	│     sqlite implementations   │
+56	│    │                         │
+57	│    ▼                         │
+58	│  internal/model               │  ◄── shared by BOTH binaries
+59	│   UserProfile, UserCredential │      (no behavior, structs only)
+60	└──────────────┬────────────────┘
+61	               │
+62	               ▼
+63	       internal/config   ◄── shared by BOTH binaries
+64	        env-var loading only — full current list in PLANNING.md's Service
+65	        boundaries section, not restated here (it has grown since this
+66	        diagram was drawn: CONNECTOR_JWT_AUDIENCE, CONNECTOR_CLIENT_ID/
+67	        SECRET, and APP_MODE were added by later consistency-pass fixes)
+68	
+69	--------------------------------------------------------------------------------
+70	DEPENDENCY DIRECTION (arrows = "depends on", never reversed)
+71	--------------------------------------------------------------------------------
+72	  cmd/api-service   → internal/api → internal/dao → internal/model
+73	  cmd/idp-connector → internal/connector → internal/model
+74	  both cmd/*        → internal/config
+75	
+76	  internal/model and internal/config are the ONLY packages both binaries import.
+77	  Neither is a dumping ground: model = data shape only, config = env parsing only.
+78	  internal/api and internal/connector never import each other.
+79	  internal/dao is imported ONLY by cmd/api-service — idp-connector has no DB access,
+80	  by design: it never touches user_profile/user_credential storage, only vendor PII
+81	  in flight.
+82	
+83	--------------------------------------------------------------------------------
+84	WHY TWO BINARIES, NOT ONE (the boundary this diagram backs)
+85	--------------------------------------------------------------------------------
+86	- Different threat models: api-service holds the DB and validates inbound bearer
+87	  tokens; idp-connector holds vendor credentials and calls out. A shared process
+88	  means a vendor-call bug (slow vendor, panic, goroutine leak) can degrade the
+89	  client-facing API — the exact incident shape Nolan's pessimist hat is naming.
+90	- Independent scaling: connector traffic is bursty/vendor-latency-bound; api-service
+91	  traffic is client-request-bound. One binary couples their resource profiles for
+92	  no shared concern.
+93	- Mirrors the assignment's own Q2/Q3 split — not an invented boundary.
+94	
+95	--------------------------------------------------------------------------------
+96	WHERE I'D CALL "TOO CLEVER" ON MYSELF (blind spot, named up front)
+97	--------------------------------------------------------------------------------
+98	- internal/api and internal/connector are NOT further split into sub-packages
+99	  (no internal/api/handlers vs internal/api/middleware). At this project's size
+100	  that split would be abstraction for its own sake — one package per binary-
+101	  facing concern is enough. If Marisol's optimist case is "one binary, less
+102	  ceremony," the honest counter isn't "more packages," it's: the two-binary
+103	  split earns its keep on threat model + scaling, not on package count. If that
+104	  reasoning doesn't hold, the diagram — not my opinion — changes.
+105	================================================================================
+106	```
+107	
+108	Note: the diagram predates the ruling's addition of `internal/app` (shared bootstrap) below — that package sits alongside `internal/config` as a second package both binaries import (route registration + config wiring only, still no behavior shared beyond wiring).
+109	
+110	## Status
+111	
+112	Ruled. Diagram delivered and appended above.
+113	
+114	---
+115	Model: sonnet (Marisol Ferran, optimist; Nolan Reyes, pessimist; Renata Cole, lead, pragmatist + ruling). Turns consumed: 2 hire turns + lead synthesis.
+116	</pre></div></details><details><summary><span class="tn">Read</span> /tmp/lt34review/03-engineering-delivery/decisions/error-semantics.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/03-engineering-delivery/decisions/error-semantics.md"
+}</pre><div class="lbl">result</div><pre>1	# Decision: Error semantics (wrap vs. sentinel)
+2	
+3	Pattern: rotating devil's advocate, decision 1 of 3 (seat: Oren Castellan). Proposer: Renata Cole.
+4	
+5	## Proposal
+6	
+7	Go 1.13+ error wrapping (`fmt.Errorf("...: %w", err)`) for propagating unexpected/lower-level errors up the call stack, plus a small set of exported sentinel errors (`dao.ErrNotFound`, `dao.ErrDuplicate`) for conditions callers are expected to branch on via `errors.Is`.
+8	
+9	## Objections — Oren Castellan (Detail Hawk)
+10	
+11	1. **Sentinel set must be closed and enumerated now**, not left open-ended — otherwise hires add ad hoc `ErrX` values across S2–S4 with no stable contract. Wants a fixed list plus a named owner and a propose-before-adding rule.
+12	2. **Wrapped errors must never cross the HTTP boundary raw** — `err.Error()` on a wrapped DB error can leak driver text (DSN fragments, column/constraint names) to an API client. Wants an explicit translation function at the boundary; anything unmapped defaults to a generic 500 with no wrapped detail.
+13	3. **`errors.Is` against a sentinel breaks silently if a backend returns a driver-native error instead** (e.g. `*pgconn.PgError` instead of `dao.ErrDuplicate`). Wants the `Repository` interface contract to state translation is *mandatory* per backend, verified by an S5 test case per backend.
+14	4. **No stated rule for `context.DeadlineExceeded`/`context.Canceled`.** These aren't ordinary internal errors and shouldn't page as generic 500s. Wants them checked and mapped to a distinct response code before generic wrapping applies.
+15	
+16	## Ruling (Renata Cole)
+17	
+18	All four accepted; no decline.
+19	
+20	1. Sentinel set is closed and fixed now: `dao.ErrNotFound`, `dao.ErrDuplicate`, `dao.ErrInvalidInput`. Defined once in `internal/dao`. Rule: no hire adds a sentinel unilaterally — propose it to me with the one-line reason, I add it. This applies for the rest of the design/implementation phase.
+21	2. `internal/api` never serializes `err.Error()` on an unmapped error. A translation function (`internal/api` boundary layer) maps the three sentinels to their HTTP status/safe message; anything else defaults to a generic 500 with no wrapped detail surfaced to the client. Wrapped errors are for logs only.
+22	3. The `Repository` interface contract states translation of known driver-native errors to the shared sentinels is **mandatory**, not optional, per backend implementation. S5's test strategy gets an explicit line item: one test per backend proving the translation happens (e.g., a unique-constraint violation surfaces as `dao.ErrDuplicate`, not a raw driver type).
+23	4. `context.DeadlineExceeded` and `context.Canceled` are checked explicitly and mapped to a distinct response (504 for deadline exceeded; treat client-cancel as a non-alerting outcome, not logged as a 500) before generic wrapping/translation applies.
+24	
+25	## Status
+26	
+27	Ruled. Carries into S2 (DAO sentinel definitions + per-backend translation) and S3 (handler-layer translation function, context-error handling).
+28	
+29	## Superseded in part — 05's contract lands (2026-09-12)
+30	
+31	05's `multi-db-strategy.md` §4 is the authoritative sentinel set and translation mechanism for the DAO layer; it supersedes the specific names and the translation rule this decision guessed at before the contract existed. What stands vs. what's replaced:
+32	
+33	- **Replaced:** the invented sentinel set (`ErrNotFound`/`ErrDuplicate`/`ErrInvalidInput`) is superseded by 05's actual seven: `ErrNotFound`, `ErrAlreadyExists`, `ErrDuplicateUsername`, `ErrInvalidMethod`, `ErrInvalidQuery`, `ErrInvalidArgument`, `ErrInvalidCredential`. These are 05's to own and extend (own-and-propose-before-adding now routes through them, not me, for anything DAO-internal) — my closed-set/no-ad-hoc-additions principle still applies, just to their list.
+34	- **Replaced:** "match SQLSTATE only" is superseded by 05's corrected rule — match structured error codes (SQLSTATE on Postgres/CockroachDB, extended result codes on SQLite) plus constraint names we define ourselves in DDL, never free-text messages. This is a more complete version of objection 2's concern (leaking driver text), not a contradiction of it.
+35	- **Stands unchanged:** the HTTP-boundary rule (objection 2 — `internal/api` never serializes `err.Error()` on an unmapped error; wrapped errors are for logs only) — this is 03's layer, not 05's, and 05's contract doesn't touch it. The context-cancellation rule (objection 4) also stands unchanged, same reason.
+36	- **Stands, now backed by a real mechanism instead of a guess:** objection 3's demand for mandatory per-backend translation — 05's contract §4 gives the actual mapping table (condition → PG/CRDB code → SQLite code → sentinel), and §7's conformance suite makes "sentinel parity for every error condition in §4" a stated, required test — stronger than what this decision asked for.
+37	
+38	## Consistency-pass fixes (2026-09-12)
+39	
+40	**F7 — authn/authz failure mapping was unstated.** This decision covered DAO-sentinel and context-error mapping but never said what an authn failure (missing/invalid token) or an authz failure (scope check, or an `authorize()` policy denial) returns. Fixed: a missing or invalid token → `401`. A scope failure and an `authorize()` policy denial both → `403`, with an **identical client-visible response body** — the two are distinguished only in the audit log (`handoff-03-auth.md`'s "policy decision: allow/deny, and if deny, whether it was a scope failure or an authorize() denial" field), never in what the client sees. This closes the gap the consistency pass found in `handoff-03-auth.md:27,50`'s "distinct signals for detection" requirement.
+41	
+42	**F50 — the boundary-sanitization rule needed to name driver `DETAIL` text explicitly.** The translation function (ruling item 2, above) already stated that unmapped errors default to a generic 500 with no wrapped detail — but a Postgres CHECK or unique-violation error's `DETAIL` line (which echoes the failing row's actual column values, including PII) is exactly the kind of "wrapped detail" that rule exists to stop, and it wasn't named specifically enough for a reader to be sure it was covered. Stated explicitly now: **the translation layer sanitizes every driver error down to its structured code plus our own constraint name before wrapping it for the log — the raw driver error (including any `DETAIL`/`Key (...)=(...)` text) is never wrapped, logged, or passed through in any form.** This translation layer (05's §4 mapping, implemented in `internal/dao`) is the enforcement site; `handoff-04-secrets.md`'s never-log list gets the matching entry from 02.
+43	
+44	---
+45	Model: sonnet (Oren Castellan, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.
+46	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Both match README's summary well. Now context-propagation and test-double-strategy.</div><details><summary><span class="tn">Read</span> /tmp/lt34review/03-engineering-delivery/decisions/context-propagation.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/03-engineering-delivery/decisions/context-propagation.md"
+}</pre><div class="lbl">result</div><pre>1	# Decision: Context propagation into the DAO layer
+2	
+3	Pattern: rotating devil's advocate, decision 2 of 3 (seat: Nolan Reyes). Proposer: Renata Cole.
+4	
+5	## Proposal
+6	
+7	Every `Repository` method (and its three sub-interfaces — `Profiles`/`Credentials`/`Methods`) takes `context.Context` as its first argument, propagated unbroken from the HTTP request through the handler into every DB call, so request cancellation/timeout actually cancels in-flight queries.
+8	
+9	## Objections — Nolan Reyes (Veteran)
+10	
+11	Agreed with the direction but pushed on three failure modes from production experience:
+12	
+13	1. **Cancellation racing a multi-statement write.** A cancelled `SELECT` aborts cleanly; a cancelled multi-statement write (e.g., profile + credential saved together) risks a half-written row unless cancellation is scoped to a transaction, not a statement. Cited a migration job killed mid-batch by a deploy SIGTERM, leaving orphaned rows because cancellation was handled per-statement.
+14	2. **Deadline budget, not a boolean.** Unbroken propagation means an inherited, already-partially-consumed deadline reaches the DAO call. If upstream work (e.g., a connector call) already burned most of the HTTP handler's timeout, the DAO gets a shrinking remainder and starts timing out under *normal* latency, not just failure — the good case starts looking like the bad case.
+15	3. **Sub-interfaces are not uniformly cancel-safe.** Credential writes during auth are exactly the path that caused a real incident: a retry re-issued a credential write against an already-expired derived context and silently no-op'd instead of erroring. Wants explicit naming of which write paths deliberately detach from the inbound context (via `context.WithoutCancel` or a fresh background context) for durability, distinct from read paths that don't need it.
+16	
+17	## Ruling (Renata Cole)
+18	
+19	All three accepted; no decline.
+20	
+21	1. Any `Repository` method that writes to more than one table (e.g., a profile+credential save) runs inside a single `Tx`. Context cancellation during that transaction triggers `Tx.Rollback`, never a partial commit — this is a stated requirement on the `Repository` implementation contract, not left to each backend's discretion.
+22	2. Deadline propagation is a budget-allocation decision, stated explicitly in the auth middleware's design (S7, LT-40 — this ruling predates the current S-numbering and originally cited "S3," which now names the Postgres/CockroachDB DAO story, LT-36, not the middleware): the HTTP-boundary timeout must be sized to cover realistic p99 DAO latency *plus* any upstream work (e.g., no DAO call should ever be handed a near-zero remaining deadline as a matter of routine operation). This gets a concrete number attached when S7's middleware design is written, not left as "some deadline."
+23	3. Credential writes are named explicitly as the path that needs a detach point for durability, distinct from profile reads and other cancel-safe paths, which propagate the inbound context unmodified. This distinction is documented at the point each such method is implemented, not left implicit.
+24	
+25	## Status
+26	
+27	Ruled. Carries into S2 (Repository implementation contract: transaction scoping, detach points) and S7/LT-40 (middleware deadline budget — see the note on item 2 above about the stale "S3" citation this superseded).
+28	
+29	## Resolved against 05's contract (2026-09-12)
+30	
+31	Oren's first-pass review of 05's DAO contract flagged a real tension: this ruling's item 1 requires any multi-table write to run in a single `Tx`, but the contract as first landed had no method spanning both `user_profile` and `user_credential`, and explicitly barred 03 from composing a cross-call transaction — leaving registration's profile+credential creation with no atomic path at all. 05 resolved it by adding `CreateProfileWithCredential(ctx, p, c)` on the `Repository` composite (05's §3b) — the one cross-table operation in the contract, DAO-generated IDs for both rows, single transaction, `c.UserID` ignored on input and set from the just-created profile. This ruling's item 1 now has exactly one caller-visible method satisfying it, rather than being a requirement with no concrete instance.
+32	
+33	## Consistency-pass fixes (2026-09-12)
+34	
+35	**F19 — a real contradiction with 05's contract, not just stale wording.** 05's `multi-db-strategy.md` states "`Context` is first on every method and cancellation is honoured" — a blanket guarantee. Item 3 above, as originally written, said credential writes detach via `context.WithoutCancel` *inside the DAO*, which would mean the DAO does not honor cancellation on those specific methods — directly contradicting 05's guarantee. Fixed: **the detach happens in the handler, before the DAO call, not inside the DAO.** The handler passes the DAO a fresh, independently-bounded context for a credential write (not derived from the inbound request's cancellation tree, but with its own timeout) — from the DAO's perspective, cancellation of the context it was given is still honored unconditionally, exactly as 05's contract states. The DAO layer's guarantee is never weakened; the detach decision is a handler-layer policy about *which* context to hand the DAO, not an exception the DAO carves out for itself.
+36	
+37	**F17 — stale references to a token cache dropped.** Item 3 originally also named "any token-persistence write" as a detach point, left over from before 02's S3 ruling settled on no-cache-by-default for the connector's vendor tokens (`decisions/connector-token-lifecycle-redblue.md`). There is no token-persistence write in the current design, so the phrase is removed (done above) rather than left to describe a mechanism that no longer exists.
+38	
+39	---
+40	Model: sonnet (Nolan Reyes, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.
+41	</pre></div></details><details><summary><span class="tn">Read</span> /tmp/lt34review/03-engineering-delivery/decisions/test-double-strategy.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/03-engineering-delivery/decisions/test-double-strategy.md"
+}</pre><div class="lbl">result</div><pre>1	# Decision: Test-double strategy (S5)
+2	
+3	Pattern: rotating devil's advocate, decision 3 of 3 (seat: Marisol Ferran). Proposer: Renata Cole.
+4	
+5	## Proposal
+6	
+7	Hand-written interface fakes (not generated mocks) for DAO/handler tests — the `Repository` composite and its three sub-interfaces are small and stable enough that a fake struct with configurable fields/funcs per test is less overhead than adopting a codegen tool (`gomock`/`mockery`) for this scope.
+8	
+9	## Objections — Marisol Ferran (Enthusiast)
+10	
+11	1. **Interface drift is silent with hand-written fakes.** A new interface method still compiles against a stale fake, which silently zero-values it instead of failing a test that should catch the gap. Generated mocks fail loudly or leave a visibly regenerated stub. Marisol's own mitigation: enforce fake regeneration in the same PR as any interface change, as a review checklist item — makes drift a procedural risk, not a tooling one.
+12	2. **Call-count/ordering assertions are free with mocks, hand-rolled with fakes.** Conceded this is likely moot here — S2–S4's test cases are table-driven input/output, not call-sequencing assertions.
+13	3. **Legibility to a reviewer** — conceded weak by Marisol herself: a 3-method, ~20-line fake is faster to read and trust than looking up `mockgen` syntax, for a project this size.
+14	
+15	Marisol's own assessment: objection 3 doesn't hold at this scale; objections 1 and 2 are real at scale but this project may not have that scale.
+16	
+17	## Ruling (Renata Cole)
+18	
+19	**Hand-written fakes stand** — objection 3 was conceded by its own author, and objection 2 doesn't apply given the table-driven test shape already committed to in S5. Objection 1 is real but has a cheap procedural fix, which is adopted rather than reaching for a codegen dependency to solve it.
+20	
+21	Adopted: any change to `Repository` or its three sub-interfaces must update the corresponding hand-written fake in the same PR — added as a stated review-checklist item for S2/S5, not left as an assumed discipline. This is the review-time equivalent of what a generated mock would catch automatically, at zero added dependency cost.
+22	
+23	## Status
+24	
+25	Ruled. No codegen/mocking library added to the module. Carries into S5 as a review-checklist line item.
+26	
+27	---
+28	Model: sonnet (Marisol Ferran, objection seat; Renata Cole, lead, proposer + ruling). Turns consumed: 1 hire turn + lead synthesis.
+29	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> find /tmp/lt34review -path "*/.github/workflows/*" -iname "*.yml" -o -path "*/.github/workflows/*" -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /tmp/lt34review -path \"*/.github/workflows/*\" -iname \"*.yml\" -o -path \"*/.github/workflows/*\" -iname \"*.yaml\" | xargs grep -l \"postgres\\|cockroach\" -i 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>/tmp/lt34review/.github/workflows/deploy.yml
+/tmp/lt34review/.github/workflows/pr-check.yml</pre></div></details><details><summary><span class="tn">Bash</span> find /tmp/lt34review -iname "pr-check*"</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "find /tmp/lt34review -iname \"pr-check*\""
+}</pre><div class="lbl">result</div><pre>/tmp/lt34review/.github/workflows/pr-check.yml</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Read</span> /tmp/lt34review/.github/workflows/pr-check.yml</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/tmp/lt34review/.github/workflows/pr-check.yml"
+}</pre><div class="lbl">result</div><pre>1	name: PR check
+2	
+3	on:
+4	  pull_request:
+5	    branches: [main]
+6	
+7	permissions:
+8	  contents: read
+9	
+10	jobs:
+11	  build-lint-test:
+12	    name: Build, lint, test
+13	    runs-on: ubuntu-latest
+14	    # Postgres runs as a real services: container, health-checked before
+15	    # any step starts. CockroachDB has no way to express its required
+16	    # container command (`start-single-node --insecure`) in the
+17	    # services: syntax — that key only takes image/env/ports/options,
+18	    # no command override — so it's started as a plain `docker run`
+19	    # step below instead, polled for readiness before go test runs, and
+20	    # torn down after. Both DSNs are set at job level so every step
+21	    # (including go test) sees them without repeating the values.
+22	    services:
+23	      postgres:
+24	        image: postgres:16-alpine
+25	        env:
+26	          POSTGRES_USER: test
+27	          POSTGRES_PASSWORD: test
+28	          POSTGRES_DB: test
+29	        ports:
+30	          - 5432:5432
+31	        options: &gt;-
+32	          --health-cmd "pg_isready -U test"
+33	          --health-interval 5s
+34	          --health-timeout 5s
+35	          --health-retries 10
+36	    env:
+37	      TEST_POSTGRES_DSN: postgres://test:«REDACTED»@localhost:5432/test?sslmode=disable
+38	      TEST_COCKROACHDB_DSN: postgres://root@localhost:26257/defaultdb?sslmode=disable
+39	    steps:
+40	      - uses: actions/checkout@v4
+41	
+42	      - uses: actions/setup-go@v5
+43	        with:
+44	          go-version: "1.27.1"
+45	          cache: true
+46	
+47	      - name: Build
+48	        run: go build ./...
+49	
+50	      - name: Vet
+51	        run: go vet ./...
+52	
+53	      - name: golangci-lint
+54	        uses: golangci/golangci-lint-action@v7
+55	        with:
+56	          version: latest
+57	          install-mode: goinstall # compiles against the job's Go 1.27 toolchain instead of a prebuilt (go1.24) release
+58	
+59	      - name: Start CockroachDB (single-node, insecure)
+60	        run: |
+61	          docker run -d --name crdb -p 26257:26257 -p 8080:8080 \
+62	            cockroachdb/cockroach:v23.2.0 start-single-node --insecure
+63	          for i in $(seq 1 30); do
+64	            if curl -fs "http://localhost:8080/health?ready=1" &gt;/dev/null 2&gt;&amp;1; then
+65	              echo "CockroachDB ready after ${i}s"
+66	              exit 0
+67	            fi
+68	            sleep 1
+69	          done
+70	          echo "CockroachDB never became ready" &gt;&amp;2
+71	          docker logs crdb
+72	          exit 1
+73	
+74	      - name: Test (race)
+75	        run: go test ./... -race -v
+76	
+77	      - name: Stop CockroachDB
+78	        if: always()
+79	        run: docker rm -f crdb || true
+80	
+81	  security-scan:
+82	    name: govulncheck
+83	    runs-on: ubuntu-latest
+84	    steps:
+85	      - uses: actions/checkout@v4
+86	        with:
+87	          fetch-depth: 0 # gitleaks needs full history available locally to diff against origin/&lt;base_ref&gt; below
+88	
+89	      - uses: actions/setup-go@v5
+90	        with:
+91	          go-version: "1.27.1"
+92	
+93	      - name: govulncheck
+94	        run: |
+95	          go install golang.org/x/vuln/cmd/govulncheck@latest
+96	          govulncheck ./...
+97	
+98	      - name: Install gitleaks
+99	        # Pinned to the same version .github/workflows/gitleaks-full-history.yml
+100	        # uses, so a PR and the scheduled full-history scan never disagree
+101	        # about what counts as a finding. Verified locally before pinning:
+102	        # 8.21.2 does not flag internal/api/tokenhandler.go's
+103	        # "RecordFailure/RecordSuccess" doc-comment fragment as a
+104	        # generic-api-key match; a newer local install (8.30.1) does —
+105	        # confirming this version is what's kept CI green so far, not an
+106	        # allowlist that happens to exist somewhere.
+107	        run: |
+108	          GITLEAKS_VERSION=8.21.2
+109	          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+110	          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+111	          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+112	
+113	      - name: gitleaks (this PR's own commits only)
+114	        # Scoped with --log-opts to origin/&lt;base_ref&gt;..HEAD (backlog Story
+115	        # 9): a full-history scan here meant a leaked-pattern match in ANY
+116	        # commit already on main would fail every subsequent PR forever,
+117	        # not just the PR that introduced it. The full-history safety net
+118	        # moves to gitleaks-full-history.yml (scheduled + on push to
+119	        # main), which still scans everything — this job just stops being
+120	        # a per-PR gate that history it didn't introduce can break.
+121	        run: |
+122	          git fetch origin "${{ github.base_ref }}" --no-tags
+123	          gitleaks detect --source . --no-banner \
+124	            --log-opts="origin/${{ github.base_ref }}..HEAD"
+125	
+126	  manifest-secret-guard:
+127	    name: Guard against the JWT signing-key Secret leaking into another manifest
+128	    runs-on: ubuntu-latest
+129	    steps:
+130	      - uses: actions/checkout@v4
+131	
+132	      - name: Check deploy/manifests.yaml
+133	        run: |
+134	          # There is no admission controller (no Gatekeeper/Kyverno/OPA,
+135	          # no Pod Security label) on the target cluster restricting which
+136	          # Secret a Deployment spec can reference, per 01's LT-32 review —
+137	          # the physical-absence guarantee for api-service's pod spec (it
+138	          # must never mount api-service-jwt-signing-key) is otherwise
+139	          # enforced only by code review. This is the CI-side backstop:
+140	          # fail the build if that Secret name appears in any manifest
+141	          # document other than the api-service-issuer Deployment's own.
+142	          python3 - &lt;&lt;'PYEOF'
+143	          import sys
+144	          docs = open("deploy/manifests.yaml").read().split("\n---\n")
+145	          fail = False
+146	          for doc in docs:
+147	              if "api-service-jwt-signing-key" in doc and "name: api-service-issuer" not in doc:
+148	                  print("::error file=deploy/manifests.yaml::A manifest document references api-service-jwt-signing-key outside the api-service-issuer Deployment:")
+149	                  print(doc)
+150	                  fail = True
+151	          sys.exit(1 if fail else 0)
+152	          PYEOF
+153	
+154	  changes:
+155	    name: Detect whether image-buildable code changed
+156	    runs-on: ubuntu-latest
+157	    outputs:
+158	      code: ${{ steps.filter.outputs.code }}
+159	    steps:
+160	      - uses: actions/checkout@v4
+161	      - uses: dorny/paths-filter@v3
+162	        id: filter
+163	        with:
+164	          # Inverse of deploy.yml's paths-ignore: a docs-only PR (LOG.md,
+165	          # PLAN.md, track directories, decisions/**) shouldn't spin up
+166	          # Docker builds that can't have changed. build-lint-test,
+167	          # security-scan, and manifest-secret-guard above are NOT gated
+168	          # by this — they stay on every PR regardless of what changed.
+169	          filters: |
+170	            code:
+171	              - 'cmd/**'
+172	              - 'internal/**'
+173	              - 'migrations/**'
+174	              - 'deploy/**'
+175	              - 'go.mod'
+176	              - 'go.sum'
+177	              - '**/Dockerfile'
+178	              - '.github/workflows/**'
+179	
+180	  build-images:
+181	    name: Build images (no push)
+182	    runs-on: ubuntu-latest
+183	    needs: [build-lint-test, changes]
+184	    if: needs.changes.outputs.code == 'true'
+185	    strategy:
+186	      matrix:
+187	        service: [api-service, idp-connector]
+188	    steps:
+189	      - uses: actions/checkout@v4
+190	
+191	      - name: Build ${{ matrix.service }} image
+192	        uses: docker/build-push-action@v6
+193	        with:
+194	          context: .
+195	          file: cmd/${{ matrix.service }}/Dockerfile
+196	          push: false
+197	          tags: loginid-takehome/${{ matrix.service }}:pr-${{ github.event.pull_request.number }}
+198	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Confirmed: real Postgres service container + CockroachDB docker run, both real (not mocked). Now check deploy manifests for replicas/Recreate, and cmd/ layout thinness.</div><details><summary><span class="tn">Bash</span> grep -n -B3 -A2 "replicas:\|Recreate" /tmp/lt34review/deploy/manifests.yaml 2&gt;/dev/null | grep -A5 -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -B3 -A2 \"replicas:\\|Recreate\" /tmp/lt34review/deploy/manifests.yaml 2&gt;/dev/null | grep -A5 -B5 \"api-service\""
+}</pre><div class="lbl">result</div><pre>69-# containerization-design.md's "Why two Deployments of one image, not RBAC
+70-# on one"). Same image as api-service, mode selected by APP_MODE.
+71-#
+72:# replicas: 1, not 2 — per Helena's (02) LT-51 review: GrantLimiter
+73-# (internal/api, wired around the client-credentials grant) tracks
+74-# failed-attempt state in-process, per-pod. Two replicas behind
+--
+77-# security regression, not a cosmetic one. This POC issuer has no HA
+78-# requirement that would justify accepting that.
+79-#
+80:# strategy: Recreate, not the RollingUpdate default — same reasoning as
+81-# api-service's Deployment (deploy/api-service.yaml): the default
+82-# maxSurge briefly runs two pods during a rollout, reopening the
+83:# cross-replica limiter gap once per deploy. Recreate accepts a brief
+84-# availability gap instead, consistent with treating the in-process
+85-# limiters here as security controls that assume one pod.
+--
+89-  name: api-service-issuer
+90-  namespace: loginid-takehome
+91-spec:
+92:  replicas: 1
+93:  strategy: {type: Recreate}
+94-  selector: {matchLabels: {app: api-service-issuer}}
+95-  template:
+--
+254-metadata: {name: postgres, namespace: loginid-takehome}
+255-spec:
+256-  serviceName: postgres</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "^kind:\|^  name:\|replicas:\|type: Recreate\|type: RollingUpdate" /tmp/lt34review/deploy/ma</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"^kind:\\|^  name:\\|replicas:\\|type: Recreate\\|type: RollingUpdate\" /tmp/lt34review/deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>23:kind: ServiceAccount
+27:kind: ServiceAccount
+31:kind: ResourceQuota
+72:# replicas: 1, not 2 — per Helena's (02) LT-51 review: GrantLimiter
+87:kind: Deployment
+89:  name: api-service-issuer
+92:  replicas: 1
+93:  strategy: {type: Recreate}
+126:kind: Service
+152:kind: ConfigMap
+236:kind: Issuer
+242:kind: Certificate
+253:kind: StatefulSet
+257:  replicas: 1
+322:kind: Service
+335:kind: NetworkPolicy
+359:kind: Job
+422:kind: Deployment
+424:  name: idp-connector
+427:  replicas: 1
+466:kind: Service
+476:kind: NetworkPolicy
+493:kind: NetworkPolicy
+505:kind: Ingress
+507:  name: loginid-takehome</pre></div></details><details><summary><span class="tn">Bash</span> wc -l /tmp/lt34review/cmd/api-service/main.go /tmp/lt34review/cmd/idp-connector/main.go; echo "---ap</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "wc -l /tmp/lt34review/cmd/api-service/main.go /tmp/lt34review/cmd/idp-connector/main.go; echo \"---api-service---\"; cat /tmp/lt34review/cmd/api-service/main.go; echo \"---idp-connector---\"; cat /tmp/lt34review/cmd/idp-connector/main.go"
+}</pre><div class="lbl">result</div><pre>     246 /tmp/lt34review/cmd/api-service/main.go
+     102 /tmp/lt34review/cmd/idp-connector/main.go
+     348 total
+---api-service---
+// Command api-service is the client-facing binary (Q1 DAO + Q2 REST API,
+// bearer-token auth). Per decisions/go-layout-debate.md, this file is a
+// thin wrapper — route registration and config loading live in
+// internal/app and internal/config, not here.
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+
+	"loginid-takehome/internal/api"
+	"loginid-takehome/internal/app"
+	"loginid-takehome/internal/config"
+	"loginid-takehome/internal/dao"
+	"loginid-takehome/internal/onboarding"
+
+	// internal/dao/postgres's own blank import of pgx/v5/stdlib already
+	// registers the "pgx" database/sql driver this file uses directly
+	// for the issuer database below — Go dedupes an import by package
+	// path, so this isn't a second registration, and no separate blank
+	// import of that package is needed here.
+	_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+	_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+)
+
+// sqlDriverNameFor maps cfg.DBDriver ("postgres"/"cockroachdb"/"sqlite" —
+// dao.Register's driver names, per dao/factory.go) to the underlying
+// database/sql driver name each backend package registers itself under
+// (internal/dao/postgres/postgres.go: "pgx"; internal/dao/sqlite/sqlite.go:
+// "sqlite") — needed only for LT-52's separate /healthz ping handle, since
+// dao.Repository itself exposes no Ping and this is a thin sql.Open, not a
+// second copy of either backend's connection logic.
+func sqlDriverNameFor(daoDriver string) string {
+	switch daoDriver {
+	case "postgres", "cockroachdb":
+		return "pgx"
+	case "sqlite":
+		return "sqlite"
+	default:
+		return ""
+	}
+}
+
+// validateAuthConfig catches exactly the two live-review findings that
+// motivated it — first AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE, then
+// AUTH_JWKS_URL, silently absent from the deployed manifests, each time
+// letting a verifier or issuer come up cleanly and fail in a way that
+// looked like an ordinary token-rejection rather than a configuration
+// gap. A verifier that quietly 401s everything, or an issuer that mints
+// structurally-incomplete tokens, is worse than a crash-loop that names
+// the exact missing variable.
+//
+// Reads config.RequiredAuthEnvVars(service, mode) — the single source of
+// truth also read by internal/config's own manifest test — rather than
+// hardcoding its own list, so this check and that test can never drift
+// apart from each other. Checks the raw environment directly (not cfg's
+// already-loaded fields): the manifest test checks for the same env var
+// NAMES in the manifest text, so both sides operate on the identical
+// primitive.
+//
+// Kept out of internal/config's shared Load() because AUTH_JWT_AUDIENCE
+// is meaningless to cmd/idp-connector (which has its own
+// ConnectorJWTAudience instead) and a blanket check in the shared loader
+// would wrongly fail that binary's startup too — idp-connector runs the
+// equivalent check itself, against its own required list.
+func validateAuthConfig(mode app.Mode) error {
+	required, recognized := config.RequiredAuthEnvVars("api-service", string(mode))
+	if !recognized {
+		// app.Mode's own constructor already rejects anything but
+		// "verifier"/"issuer" (config.Load's APP_MODE validation), so
+		// reaching this branch means RequiredAuthEnvVars itself has
+		// drifted out of sync with app.Mode's real values — a bug in
+		// this binary, not a bad deployment, and worth failing loudly
+		// rather than silently requiring nothing (the exact class of
+		// gap this function exists to prevent, moved one level up).
+		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for api-service mode %q", mode)
+	}
+	for _, name := range required {
+		value := os.Getenv(name)
+		if value == "" {
+			return fmt.Errorf("%s must be set in %s mode", name, mode)
+		}
+		if err := config.ValidateEnvVarValue(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// newOnboardingService wires LT-33's mediating service — api-service's
+// own outbound call to cmd/idp-connector — from cfg's already-resolved
+// fields. Returns an error, not a Fatal-worthy one, when
+// CONNECTOR_CLIENT_ID/SECRET or the two connector-related URLs aren't
+// configured yet: this is a new capability with no existing traffic
+// depending on it and, as of this story, no handler that calls it at
+// all — its one caller in main() below uses this purely as a
+// startup-time config smoke test, discarding the returned *Service, so
+// there is nothing here for a Fatal to protect yet. Once a real
+// onboarding-flow handler consumes this, that handler's own call sites
+// are where a request-time failure actually matters, not this
+// constructor.
+func newOnboardingService(cfg config.Config) (*onboarding.Service, error) {
+	if cfg.IssuerTokenURL == "" {
+		return nil, fmt.Errorf("ISSUER_TOKEN_URL must be set")
+	}
+	if cfg.IDPConnectorBaseURL == "" {
+		return nil, fmt.Errorf("IDP_CONNECTOR_BASE_URL must be set")
+	}
+
+	tokenClient, err := onboarding.NewHTTPTokenClient(cfg.IssuerTokenURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	tokens, err := onboarding.NewTokenSource(tokenClient, cfg.ConnectorClientID, cfg.ConnectorClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	connectorClient, err := onboarding.NewHTTPConnectorClient(cfg.IDPConnectorBaseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &amp;onboarding.Service{Tokens: tokens, Connector: connectorClient}, nil
+}
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("api-service: loading config: %v", err)
+	}
+	if err := validateAuthConfig(app.Mode(cfg.AppMode)); err != nil {
+		log.Fatalf("api-service: %v", err)
+	}
+
+	addr := cfg.HTTPAddr
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
+
+	var handler http.Handler
+	switch app.Mode(cfg.AppMode) {
+	case app.ModeVerifier:
+		// The verifying Deployment is the one that talks to the
+		// database (LT-39's search/retrieve handlers) — the issuer
+		// Deployment (below) never needs a Repository at all, since it
+		// only mints tokens.
+		//
+		// A failure here does NOT Fatal: on a cluster where the database
+		// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
+		// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
+		// misconfigured, this process must still come up and serve
+		// /healthz rather than crash-loop the whole verifying Deployment
+		// over a dependency only two of its routes need. repo stays nil;
+		// NewVerifierRouter fails those two routes closed with 503
+		// instead of panicking on a nil Repository.
+		repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+		if err != nil {
+			log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+			repo = nil
+		}
+
+		// A second, independent *sql.DB purely for /healthz's bounded
+		// connectivity probe (LT-52 criterion 5) — sql.Open never dials,
+		// it only validates the driver/DSN, so this never blocks
+		// startup; PingContext at request time is what actually checks
+		// connectivity, bounded to dbPingTimeout. Deliberately separate
+		// from repo above rather than routed through dao.Repository,
+		// which 05's contract doesn't expose a Ping through.
+		var pingDB *sql.DB
+		if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+			pingDB, err = sql.Open(driverName, cfg.DBDSN)
+			if err != nil {
+				log.Printf("api-service: opening /healthz DB ping handle: %v — /healthz will report db=down", err)
+				pingDB = nil
+			}
+		}
+
+		// LT-33: api-service's own outbound call to cmd/idp-connector.
+		// Constructed here ONLY as a startup-time config smoke test — no
+		// handler exists yet that calls it (no assignment question asks
+		// for an onboarding endpoint, and this story's own non-goals rule
+		// one out), so the constructed *onboarding.Service below is
+		// deliberately discarded, not stored anywhere reachable. This is
+		// NOT the same pattern as repo/pingDB above: those two ARE
+		// consumed by NewVerifierRouter's handlers; this exists only so
+		// a missing/malformed CONNECTOR_CLIENT_ID, ISSUER_TOKEN_URL, etc.
+		// is visible in this process's own log the moment it starts,
+		// rather than only when a future onboarding-flow handler first
+		// tries to use it (Oren Castellan's review, PR #54: the original
+		// "ready" wording here overstated this — nothing is actually
+		// wired to use it yet).
+		if _, err := newOnboardingService(cfg); err != nil {
+			log.Printf("api-service: onboarding (LT-33) config check failed, no consumer wired yet: %v", err)
+		} else {
+			log.Printf("api-service: onboarding (LT-33) config check passed, no consumer wired yet")
+		}
+
+		handler = app.NewVerifierRouter(cfg, repo, pingDB)
+	case app.ModeIssuer:
+		// config.Load already fails startup if JWT_SIGNING_KEY_FILE is
+		// missing/unreadable in issuer mode (resolveSigningKeyPath) —
+		// LoadSigningKey failing here means the file is readable but not
+		// a valid RSA private key, a genuine misconfiguration this
+		// process cannot usefully run past (there is no "serve /healthz,
+		// fail closed" story for a router with no key at all: both of
+		// its routes need one). Fatal, not degrade — unlike the DAO
+		// repository above, which has a real story for "not there yet."
+		key, err := api.LoadSigningKey(cfg.JWTSigningKeyPath)
+		if err != nil {
+			log.Fatalf("api-service: loading JWT signing key: %v", err)
+		}
+
+		// issuerDB, like the verifier's pingDB, is opened independently
+		// of whether it can be reached yet — sql.Open never dials. Empty
+		// IssuerDBDSN (not configured yet) leaves issuerDB nil;
+		// NewIssuerRouter's /auth/token then fails every grant closed
+		// with server_error rather than panicking on a nil ClientStore.
+		var issuerDB *sql.DB
+		if cfg.IssuerDBDSN != "" {
+			issuerDB, err = sql.Open("pgx", cfg.IssuerDBDSN)
+			if err != nil {
+				log.Printf("api-service: opening issuer database: %v — /auth/token will return server_error until this is resolved", err)
+				issuerDB = nil
+			}
+		} else {
+			log.Printf("api-service: ISSUER_DB_DSN/ISSUER_DB_DSN_FILE not set — /auth/token will return server_error until this is resolved")
+		}
+
+		handler = app.NewIssuerRouter(cfg, key, issuerDB)
+	default:
+		// The unrecognized-mode fallback (NewRouter itself already logs
+		// loudly and treats it as verifier — see app.NewRouter's own doc
+		// comment) doesn't need the full verifier stack; NewRouter's
+		// /healthz alone covers it, matching the safer of the two route
+		// sets.
+		handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))
+	}
+
+	if err := http.ListenAndServe(addr, handler); err != nil {
+		log.Fatalf("api-service: %v", err)
+	}
+}
+---idp-connector---
+// Command idp-connector is the outbound-only binary (Q3: /auth, /identity
+// against third-party IDPs). Per decisions/go-layout-debate.md, this file
+// is a thin wrapper — route registration and config loading live in
+// internal/app and internal/config, not here.
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+
+	"loginid-takehome/internal/app"
+	"loginid-takehome/internal/config"
+	"loginid-takehome/internal/connector"
+)
+
+// validateAuthConfig catches the live-review finding this binary's
+// manifest actually hit: AUTH_JWKS_URL and AUTH_JWT_ISSUER were both
+// silently absent from idp-connector's Deployment, so every request
+// 401'd in a way indistinguishable from an ordinary rejected token — the
+// PM's own postmortem note was that cmd/api-service's equivalent check
+// (added after ITS OWN identical incident) only protects that binary,
+// not this one, since nothing shared the requirement between them until
+// now. Reads config.RequiredAuthEnvVars("idp-connector", "") — the same
+// single source of truth internal/config's own manifest test reads —
+// rather than a hardcoded list of its own, so this check and that test
+// can never drift apart.
+func validateAuthConfig() error {
+	required, recognized := config.RequiredAuthEnvVars("idp-connector", "")
+	if !recognized {
+		// idp-connector always passes the same fixed ("idp-connector", "")
+		// pair — reaching here means RequiredAuthEnvVars itself has
+		// drifted, not a bad deployment. A bug in this binary, not a
+		// config problem, but still worth failing loudly rather than
+		// silently requiring nothing.
+		return fmt.Errorf("internal error: no RequiredAuthEnvVars entry for idp-connector")
+	}
+	for _, name := range required {
+		value := os.Getenv(name)
+		if value == "" {
+			return fmt.Errorf("%s must be set", name)
+		}
+		if err := config.ValidateEnvVarValue(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("idp-connector: loading config: %v", err)
+	}
+	if err := validateAuthConfig(); err != nil {
+		log.Fatalf("idp-connector: %v", err)
+	}
+
+	addr := cfg.HTTPAddr
+	if addr == "" {
+		addr = ":8081"
+	}
+
+	// No real ABC/XYZ vendor exists for this take-home (LT-41's own
+	// non-goal) — IDP_ABC_BASE_URL unset (the common case in this
+	// environment) wires the self-contained StubVendorClient instead,
+	// seeded with one demo identity so the connector's full /auth -&gt;
+	// /identity flow is exercisable end to end without a real vendor. If
+	// IDP_ABC_BASE_URL IS set, a real (or real-shaped) vendor is assumed
+	// reachable over HTTPS and HTTPVendorClient is used instead — this
+	// process does not silently fall back to the stub if that vendor
+	// turns out to be unreachable at request time; NewHTTPVendorClient
+	// only fails loudly at startup, on a non-https URL.
+	var vendor connector.VendorClient
+	if cfg.IDPABCBaseURL != "" {
+		httpVendor, err := connector.NewHTTPVendorClient(cfg.IDPABCBaseURL, nil)
+		if err != nil {
+			log.Fatalf("idp-connector: configuring vendor client: %v", err)
+		}
+		vendor = httpVendor
+		log.Printf("idp-connector: using HTTP vendor client at %s", cfg.IDPABCBaseURL)
+	} else {
+		stub := connector.NewStubVendorClient()
+		stub.Seed("demo-user", "demo-password", connector.Identity{
+			Name:          "Jane Demo",
+			Phone:         "+15555550100",
+			StreetAddress: "1 Demo Way",
+			Locality:      "Demoville",
+			Region:        "CA",
+			PostalCode:    "94000",
+			Country:       "US",
+		})
+		vendor = stub
+		log.Printf("idp-connector: IDP_ABC_BASE_URL not set — using in-process stub vendor (LT-41 non-goal: no real vendor integration)")
+	}
+
+	log.Printf("idp-connector: listening on %s", addr)
+	if err := http.ListenAndServe(addr, app.NewConnectorRouter(cfg, vendor)); err != nil {
+		log.Fatalf("idp-connector: %v", err)
+	}
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><details><summary><span class="tn">Bash</span> grep -n "^kind: Deployment" -A3 /tmp/lt34review/deploy/manifests.yaml</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"^kind: Deployment\" -A3 /tmp/lt34review/deploy/manifests.yaml"
+}</pre><div class="lbl">result</div><pre>87:kind: Deployment
+88-metadata:
+89-  name: api-service-issuer
+90-  namespace: loginid-takehome
+--
+422:kind: Deployment
+423-metadata:
+424-  name: idp-connector
+425-  namespace: loginid-takehome</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "name: api-service\b\|name: api-service$" /tmp/lt34review/deploy/manifests.yaml; grep -rn "a</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"name: api-service\\b\\|name: api-service$\" /tmp/lt34review/deploy/manifests.yaml; grep -rn \"api-service-verifier\\|kind: Deployment\" /tmp/lt34review/deploy/*.yaml 2&gt;/dev/null; ls /tmp/lt34review/deploy/"
+}</pre><div class="lbl">result</div><pre>24:metadata: {name: api-service, namespace: loginid-takehome}
+28:metadata: {name: api-service-issuer, namespace: loginid-takehome}
+89:  name: api-service-issuer
+101:        - name: api-service
+127:metadata: {name: api-service-issuer, namespace: loginid-takehome}
+494:metadata: {name: api-service-issuer-default-deny, namespace: loginid-takehome}
+519:          - {path: /healthz, pathType: Exact, backend: {service: {name: api-service, port: {number: 443}}}}
+520:          - {path: /auth/token, pathType: Exact, backend: {service: {name: api-service-issuer, port: {number: 443}}}}
+527:          - {path: /profiles, pathType: Prefix, backend: {service: {name: api-service, port: {number: 443}}}}
+/tmp/lt34review/deploy/api-service.yaml:27:kind: Deployment
+/tmp/lt34review/deploy/manifests.yaml:87:kind: Deployment
+/tmp/lt34review/deploy/manifests.yaml:422:kind: Deployment
+demo-data
+migrate
+api-service.yaml
+bootstrap.yaml
+db-secret-bootstrap.yaml
+gen-argon2-hash.go
+issuer-secret-bootstrap.yaml
+manifests.yaml
+rbac.yaml
+runner-set-values.yaml</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:19 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">The api-service (verifier) Deployment is in a separate file. Let me check that one.</div><details><summary><span class="tn">Bash</span> grep -n "replicas:\|strategy:\|type: Recreate\|type: RollingUpdate\|kind: Deployment\|name: api-serv</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"replicas:\\|strategy:\\|type: Recreate\\|type: RollingUpdate\\|kind: Deployment\\|name: api-service\" /tmp/lt34review/deploy/api-service.yaml"
+}</pre><div class="lbl">result</div><pre>6:# replicas: 1, not 2 — per Naomi's (01) live review: RateLimiter,
+16:# strategy: Recreate, not the RollingUpdate default — per Tobias's (01)
+25:# assume exactly one pod, same trade already accepted for replicas: 1.
+27:kind: Deployment
+29:  name: api-service
+32:  replicas: 1
+33:  strategy: {type: Recreate}
+41:        - name: api-service
+85:metadata: {name: api-service, namespace: loginid-takehome}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:20 AM PDT</span><span class="who">Desmond Okafor</span><div class="body">Both api-service and api-service-issuer confirmed at replicas:1, strategy Recreate. Package layout confirmed thin. Now I have everything needed.
+
+## Claims audit: 03-engineering-delivery/README.md (LT-43), verified against /tmp/lt34review @ 2ebf511
+
+**1. Model/effort claims — PASS.** `03-engineering-delivery/backlog.md`: 11 implementation stories (S1,S2,S3,S4,S5,S6,S7,S7a,S9,S10,S11) all say `Model/effort: sonnet, high`; exactly one, S8 (LT-41, connector), says `opus, high` (line 177, with the stated exception rationale on line 177). README's claim (line 32) matches exactly.
+
+**2. Decision docs cited — PASS, all four.** `go-layout-debate.md`: three-hats debate, ruling keeps two binaries but adopts shared `internal/app` for authoring cost (lines 13–19) — matches README line 35. `error-semantics.md`: rotating devil's-advocate seat Oren Castellan, closes sentinel set, forces boundary translation, adds context.DeadlineExceeded/Canceled handling (lines 9–23) — matches README line 36 (note: original sentinel names were later superseded by 05's contract, but the README doesn't claim the specific names, so no discrepancy). `context-propagation.md`: seat Nolan Reyes, scopes multi-table writes to a `Tx`, names credential writes as the detach point (lines 9–23) — matches README line 37. `test-double-strategy.md`: seat Marisol Ferran, hand-written fakes vs. codegen mocks, drift risk closed via PR checklist (lines 9–21) — matches README line 38.
+
+**3. PR template claim — PASS.** `/tmp/lt34review/.github/pull_request_template.md` line 9: `- [ ] Any change to dao.Repository or its sub-interfaces updates the hand-written fake in this PR (decisions/test-double-strategy.md)` — literal checklist line exists as claimed.
+
+**4. Live-tested findings — PASS on both items checked.** CI: `.github/workflows/pr-check.yml` runs a real `postgres:16-alpine` `services:` container (lines 22–35) plus a real `cockroachdb/cockroach:v23.2.0` container via `docker run` (lines 59–72), both DSN'd for `go test` — not mocked, matches finding 1. Deploy manifests: `deploy/api-service.yaml` (verifier) has `replicas: 1` / `strategy: {type: Recreate}` at lines 32–33; `deploy/manifests.yaml`'s `api-service-issuer` Deployment has the same at lines 92–93 — matches finding 2's claim exactly (both Deployments, not just one).
+
+**5. Package layout claim — PASS.** `cmd/api-service/main.go` (246 lines) and `cmd/idp-connector/main.go` (102 lines) are both argument-parsing/wiring/`main()` only — no route registration or handler logic; both call into `internal/app.New*Router(...)` and `internal/config.Load()`. Route registration and config loading live in `internal/app`/`internal/config` as claimed.
+
+**Overall: no discrepancies found across all 5 areas.** One minor observation, not a discrepancy: `error-semantics.md`'s originally-ruled sentinel names (`ErrNotFound`/`ErrDuplicate`/`ErrInvalidInput`) were later superseded by 05's seven sentinels — the README's summary describes the *pattern* (closing the set, boundary translation, context-error handling), which still holds, so this doesn't need softening.
+
+Files reviewed: `/tmp/lt34review/03-engineering-delivery/README.md`, `/tmp/lt34review/03-engineering-delivery/backlog.md` cross-checked against `/Users/warrenthompson/Source/LoginID/03-engineering-delivery/backlog.md`, `/tmp/lt34review/03-engineering-delivery/decisions/{go-layout-debate,error-semantics,context-propagation,test-double-strategy}.md`, `/tmp/lt34review/.github/pull_request_template.md`, `/tmp/lt34review/.github/workflows/pr-check.yml`, `/tmp/lt34review/deploy/api-service.yaml`, `/tmp/lt34review/deploy/manifests.yaml`, `/tmp/lt34review/cmd/api-service/main.go`, `/tmp/lt34review/cmd/idp-connector/main.go`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

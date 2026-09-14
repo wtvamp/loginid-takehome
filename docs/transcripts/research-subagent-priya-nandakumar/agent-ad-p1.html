@@ -1,0 +1,89 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Priya Nandakumar's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Priya Nandakumar's session)</h1><div class="sub">Unnamed research / consistency subagent · session 1 of 2 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 11:32 AM PDT – Sep 12, 2026 11:32 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 11:32 AM PDT</span><span class="who">Lead</span><div class="body">Tightly scoped research task for the LoginID take-home, 05-data-ops track. Return prose findings only — do NOT write any files, and do not write any code.
+
+QUESTION: Where do CockroachDB and PostgreSQL diverge in **transaction semantics and error semantics** (not SQL syntax, which is already covered), specifically in ways that would force a Go `database/sql` data-access layer to know which of the two engines it is talking to?
+
+This matters because our design currently claims one Go `postgres` package can serve both engines, and that claim is defended only on wire-protocol and SQL-surface compatibility. I need to know whether it survives contact with transaction and error behaviour.
+
+Investigate specifically, and answer each:
+1. **Retryable transaction errors.** CockroachDB defaults to SERIALIZABLE isolation. Does it return retryable serialization-failure errors (SQLSTATE 40001) that a *client* is expected to retry, in situations where PostgreSQL at its default READ COMMITTED would not? Is a client-side retry loop mandatory on CockroachDB? Does CockroachDB do any internal/automatic retry, and what are the limits of that (e.g. transactions that have already streamed results back)? What does Cockroach Labs' own documentation instruct client applications to do?
+2. **Isolation levels.** What isolation levels does each support and default to? Does CockroachDB now offer READ COMMITTED, and if so does that change the retry answer?
+3. **Error codes for the constraint violations our DAO must translate into shared Go sentinel errors** — unique-constraint violation (we need this for a duplicate `username`) and foreign-key violation. Do both engines use the same SQLSTATE codes (23505, 23503)? Are the error *messages*, constraint names, or the structure of the error object different enough that parsing differs between engines?
+4. **Go driver considerations.** Is `pgx`/`lib/pq` usable unchanged against CockroachDB? Is there anything in `crdb`/`cockroachdb-go` (e.g. `crdb.ExecuteTx`) that exists specifically because the standard Postgres path is insufficient — and if so, what problem does it solve?
+5. Any other transaction-semantics divergence that would leak into a shared implementation (e.g. behaviour of `SELECT ... FOR UPDATE`, savepoints, advisory locks, transaction priorities, `ON CONFLICT DO UPDATE` under contention).
+
+RULES, which matter as much as the answer:
+- A source URL for EVERY substantive claim. Prefer primary sources: Cockroach Labs official docs, PostgreSQL official docs, the cockroachdb/cockroach GitHub repo, the pgx repo.
+- Label vendor marketing/comparison pages as such; a vendor's compatibility page claiming compatibility is evidence of the claim, not proof of the fact.
+- Maintain an explicit **"could not verify"** list for anything you could not source. Do not fill gaps with plausible-sounding inference — an honest gap is far more useful to me than a confident guess.
+- Note anywhere sources contradict each other or where behaviour has changed by version, and give version numbers.
+- Bottom-line it: finish with a direct verdict on whether one Go implementation can honestly serve both engines, and if so what it costs — and if the honest answer is "yes, but with a named caveat", say exactly what the caveat is.
+
+Return under 900 words plus the source list.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 11:32 AM PDT</span><span class="who">Research subagent (Priya Nandakumar's session)</span><details><summary><span class="tn">ToolSearch</span> select:WebSearch,WebFetch</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "select:WebSearch,WebFetch",
+  "max_results": 5
+}</pre><div class="lbl">result</div><pre>[tool reference: ]
+[tool reference: ]</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 11:32 AM PDT</span><span class="who">Research subagent (Priya Nandakumar's session)</span><details><summary><span class="tn">WebSearch</span> CockroachDB SQLSTATE 40001 retryable transaction error client retry</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "CockroachDB SQLSTATE 40001 retryable transaction error client retry"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "CockroachDB SQLSTATE 40001 retryable transaction error client retry"
+
+Links: [{"title":"Middleware to handle retries for SQLSTATE value of '40001' (PostgreSQL, CockroachDB) · Issue #11183 · prisma/prisma","url":"https://github.com/prisma/prisma/issues/11183"},{"title":"Transaction Retry Error Reference - CockroachDB","url":"https://www.cockroachlabs.com/docs/v26.2/transaction-retry-error-reference"},{"title":"Advanced Client-side Transaction Retries","url":"https://www.cockroachlabs.com/docs/stable/advanced-client-side-transaction-retries"},{"title":"Transaction Retry Error Example","url":"https://www.cockroachlabs.com/docs/stable/transaction-retry-error-example"},{"title":"sql: transaction error state is not entered after a serializable restart · Issue #55233 · cockroachdb/cockroach","url":"https://github.com/cockroachdb/cockroach/issues/55233"},{"title":"Transaction Retry Error Reference","url":"https://www.cockroachlabs.com/docs/stable/transaction-retry-error-reference"},{"title":"What to do when a transaction fails in CockroachDB","url":"https://www.cockroachlabs.com/blog/what-to-do-when-a-transaction-fails-in-cockroachdb/"},{"title":"CockroachDB - Transactions &amp; Serializable Isolation","url":"https://www.lexuankha.com/blog/cockroachdb-transactions-serializable-isolation"}]
+
+Based on the search results, here's what you need to know about CockroachDB's SQLSTATE 40001 retryable transaction errors and client-side retry handling:
+
+## What is SQLSTATE 40001?
+
+Error code 40001 indicates that a transaction failed because it conflicted with another concurrent or recent transaction accessing the same data. All transaction retry errors use the SQLSTATE error code 40001, and emit error messages with the string "restart transaction".
+
+## Client-Side Retry Logic
+
+The transaction needs to be retried by the client. Your code should attempt to execute the transaction. If an error is returned that doesn't have the code 40001, or if the number of transaction retries has exceeded the maximum allowable number of retries, an error should be returned. Otherwise, the system should simply wait a moment (backoff) and try the transaction again.
+
+## Advanced Client-Side Transaction Retries
+
+If a statement returns a retry error (identified via the 40001 error code or "restart transaction" string at the start of the error message), you can issue the ROLLBACK TO SAVEPOINT statement to restart the transaction. A savepoint defined with the name cockroach_restart is a "retry savepoint" and is used to implement advanced client-side transaction retries.
+
+## Language-Specific Libraries
+
+Go developers using GORM or pgx can use the github.com/cockroachdb/cockroach-go/crdb package. Additionally, Python developers using SQLAlchemy can use the sqlalchemy-cockroachdb adapter, and Ruby (Active Record) developers can use the activerecord-cockroachdb-adapter.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> CockroachDB READ COMMITTED isolation level default SERIALIZABLE</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "CockroachDB READ COMMITTED isolation level default SERIALIZABLE"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "CockroachDB READ COMMITTED isolation level default SERIALIZABLE"
+
+Links: [{"title":"Read Committed Transactions - CockroachDB","url":"https://www.cockroachlabs.com/docs/v26.2/read-committed"},{"title":"Transactions","url":"https://www.cockroachlabs.com/docs/stable/transactions"},{"title":"cockroach/docs/RFCS/20230122_read_committed_isolation.md at master · cockroachdb/cockroach","url":"https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20230122_read_committed_isolation.md"},{"title":"Isolation levels without the anomaly table","url":"https://www.cockroachlabs.com/blog/232-read-committed-no-more-anomaly-tables/"},{"title":"No Dirty Reads: Everything you always wanted to know about SQL isolation levels (but were too afraid to ask)","url":"https://www.cockroachlabs.com/blog/sql-isolation-levels-explained/"},{"title":"Serializable Transactions","url":"https://www.cockroachlabs.com/docs/stable/demo-serializable"},{"title":"Serializable, lockless, distributed: Isolation in CockroachDB","url":"https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/"},{"title":"Changing the default transaction isolation level for asyncpg · sqlalchemy/sqlalchemy · Discussion #12159","url":"https://github.com/sqlalchemy/sqlalchemy/discussions/12159"},{"title":"Read Committed Isolation Levels Explained | Consistency in CockroachDB - YouTube","url":"https://www.youtube.com/watch?v=RX5SYAap57s"},{"title":"CockroachDB - Transactions &amp; Serializable Isolation","url":"https://www.lexuankha.com/blog/cockroachdb-transactions-serializable-isolation"}]
+
+Based on the search results, here's what I found about CockroachDB's isolation levels:
+
+## Default Isolation Level
+
+By default, CockroachDB executes all transactions at the strongest ANSI transaction isolation level: SERIALIZABLE, which permits no concurrency anomalies.
+
+## Supported Isolation Levels
+
+CockroachDB offers two transaction isolation levels: SERIALIZABLE and READ COMMITTED. Since v23.2, CockroachDB also supports Read Committed for PostgreSQL migration compatibility (requires an enterprise license from v24.1), but Serializable remains the default.
+
+## Key Differences
+
+READ COMMITTED isolation can prevent many retry errors, because it allows earlier non-locking SELECT statements to be disregarded: even if the current statement needs to be retried, in READ COMMITTED we never need to go back and retry older statements and can generally handle everything on the server side without returning an error to the client.
+
+So to summarize: SERIALIZABLE is CockroachDB's default isolation level, but READ COMMITTED is now available as an alternative option for improved migration compatibility with systems like PostgreSQL that default to READ COMMITTED.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> cockroachdb-go crdb.ExecuteTx client-side transaction retry</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "cockroachdb-go crdb.ExecuteTx client-side transaction retry"
+}</pre><div class="lbl err">result — error</div><pre>You've hit your org's monthly spend limit · run /usage-credits to raise it, or visit claude.ai/admin-settings/usage · your session limit resets 2pm (America/Los_Angeles)</pre></div></details><details><summary><span class="tn">WebSearch</span> CockroachDB unique constraint violation 23505 error message pq lib/pq pgx compatibility</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "CockroachDB unique constraint violation 23505 error message pq lib/pq pgx compatibility"
+}</pre><div class="lbl err">result — error</div><pre>You've hit your org's monthly spend limit · run /usage-credits to raise it, or visit claude.ai/admin-settings/usage · your session limit resets 2pm (America/Los_Angeles)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 11:32 AM PDT</span><span class="who">Research subagent (Priya Nandakumar's session)</span><div class="body">You've hit your org's monthly spend limit · run /usage-credits to raise it, or visit claude.ai/admin-settings/usage · your session limit resets 2pm (America/Los_Angeles)</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

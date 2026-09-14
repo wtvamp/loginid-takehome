@@ -1,0 +1,118 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Imogen Hale — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Imogen Hale</h1><div class="sub">Hire (track 01) · session 3 of 3 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 6:17 PM PDT – Sep 13, 2026 6:18 PM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 6:17 PM PDT</span><span class="who">Lead</span><div class="body">Naomi (PO) needs page copy for LT-53, a demo console being built (`GET /demo` on api-service, embedded static HTML page, no external assets). Read `01-product-industry-research-design/refinement/LT-53.md` for full context on what's being built and why.
+
+The page has five required panels/flows, each driving the real API live from the browser:
+1. Masked search beside full read (the read:own/read:any scoping distinction, side by side)
+2. The two 403s beside each other with a byte-equality check on the response bodies (anti-enumeration design — both rejections look identical)
+3. The 401 (no/invalid token)
+4. The reason_code enum: one accepted value, one rejected value, shown together
+5. The rate limit tripping (a real burst against the real limiter, live)
+
+Warren's own criterion: "each panel should say in one sentence what it proves" — not what it does mechanically. A viewer should read something like "this shows the API can tell two failure reasons apart without leaking which one" rather than "this calls /profiles/search twice."
+
+Your task: write one caption sentence per panel (5 total) that a first-time viewer — someone with no context on this project — would read and understand what security/design property is being demonstrated. Also write one sentence of copy for the page's own top-level intro (what this whole demo is for, in plain terms) and one sentence explaining the credential box (why the visitor is asked to paste a QA client id/secret, and that it's never stored). Keep every sentence genuinely one sentence, plain English, no jargon a non-engineer interviewer would trip on. Return just the 7 sentences, labeled by panel/section.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:17 PM PDT</span><span class="who">Imogen Hale</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/01-product-industry-research-design</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/refinement/LT-53.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/refinement/LT-53.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-53 refinement — Demo console (epic LT-3)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale (page copy), Tobias Lindqvist (objection seat — credential-handling risk). **Engineering:** Renata Cole (03, page + `go:embed` + tests), Theo Bergman (04, Ingress path). **Design input:** Marcus Ilori (02, seat on the credential-handling criterion). **Visual review:** Warren, at the live URL, before PO review. **Source:** Warren's ask ("does anything visual demonstrate what was built?" → "curl only" → "go ahead on a demo console"), routed by the PM as LT-53 under epic LT-3.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this one, now
+8	
+9	Every other story in this backlog is `curl`-verified — real, but nothing a first-time viewer (an interviewer, e.g.) can look at and understand without already knowing the API surface. This is the last story: a demo page that makes the working system visible, not a new capability.
+10	
+11	## Constraints, not up for re-derivation (PM's ruling)
+12	
+13	- **One static HTML page, embedded in the `api-service` binary via `go:embed`.** Not a separate service, not a separate deploy artifact.
+14	- **Served at `GET /demo` on the verifier**, same origin as the API it demonstrates — no CORS work, and critically, **no secret is ever baked into the page itself**.
+15	- **The visitor pastes a QA client id and secret** (the same QA clients already seeded for review, `qa-client-credential`) **that live only in the browser tab** — never persisted, never sent anywhere but this origin's own `/auth/token`.
+16	- **The page mints a real token and drives the real endpoints** — no simulated/fake responses. Every action shows the request as a literal `curl` line next to the raw response.
+17	- **Required panels/flows:**
+18	  1. Masked search beside full read (the `read:own`/`read:any` scoping distinction, side by side).
+19	  2. The two `403`s beside each other with a byte-equality check on the response bodies (demonstrating the anti-enumeration identical-content design).
+20	  3. The `401` (no/invalid token).
+21	  4. The `reason_code` enum: one accepted value, one rejected value, shown together.
+22	  5. The rate limit tripping (a real burst against the real limiter, shown live, not staged).
+23	
+24	## Warren's visual/design criterion (added after his "make sure it looks good" note — now a hard acceptance criterion, not polish)
+25	
+26	- **A deliberate palette and type scale, system fonts only** — the page loads no external assets (fonts, icon sets, JS/CSS CDNs), consistent with this being a same-origin, no-CORS, no-external-dependency page by design, not just a performance nicety.
+27	- **Panels read request → response, left to right.**
+28	- **Masked fields are visually highlighted**, not just textually present — a viewer should be able to *see* which fields are masked without reading closely.
+29	- **Response states color-coded to the same legend the project's own retrospective uses:** agent teal, human coral, deploy amber, done green, incident red, security violet, dark ground. **Flagged here since no retrospective artifact exists yet in this repository as a file to cite** — this refinement doc is the authoritative definition of that palette for this story; Renata builds to the six names/roles above, not to a file that may not exist by the time this is implemented. If a retrospective artifact is later published with different exact hex values, this page's palette should be reconciled to match it, not the other way around.
+30	- **Responsive at phone width.**
+31	- **No raw, unformatted JSON** — every response is rendered through the page's own formatting, not a `&lt;pre&gt;{{raw}}&lt;/pre&gt;` dump.
+32	- **Imogen owns the page copy:** each panel states, in one sentence, what it proves — not what it does mechanically (a viewer should read "this shows the API can tell two failure reasons apart without leaking which one" rather than "this calls /profiles/search twice").
+33	- **Warren does a visual review at the live URL before the PO review** — this story's sign-off order is Warren (visual) → Naomi (PO, functional + visual-criteria compliance), not PO-then-Warren.
+34	
+35	## Acceptance criteria
+36	
+37	- [ ] `GET /demo` serves a single HTML page embedded via `go:embed` in the `api-service` binary — no separate deploy artifact, no separate service.
+38	- [ ] **Architecture stated explicitly, per Marcus's review (item 1):** the page's JS calls the real `/auth/token` and protected endpoints **directly from the browser** (same-origin `fetch`, using a token the browser itself obtained) — `api-service`'s server-side code never sees the plaintext QA secret at all; it only ever serves static content at `/demo`. This is the design, not an implementation detail left implicit — if any future change introduces a server-side proxy step instead, that handler would need its own never-log coverage on the request body specifically (a new criterion at that point, not assumed covered by "the page" the way this one is).
+39	- [ ] The page never contains a secret value in its own source/markup/JS — the QA client id/secret are entered by the visitor into the page at runtime and held only in browser memory/DOM state for that tab, never written to `localStorage`/`sessionStorage`/a cookie, and never logged by the client-side JS to the console.
+40	- [ ] **Marcus's seat, credential-handling criterion:** the page's own JS never sends the pasted client secret anywhere except this origin's own `/auth/token` endpoint, exactly once per mint, over HTTPS — enforcement site: read the shipped JS directly, confirm no other network call ever references the secret variable, and confirm the token (not the secret) is what's held and reused for subsequent calls.
+41	- [ ] **Added per Marcus's review (item 2), a real gap — browser autofill/password-manager save prompts.** "Memory-only, never localStorage" covers what the application does, not what the browser's own chrome does: a plain credential-shaped `&lt;input&gt;` can trigger a "save this password?" prompt, putting the QA secret into the visitor's OS-level password store indefinitely — completely outside this design's control once that happens. Enforcement site: the secret input uses `type="password"`, `autocomplete="off"` (falling back to `autocomplete="new-password"` if a given browser ignores `off`, which some do), and a field `name`/`id` that doesn't pattern-match what password managers heuristically look for (avoid `password`/`secret` as the literal attribute value; something like `qa-token-input` is safer).
+42	- [ ] `/demo` and its own requests are excluded from audit-log bodies — the page's own static-asset serving and the visitor's direct browser-to-API calls (per the architecture criterion above) shouldn't pollute the audit trail with demo traffic the same way a real caller's would, or should be clearly distinguishable if they do.
+43	- [ ] The never-log lint (LT-49) covers this story's own new code paths, the same as everywhere else in this project — no exemption for "it's just a demo page."
+44	- [ ] The static `/demo` handler sits behind the same rate limiters as everything else `api-service` serves — no special-cased bypass for the demo route.
+45	- [ ] No authentication bypass anywhere in this story's own code — the demo page is a client of the real, fully-enforced API, not a backdoor or a relaxed-auth mode reachable only from `/demo`.
+46	- [ ] All required panels/flows present and each drives the **real** endpoint, not a canned/fake response: masked-vs-full read, the two 403s with a byte-equality check shown in the UI, the 401, the reason_code accept/reject pair, the rate limit tripping live.
+47	- [ ] Every action displays the literal `curl` command alongside the raw response — a viewer could copy the `curl` line and reproduce the call themselves.
+48	- [ ] Warren's visual criteria (palette/type scale, system fonts only, left-to-right request→response layout, highlighted masked fields, the six-color legend, responsive at phone width, no raw JSON, one-sentence-per-panel copy from Imogen) are all met — enforcement site: Warren's own visual review at the live URL, a precondition to the PO review, not a substitute for it.
+49	- [ ] No CORS configuration anywhere in this story's diff — same-origin service of the page is what makes this unnecessary; if a PR adds CORS handling, that's a signal the page isn't actually being served same-origin as designed.
+50	- [ ] Tests (Renata's, per the story's own engineering ownership): confirm `/demo` serves the embedded page, confirm the embed doesn't accidentally bundle any real secret file matching the never-log-list's field names, confirm the route exists in both `verifier`/default `APP_MODE` and doesn't get exposed on `issuer`/`sweep` modes (this is a demo of the search/retrieve/connector-adjacent surface, not the issuer internals).
+51	
+52	## Forward note, not a blocker (Marcus's review, item 3)
+53	
+54	An unauthenticated, publicly-reachable page whose whole purpose is pasting a real credential into a form is an unusual thing to leave running indefinitely. Fine for the review window this story serves; whether/how it's disabled or gated afterward (a feature flag, removed in a follow-up, left as-is with the QA clients themselves rotated/retired) is a decision for after the submission's review period, not something this story needs to resolve now — noted here so it doesn't just quietly stay live as a permanent oddity in the submission's final state.
+55	
+56	## Non-goals
+57	
+58	- No new API endpoints beyond what already exists — the demo page is a client of the existing surface, not new server-side capability.
+59	- No user accounts, no persistence of anything the visitor enters — every session starts blank.
+60	- No production/marketing polish beyond what's specified above — this is a technical demo for an interviewer, not a product landing page.
+61	- No change to rate-limiting, scoping, or any other already-shipped security control to make the demo "work better" — the demo shows the real system's real behavior, including its real limits (e.g., the rate limit tripping is a feature of the demo, not a bug to route around).
+62	
+63	## PO review script
+64	
+65	1. Load `https://loginid-takehome.uplifttech.org/demo` cold, as a first-time viewer would — confirm each panel's one-sentence copy actually explains what it proves without external context.
+66	2. Read the shipped page source/JS directly: confirm no secret is baked in, confirm the pasted secret is never sent anywhere but `/auth/token`, confirm no `localStorage`/`sessionStorage`/cookie writes of the secret or token.
+67	3. Run each required flow live: masked-vs-full read, the two 403s (confirm the byte-equality check is real, not simulated — mutate one response mentally/actually and confirm the UI would show a mismatch), the 401, the reason_code pair, the rate limit (drive real traffic until it trips, confirm the UI shows it live).
+68	4. Check responsiveness at phone width directly (resize/emulate), confirm no horizontal scroll, confirm the layout doesn't break.
+69	5. Confirm no external asset requests in the browser's network panel — no CDN font, no external script, nothing but this origin.
+70	6. Confirm Warren's own visual review happened and is recorded before this PO review proceeds.
+71	7. Screenshot each panel (or the full page) into this refinement record for the retrospective, per the PM's instruction.
+72	
+73	## Research team review
+74	
+75	**Imogen Hale — page copy:** [pending]
+76	
+77	**Tobias Lindqvist — objection (credential-handling risk):** [pending]
+78	
+79	**Naomi Voss — ruling:** [pending]
+80	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:17 PM PDT</span><span class="who">Imogen Hale</span><div class="body">Intro: This page lets you drive the actual identity API live from your browser, so you can watch its access rules and safeguards work in real time instead of taking our word for it.
+
+Credential box: You paste a temporary QA test login here only to get a real access token for this demo — it stays in this browser tab, is never saved anywhere, and is only ever used to talk to this one page's own login endpoint.
+
+Panel 1 (masked vs. full read): This shows the same person's record returned two different ways depending on what the caller is allowed to see — one version hides sensitive fields, the other reveals them — proving access is limited to what each caller has earned, not an all-or-nothing switch.
+
+Panel 2 (two 403s, byte-equality): This shows that being denied for "you don't have permission" and being denied because "that record doesn't exist" look exactly, byte-for-byte, the same from the outside, so no one can use the error message to go fishing for which accounts are real.
+
+Panel 3 (401): This shows the API simply refuses to answer at all when no valid login is presented, proving there's no accidental back door for anonymous requests.
+
+Panel 4 (reason_code enum): This shows the system accepts a recognized reason for a request and rejects a made-up one, proving it enforces a fixed, checkable list of valid reasons rather than trusting whatever a caller types in.
+
+Panel 5 (rate limit): This shows the API cutting off a rapid burst of real requests in real time, proving it can defend itself against being hammered rather than just claiming to.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

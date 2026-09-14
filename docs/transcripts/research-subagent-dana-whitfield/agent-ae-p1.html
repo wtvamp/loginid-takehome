@@ -1,0 +1,1774 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 10 of 12 · model <span class="mono">claude-haiku-4-5-20251001</span> · Sep 12, 2026 10:43 AM PDT – Sep 12, 2026 10:45 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 10:43 AM PDT</span><span class="who">Lead</span><div class="body">Research-only question about Claude Code (the CLI). Context: I'm the orchestrator ("team-lead") of a project with five persistent teammate agents spawned via the Agent tool. Each teammate will now "hire" its own sub-team of specialist agents, each with a distinct persona, and I need to know exactly which mechanisms exist. Please answer from the official Claude Code docs (cite the doc URL/section for each), concisely (under 600 words), organized by number:
+
+1. Custom agent definitions in `.claude/agents/*.md` (project-level) — what frontmatter fields are supported today? Specifically: `name`, `description`, `model` (which values? e.g. sonnet/opus/haiku/fable or full model ids?), reasoning effort (exact key name and allowed values — is it `effort`? `reasoning_effort`? values low/medium/high/xhigh/max?), `tools`/`disallowedTools`, `permissionMode`, and whether the body can use `@path` imports the way CLAUDE.md does. Is there an alternative to frontmatter for setting a subagent's effort (e.g., an SDK `agents` option), and does the Agent tool's `model` parameter override the definition?
+
+2. Nested spawning: can a subagent spawned via the Agent tool itself call the Agent tool to spawn further subagents (grand-child agents)? Any documented depth limit or restriction? Do project-level `.claude/agents/` definitions apply to agents spawned from within a subagent's session?
+
+3. Plan mode for teammates: when a teammate/subagent uses EnterPlanMode and then ExitPlanMode, how is approval handled — does a `plan_approval_request` message get routed to the parent/team-lead (I've seen `plan_approval_response` in the SendMessage protocol), and where does the teammate's plan file live (~/.claude/plans/?)? Can the team-lead reject with feedback and have the teammate revise?
+
+4. Effort at runtime: is there any way for an already-running agent to change its own effort level (e.g., `/effort` is a user slash command — can a subagent set it)? If not, confirm that effort must be fixed at spawn via the agent definition.
+
+5. Hooks scoping: can a `SessionStart` hook be scoped per agent definition or per directory, or are hooks only global/project-level in settings.json? (Background: a global SessionStart hook currently fires with `CLAUDE_PROJECT_DIR` set to the project root for every subagent regardless of its later cwd.) Is `CLAUDE_PROJECT_DIR` documented, and what is it set to for subagents?
+
+Report exact key names and value enums where the docs give them; say "not documented" rather than guessing.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:43 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/claude_code_docs_map.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/claude_code_docs_map.md",
+  "prompt": "Table of contents and index. Find pages about custom agent definitions, spawning subagents, plan mode, effort levels, and hooks."
+}</pre><div class="lbl">result</div><pre># Claude Code Documentation Overview
+
+This is a comprehensive documentation map for Claude Code with links to all available resources. Here are the key sections:
+
+## Main Documentation Areas
+
+### **Getting Started**
+- [Overview](https://code.claude.com/docs/en/overview.md) - What you can do with Claude Code
+- [Quickstart](https://code.claude.com/docs/en/quickstart.md) - Step-by-step setup guide
+- [Changelog](https://code.claude.com/docs/en/changelog.md)
+
+### **Core Concepts**
+- [How Claude Code Works](https://code.claude.com/docs/en/how-claude-code-works.md) - The agentic loop, tools, sessions
+- [Features Overview](https://code.claude.com/docs/en/features-overview.md)
+- [Context Window Management](https://code.claude.com/docs/en/context-window.md)
+- [Prompt Caching](https://code.claude.com/docs/en/prompt-caching.md)
+
+### **Using Claude Code**
+- [Memory &amp; CLAUDE.md](https://code.claude.com/docs/en/memory.md) - Project instructions and context
+- [Sessions](https://code.claude.com/docs/en/sessions.md) - Resume, branch, manage conversations
+- [Common Workflows](https://code.claude.com/docs/en/common-workflows.md)
+- [Best Practices](https://code.claude.com/docs/en/best-practices.md)
+
+### **Agents &amp; Parallel Work**
+- [Agents Overview](https://code.claude.com/docs/en/agents.md)
+- [Sub-agents](https://code.claude.com/docs/en/sub-agents.md) - Custom agent definitions and spawning
+- [Agent View](https://code.claude.com/docs/en/agent-view.md) - Monitor parallel sessions
+- [Agent Teams](https://code.claude.com/docs/en/agent-teams.md)
+- [Workflows](https://code.claude.com/docs/en/workflows.md)
+
+### **Platforms &amp; Integration**
+- **Desktop**: [Desktop Guide](https://code.claude.com/docs/en/desktop.md), [Linux](https://code.claude.com/docs/en/desktop-linux.md), [WSL](https://code.claude.com/docs/en/desktop-wsl.md)
+- **Web**: [Web Quickstart](https://code.claude.com/docs/en/web-quickstart.md), [Claude Code on Web](https://code.claude.com/docs/en/claude-code-on-the-web.md)
+- **IDEs**: [VS Code](https://code.claude.com/docs/en/vs-code.md), [JetBrains](https://code.claude.com/docs/en/jetbrains.md)
+- **Remote**: [Remote Control](https://code.claude.com/docs/en/remote-control.md), [Mobile](https://code.claude.com/docs/en/mobile.md)
+- **Tools**: [Chrome Extension](https://code.claude.com/docs/en/chrome.md), [Computer Use](https://code.claude.com/docs/en/computer-use.md)
+
+### **MCP &amp; Skills**
+- [MCP Quickstart](https://code.claude.com/docs/en/mcp-quickstart.md)
+- [MCP Full Guide](https://code.claude.com/docs/en/mcp.md)
+- [Skills](https://code.claude.com/docs/en/skills.md)
+
+### **Plugins**
+- [Discover Plugins](https://code.claude.com/docs/en/discover-plugins.md)
+- [Plugin Development](https://code.claude.com/docs/en/plugins.md)
+- [Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces.md)
+
+### **Automation &amp; Scheduling**
+- [Hooks Guide](https://code.claude.com/docs/en/hooks-guide.md) - Auto-approve, re-inject context, block edits
+- [Channels](https://code.claude.com/docs/en/channels.md)
+- [Scheduled Tasks](https://code.claude.com/docs/en/scheduled-tasks.md)
+- [Goal Command](https://code.claude.com/docs/en/goal.md)
+- [Headless Mode](https://code.claude.com/docs/en/headless.md)
+
+### **Permissions &amp; Sandboxing**
+- [Permissions](https://code.claude.com/docs/en/permissions.md)
+- [Permission Modes](https://code.claude.com/docs/en/permission-modes.md) - Plan, auto, bypassPermissions modes
+- [Sandboxing](https://code.claude.com/docs/en/sandboxing.md)
+
+### **Settings &amp; Configuration**
+- [Settings Guide](https://code.claude.com/docs/en/settings.md)
+- [Settings Reference](https://code.claude.com/docs/en/settings-reference.md) - Complete setting options
+- [Model Configuration](https://code.claude.com/docs/en/model-config.md)
+- [Fast Mode](https://code.claude.com/docs/en/fast-mode.md)
+
+### **Deployment &amp; Enterprise**
+- [Admin Setup](https://code.claude.com/docs/en/admin-setup.md)
+- [Managed Settings](https://code.claude.com/docs/en/managed-settings.md)
+- [Gateways](https://code.claude.com/docs/en/gateways.md)
+- Cloud Providers: [Bedrock](https://code.claude.com/docs/en/amazon-bedrock.md), [Google Vertex AI](https://code.claude.com/docs/en/google-vertex-ai.md), [Microsoft Foundry](https://code.claude.com/docs/en/microsoft-foundry.md)
+
+### **Security &amp; Data**
+- [Security](https://code.claude.com/docs/en/security.md)
+- [Data Usage](https://code.claude.com/docs/en/data-usage.md)
+- [Zero Data Retention](https://code.claude.com/docs/en/zero-data-retention.md)
+
+### **Troubleshooting**
+- [Installation Troubleshooting](https://code.claude.com/docs/en/troubleshoot-install.md)
+- [General Troubleshooting](https://code.claude.com/docs/en/troubleshooting.md)
+- [Error Reference](https://code.claude.com/docs/en/errors.md)
+- [Debug Configuration](https://code.claude.com/docs/en/debug-your-config.md)
+
+## Quick Navigation Tips
+
+Use the **documentation index** at https://code.claude.com/docs/llms.txt for LLM-friendly discovery. This map shows all pages with their heading structures for easy exploration before diving deeper into specific topics.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:43 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/sub-agents.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/sub-agents.md",
+  "prompt": "Custom agent definitions, frontmatter fields (name, description, model, effort, tools, permissionMode), @imports, nested spawning, plan mode, approval routing"
+}</pre><div class="lbl">result</div><pre># Create Custom Subagents in Claude Code
+
+Subagents are specialized AI assistants that handle specific tasks in isolated context windows. Here's how to create and use them:
+
+## Quick Start
+
+### 1. Ask Claude to Create One
+
+Describe what you want in your Claude Code session:
+
+```
+Create a personal code-improver subagent in ~/.claude/agents/ that scans
+files and suggests improvements for readability, performance, and best
+practices. It should be read-only and use Sonnet.
+```
+
+### 2. Review the Generated File
+
+Claude creates a markdown file in `~/.claude/agents/` with YAML frontmatter:
+
+```markdown
+---
+name: code-improver
+description: Scans files and suggests improvements for readability, performance, and best practices
+tools: Read, Grep, Glob
+model: sonnet
+---
+
+You are a code improvement specialist. For each issue you find, explain
+the problem, show the current code, and provide an improved version.
+```
+
+### 3. Use It
+
+Ask Claude: `Use the code-improver agent to suggest improvements in this project`
+
+## File Structure &amp; Scopes
+
+Store subagents in different locations based on scope:
+
+| Location | Scope | Priority |
+|----------|-------|----------|
+| Managed settings | Organization-wide | 1 (highest) |
+| `--agents` CLI flag | Current session | 2 |
+| `.claude/agents/` | Current project | 3 |
+| `~/.claude/agents/` | All projects | 4 |
+| Plugin's `agents/` | Where plugin enabled | 5 (lowest) |
+
+**Best practice**: Store project-specific subagents in `.claude/agents/` and check them into version control.
+
+## Essential Frontmatter Fields
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `name` | Yes | Unique identifier (lowercase, hyphens only) |
+| `description` | Yes | When Claude should delegate to this subagent |
+| `tools` | No | Allowed tools (inherits all if omitted) |
+| `model` | No | `sonnet`, `opus`, `haiku`, `fable`, or `inherit` |
+| `permissionMode` | No | `default`, `acceptEdits`, `auto`, `plan`, etc. |
+| `skills` | No | Skills to preload into context |
+| `memory` | No | `user`, `project`, or `local` for persistent memory |
+| `isolation` | No | Set to `worktree` for isolated git worktree |
+| `maxTurns` | No | Max agentic turns before stopping |
+
+## Common Examples
+
+### Read-Only Code Reviewer
+
+```yaml
+---
+name: code-reviewer
+description: Reviews code for quality and best practices
+tools: Read, Glob, Grep
+model: sonnet
+permissionMode: plan
+---
+
+You are a code reviewer. When invoked, analyze the code and provide
+specific, actionable feedback on quality, security, and best practices.
+```
+
+### API Development with Skills
+
+```yaml
+---
+name: api-developer
+description: Implement API endpoints following team conventions
+tools: Read, Write, Edit, Bash, Glob
+model: opus
+skills:
+  - api-conventions
+  - error-handling-patterns
+---
+
+Implement API endpoints. Follow the conventions and patterns from the preloaded skills.
+Always write tests for new endpoints. Use the error-handling patterns consistently.
+```
+
+### Research Agent with Memory
+
+```yaml
+---
+name: researcher
+description: Researches codebase patterns and architecture
+tools: Read, Grep, Glob, Bash
+memory: project
+---
+
+You are a research specialist. As you explore the codebase, maintain agent memory
+with discovered patterns, conventions, and architectural decisions. Update your
+memory files with findings so future sessions can build on this knowledge.
+```
+
+## Invoking Subagents
+
+### Three Ways to Invoke
+
+**1. Natural language** (Claude decides):
+```
+Use the code-reviewer to check my auth changes
+```
+
+**2. @-mention** (guarantees it runs):
+```
+@"code-reviewer (agent)" review the authentication module
+```
+
+**3. Session-wide** (whole session uses it):
+```bash
+claude --agent code-reviewer
+```
+
+Or in `.claude/settings.json`:
+```json
+{
+  "agent": "code-reviewer"
+}
+```
+
+## Control Capabilities
+
+### Restrict Tools
+
+**Allowlist approach:**
+```yaml
+tools: Read, Grep, Glob, Bash
+```
+
+**Denylist approach:**
+```yaml
+disallowedTools: Write, Edit
+```
+
+### Restrict Subagent Spawning
+
+Allow only certain subagents to be spawned:
+```yaml
+tools: Agent(worker, researcher), Read, Bash
+```
+
+### Permission Modes
+
+```yaml
+permissionMode: plan  # Read-only exploration
+```
+
+Options: `default` (manual), `acceptEdits`, `auto`, `dontAsk`, `plan`, `bypassPermissions`
+
+## Running Subagents
+
+### Foreground vs Background
+
+- **Foreground** (default): blocks main conversation, prompts passed through
+- **Background**: runs concurrently, permission prompts surface in main session
+
+Keep a subagent in background:
+```yaml
+background: true
+```
+
+Disable all background tasks:
+```bash
+export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+```
+
+## Advanced Features
+
+### Persistent Memory
+
+Track learning across sessions:
+```yaml
+memory: project
+---
+
+Update your memory as you discover codepaths, patterns, and architectural decisions.
+```
+
+The subagent gets access to `.claude/agent-memory/&lt;name&gt;/MEMORY.md`
+
+### Hooks for Validation
+
+Run scripts before tool use:
+```yaml
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./scripts/validate-command.sh"
+```
+
+### MCP Servers
+
+Scope MCP servers to specific subagents:
+```yaml
+mcpServers:
+  - github
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest"]
+```
+
+### Nested Subagents
+
+Subagents can spawn their own subagents (default: up to 3 levels deep):
+```bash
+export CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2
+```
+
+## Key Considerations
+
+- **Keep descriptions brief** — combined descriptions shouldn't exceed 15,000 tokens
+- **Use subagents for isolation** — verbose output stays in subagent context
+- **Forks inherit full context** — use when a side task needs background; normal subagents start fresh
+- **Memory is optional** — enables cross-session learning for specialized agents
+- **Tool restrictions enforce constraints** — perfect for read-only analyzers or specialized tools
+
+For more details, see the [complete documentation](https://code.claude.com/docs/custom-agents).</pre></div></details><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/agents.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/agents.md",
+  "prompt": "Agent tool, spawning, model parameter override, effort level settings"
+}</pre><div class="lbl">result</div><pre>&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# Run agents in parallel
+
+&gt; Compare the ways Claude Code can take on multiple tasks at once: subagents, agent view, agent teams, and dynamic workflows.
+
+[Subagents](/docs/en/sub-agents), [agent view](/docs/en/agent-view), [agent teams](/docs/en/agent-teams), and [dynamic workflows](/docs/en/workflows) each parallelize work in a different way. The right one depends on whether you want to stay in each conversation yourself, hand tasks off and check back later, or have Claude coordinate a group of workers for you.
+
+| Approach                           | What it gives you                                                                                                                                         | Use it when                                                                                                                                                                                         |
+| :--------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Subagents](/docs/en/sub-agents)        | Delegated workers inside one session that do a side task in their own context and return a summary                                                        | A side task would flood your main conversation with search results, logs, or file contents you won't reference again                                                                                |
+| [Agent view](/docs/en/agent-view)       | One screen to dispatch and monitor sessions running in the background, opened with `claude agents`. Research preview                                      | You have several independent tasks and want to hand them off, check status at a glance, and step in only when one needs you                                                                         |
+| [Agent teams](/docs/en/agent-teams)     | Multiple coordinated sessions with a shared task list and inter-agent messaging, managed by a lead. Experimental and disabled by default                  | You want Claude to split a project into pieces, assign them, and keep the workers in sync                                                                                                           |
+| [Dynamic workflows](/docs/en/workflows) | A script that runs many subagents and cross-checks their results, for work too big to coordinate one turn at a time or that needs more than a single pass | A job outgrows a handful of subagents, or you want findings verified against each other: a codebase-wide audit, a 500-file migration, cross-checked research, or a plan drafted from several angles |
+
+In every approach the workers are Claude sessions. To involve a different tool, expose it to Claude as an [MCP server](/docs/en/mcp).
+
+Three more tools support this work without being a way to run agents themselves:
+
+* [Worktrees](/docs/en/worktrees) give each session a separate git checkout, so parallel sessions never edit the same files. Use them for sessions you run yourself. A session you dispatch from agent view [moves into a worktree of its own before it edits files](/docs/en/agent-view#how-file-edits-are-isolated), and subagents you spawn can each get one too.
+* [Cross-session messaging](/docs/en/cross-session-messaging) lets Claude list and message your other Claude Code sessions on this machine, on another machine, or on [Claude Code on the web](/docs/en/claude-code-on-the-web), so sessions you run yourself can pass findings and status between themselves.
+* [`/batch`](/docs/en/commands) is a [skill](/docs/en/skills) that has Claude split one large change into 5 to 30 worktree-isolated subagents that each open a pull request. It's a packaged use of subagents and worktrees, not a separate coordination style.
+
+A few other features run Claude without you driving each step, but they solve a different problem than splitting work across agents:
+
+* A [background bash command](/docs/en/interactive-mode#background-bash-commands) runs one shell command without blocking the conversation. It doesn't spawn an agent.
+* A [forked subagent](/docs/en/sub-agents#fork-the-current-conversation) is a subagent that inherits your full conversation context instead of starting fresh. It's a way to spawn a subagent, not a separate surface. Start one with `/subtask`. Claude also spawns one itself where [fork mode](/docs/en/sub-agents#turn-fork-mode-on-or-off) is on. To copy the whole session into a new [background session](/docs/en/agent-view#from-inside-a-session) that runs alongside it, use `/fork`. With [agent view turned off](/docs/en/agent-view#turn-off-agent-view), the forked-subagent command is `/fork` instead and `/subtask` isn't available.
+* A [routine](/docs/en/routines) runs a session on a schedule in the cloud, not in parallel on your machine.
+
+&lt;Note&gt;
+  Running several sessions or subagents at once multiplies token usage. See [Costs](/docs/en/costs) for usage and rate-limit details.
+&lt;/Note&gt;
+
+## Choose an approach
+
+The right approach depends on who coordinates the work, whether the workers need to communicate, and whether they edit the same files:
+
+* **Who coordinates the work?**
+  * Claude delegates and collects results inside one conversation: [subagents](/docs/en/sub-agents)
+  * You hand off independent tasks and check back later: [agent view](/docs/en/agent-view)
+  * Claude plans, assigns, and supervises a group of workers: [agent teams](/docs/en/agent-teams), experimental and disabled by default
+  * A script holds the plan instead of Claude's turn-by-turn judgment: [dynamic workflows](/docs/en/workflows). See [how workflows compare to subagents and skills](/docs/en/workflows#when-to-use-a-workflow)
+* **Do the workers need to talk to each other?** Claude can pass findings with [cross-session messaging](/docs/en/cross-session-messaging) between sessions you run yourself, including the sessions you dispatch from agent view. Subagents report results back to the conversation that spawned them, and agent view sessions report results only to you. Teammates in an agent team message each other directly and, when they [have the Task tools](/docs/en/tools-reference#task-tool-availability), share a task list.
+* **Do the tasks touch the same files?** Isolate the work with [worktrees](/docs/en/worktrees). Subagents and sessions you run yourself can each use a separate worktree. Agent teams don't isolate teammates in worktrees, so [partition the work](/docs/en/agent-teams#avoid-file-conflicts) so each teammate owns a different set of files.
+
+## Check on running work
+
+The command for checking on running work depends on which approach you used:
+
+* For background sessions, `claude agents` opens [agent view](/docs/en/agent-view): one screen showing every session, its state, and which ones need your input.
+* For subagents in the current session, named background subagents appear in the @-mention typeahead with their status. As of v2.1.198, `/agents` no longer opens a panel; it prints a notice pointing to the subagent file locations. To [create and edit custom subagents](/docs/en/sub-agents#configure-subagents), ask Claude or edit the files directly. Despite the similar name, `/agents` is separate from `claude agents`.
+* For anything running in the background of the current session, `/tasks` lists each item and lets you check on, attach to, or stop it. The list also includes subagents that have finished.
+* For dynamic workflows, `/workflows` lists running and completed runs, the phase each is in, and how many agents have finished.
+
+For a desktop view of all your sessions, see [parallel sessions in the desktop app](/docs/en/desktop#work-in-parallel-with-sessions).
+
+## Learn more
+
+Each guide below covers setup and configuration for one approach:
+
+* [Create custom subagents](/docs/en/sub-agents): define reusable specialists and control which tools they can use.
+* [Manage agents with agent view](/docs/en/agent-view): dispatch sessions, watch their state, and attach when one needs you.
+* [Orchestrate agent teams](/docs/en/agent-teams): set up a lead and teammates, assign tasks, and review their work.
+* [Orchestrate dynamic workflows](/docs/en/workflows): run a bundled workflow or have Claude write one that runs many subagents and verifies their findings against each other.
+* [Run parallel sessions with worktrees](/docs/en/worktrees): start Claude in an isolated checkout, control what gets copied in, and clean up afterward.
+</pre></div></details><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/hooks-guide.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/hooks-guide.md",
+  "prompt": "Hook scoping (per-agent vs global), SessionStart, CLAUDE_PROJECT_DIR, subagent hooks"
+}</pre><div class="lbl">result</div><pre>&lt;persisted-output&gt;
+Output too large (80.8KB). Full output saved to: /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-results/toolu_012okuAKD5gRpdcsmBrZy5E8.txt
+
+Preview (first 2KB):
+&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# Automate actions with hooks
+
+&gt; Run shell commands automatically when Claude Code edits files, finishes tasks, or needs input. Format code, send notifications, validate commands, and enforce project rules.
+
+Hooks are user-defined shell commands. Claude Code runs them at specific points in its lifecycle, which gives you deterministic control: certain actions always happen rather than relying on the LLM to choose to run them. Use hooks to enforce project rules, automate repetitive tasks, and integrate Claude Code with your existing tools.
+
+For decisions that require judgment rather than deterministic rules, you can also use [prompt-based hooks](#prompt-based-hooks) or [agent-based hooks](#agent-based-hooks) that use a Claude model to evaluate conditions.
+
+For other ways to extend Claude Code, see [skills](/docs/en/skills) for giving Claude additional instructions and executable commands, [subagents](/docs/en/sub-agents) for running tasks in isolated contexts, and [plugins](/docs/en/plugins) for packaging extensions to share across projects.
+
+&lt;Tip&gt;
+  This guide covers common use cases and how to get started. For full event schemas, JSON input/output formats, and advanced features like async hooks and MCP tool hooks, see the [Hooks reference](/docs/en/hooks).
+&lt;/Tip&gt;
+
+## Set up your first hook
+
+To create a hook, add a `hooks` block to a [settings file](#configure-hook-location). This walkthrough creates a desktop notification hook, so you get alerted whenever Claude is waiting for your input instead of watching the terminal.
+
+&lt;Steps&gt;
+  &lt;Step title="Add the hook to your settings"&gt;
+...
+&lt;/persisted-output&gt;</pre></div></details><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/permission-modes.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/permission-modes.md",
+  "prompt": "Plan mode, EnterPlanMode, ExitPlanMode, approval routing, plan file location"
+}</pre><div class="lbl">result</div><pre>&lt;persisted-output&gt;
+Output too large (78.4KB). Full output saved to: /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-results/toolu_01GGe31bZeLyLhYWeWRSx3MF.txt
+
+Preview (first 2KB):
+&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# Choose a permission mode
+
+&gt; Control whether Claude asks before acting. Switch permission modes with Shift+Tab in the CLI, the mode indicator in VS Code, or the mode selector in Desktop.
+
+A permission mode sets which actions Claude can take in a session without asking you first. In Manual mode, Claude Code stops and asks you before most actions that edit files, run shell commands, or reach the network. In [auto mode](#eliminate-prompts-with-auto-mode), a second model, the classifier, reviews actions instead of you; [how the classifier evaluates actions](#how-the-classifier-evaluates-actions) lists which actions it reviews and which skip it.
+
+On Pro, Max, and Team plans, the built-in starting permission mode is auto mode. [Which mode a session starts in](#which-mode-a-session-starts-in) covers the surfaces and settings that change the starting permission mode. You can also change a running session's permission mode at any time.
+
+## Available modes
+
+Each mode makes a different tradeoff between convenience and oversight. The table below shows what Claude can do without a permission prompt in each mode. Manual mode appears under its config value, `default`.
+
+| Mode                                                                | What runs without asking                                                                                  | Best for                                        |
+| :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
+...
+&lt;/persisted-output&gt;</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:44 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-re</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-results/toolu_012okuAKD5gRpdcsmBrZy5E8.txt",
+  "limit": 500
+}</pre><div class="lbl">result</div><pre>1	&gt; ## Documentation Index
+2	&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+3	&gt; Use this file to discover all available pages before exploring further.
+4	
+5	# Automate actions with hooks
+6	
+7	&gt; Run shell commands automatically when Claude Code edits files, finishes tasks, or needs input. Format code, send notifications, validate commands, and enforce project rules.
+8	
+9	Hooks are user-defined shell commands. Claude Code runs them at specific points in its lifecycle, which gives you deterministic control: certain actions always happen rather than relying on the LLM to choose to run them. Use hooks to enforce project rules, automate repetitive tasks, and integrate Claude Code with your existing tools.
+10	
+11	For decisions that require judgment rather than deterministic rules, you can also use [prompt-based hooks](#prompt-based-hooks) or [agent-based hooks](#agent-based-hooks) that use a Claude model to evaluate conditions.
+12	
+13	For other ways to extend Claude Code, see [skills](/docs/en/skills) for giving Claude additional instructions and executable commands, [subagents](/docs/en/sub-agents) for running tasks in isolated contexts, and [plugins](/docs/en/plugins) for packaging extensions to share across projects.
+14	
+15	&lt;Tip&gt;
+16	  This guide covers common use cases and how to get started. For full event schemas, JSON input/output formats, and advanced features like async hooks and MCP tool hooks, see the [Hooks reference](/docs/en/hooks).
+17	&lt;/Tip&gt;
+18	
+19	## Set up your first hook
+20	
+21	To create a hook, add a `hooks` block to a [settings file](#configure-hook-location). This walkthrough creates a desktop notification hook, so you get alerted whenever Claude is waiting for your input instead of watching the terminal.
+22	
+23	&lt;Steps&gt;
+24	  &lt;Step title="Add the hook to your settings"&gt;
+25	    Open `~/.claude/settings.json` and add a `Notification` hook. If the file doesn't exist, create it. The example below uses `osascript` for macOS; see [Get notified when Claude needs input](#get-notified-when-claude-needs-input) for Linux and Windows commands.
+26	
+27	    ```json theme={null}
+28	    {
+29	      "hooks": {
+30	        "Notification": [
+31	          {
+32	            "matcher": "",
+33	            "hooks": [
+34	              {
+35	                "type": "command",
+36	                "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+37	              }
+38	            ]
+39	          }
+40	        ]
+41	      }
+42	    }
+43	    ```
+44	
+45	    If your settings file already has a `hooks` key, add `Notification` as a sibling of the existing event keys rather than replacing the whole object. Each event name is a key inside the single `hooks` object:
+46	
+47	    ```json theme={null}
+48	    {
+49	      "hooks": {
+50	        "PostToolUse": [
+51	          {
+52	            "matcher": "Edit|Write",
+53	            "hooks": [{ "type": "command", "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write" }]
+54	          }
+55	        ],
+56	        "Notification": [
+57	          {
+58	            "matcher": "",
+59	            "hooks": [{ "type": "command", "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'" }]
+60	          }
+61	        ]
+62	      }
+63	    }
+64	    ```
+65	
+66	    You can also ask Claude to write the hook for you by describing what you want in the CLI.
+67	  &lt;/Step&gt;
+68	
+69	  &lt;Step title="Verify the configuration"&gt;
+70	    Type `/hooks` to open the hooks browser. You'll see a list of all available hook events, with a count next to each event that has hooks configured. Select `Notification` to confirm your new hook appears in the list. Selecting the hook shows its details: the event, matcher, type, source file, and command.
+71	  &lt;/Step&gt;
+72	
+73	  &lt;Step title="Test the hook"&gt;
+74	    Press `Esc` to return to the CLI. Press `Shift+Tab` until the status bar shows `⏸ manual mode on`, ask Claude to do something that requires permission, then switch away from the terminal. You should receive a desktop notification.
+75	  &lt;/Step&gt;
+76	&lt;/Steps&gt;
+77	
+78	&lt;Tip&gt;
+79	  The `/hooks` menu is read-only. To add, modify, or remove hooks, edit your settings JSON directly or ask Claude to make the change.
+80	&lt;/Tip&gt;
+81	
+82	## What you can automate
+83	
+84	Hooks let you run code at key points in Claude Code's lifecycle: format files after edits, block commands before they execute, send notifications when Claude needs input, inject context at session start, and more. For the full list of hook events, see the [Hooks reference](/docs/en/hooks#hook-lifecycle).
+85	
+86	Each example includes a ready-to-use configuration block that you add to a [settings file](#configure-hook-location).
+87	
+88	For a production example of hooks that run a separate model review and feed findings back into the session, see [how the `security-guidance` plugin integrates with Claude Code](/docs/en/security-guidance#how-the-plugin-integrates-with-claude-code).
+89	
+90	### Get notified when Claude needs input
+91	
+92	Get a desktop notification whenever Claude finishes working and needs your input, so you can switch to other tasks without checking the terminal.
+93	
+94	This hook uses the `Notification` event, which Claude Code fires when Claude is waiting for input or permission. See [when each notification type fires](/docs/en/hooks#notification) for the exact timing. Each tab below uses the platform's native notification command. Add this to `~/.claude/settings.json`:
+95	
+96	&lt;Tabs&gt;
+97	  &lt;Tab title="macOS"&gt;
+98	    ```json theme={null}
+99	    {
+100	      "hooks": {
+101	        "Notification": [
+102	          {
+103	            "matcher": "",
+104	            "hooks": [
+105	              {
+106	                "type": "command",
+107	                "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+108	              }
+109	            ]
+110	          }
+111	        ]
+112	      }
+113	    }
+114	    ```
+115	
+116	    &lt;Accordion title="If no notification appears"&gt;
+117	      `osascript` routes notifications through the built-in Script Editor app. If Script Editor doesn't have notification permission, the command fails silently, and macOS won't prompt you to grant it. Run this in Terminal once to make Script Editor appear in your notification settings:
+118	
+119	      ```bash theme={null}
+120	      osascript -e 'display notification "test"'
+121	      ```
+122	
+123	      Nothing will appear yet. Open **System Settings &gt; Notifications**, find **Script Editor** in the list, and turn on **Allow Notifications**. Run the command again to confirm the test notification appears.
+124	    &lt;/Accordion&gt;
+125	  &lt;/Tab&gt;
+126	
+127	  &lt;Tab title="Linux"&gt;
+128	    ```json theme={null}
+129	    {
+130	      "hooks": {
+131	        "Notification": [
+132	          {
+133	            "matcher": "",
+134	            "hooks": [
+135	              {
+136	                "type": "command",
+137	                "command": "notify-send 'Claude Code' 'Claude Code needs your attention'"
+138	              }
+139	            ]
+140	          }
+141	        ]
+142	      }
+143	    }
+144	    ```
+145	
+146	    &lt;Accordion title="If no notification appears"&gt;
+147	      `notify-send` needs a desktop notification daemon, which headless servers, SSH sessions, and most containers don't have. Test the command directly first:
+148	
+149	      ```bash theme={null}
+150	      notify-send 'Claude Code' 'test'
+151	      ```
+152	
+153	      If the command isn't found, install the `libnotify-bin` package on Debian and Ubuntu, or your distribution's equivalent.
+154	    &lt;/Accordion&gt;
+155	  &lt;/Tab&gt;
+156	
+157	  &lt;Tab title="Windows (PowerShell)"&gt;
+158	    ```json theme={null}
+159	    {
+160	      "hooks": {
+161	        "Notification": [
+162	          {
+163	            "matcher": "",
+164	            "hooks": [
+165	              {
+166	                "type": "command",
+167	                "command": "powershell.exe -Command \"[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('Claude Code needs your attention', 'Claude Code')\""
+168	              }
+169	            ]
+170	          }
+171	        ]
+172	      }
+173	    }
+174	    ```
+175	
+176	    &lt;Accordion title="If no dialog appears"&gt;
+177	      This command opens a dialog box rather than a notification in the corner of your screen, so the dialog can open behind your terminal window. Test the command directly in PowerShell first. If you run Claude Code inside WSL, `powershell.exe` must be available on your `PATH` through Windows interop.
+178	    &lt;/Accordion&gt;
+179	  &lt;/Tab&gt;
+180	&lt;/Tabs&gt;
+181	
+182	The empty `matcher` fires on all notification types. To fire only on specific events, set it to one of these values:
+183	
+184	| Matcher                      | Fires when                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+185	| :--------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+186	| `permission_prompt`          | Claude needs you to approve a tool use or a sandboxed command's [network request](/docs/en/sandboxing#network-isolation), and the prompt has waited about six seconds                                                                                                                                                                                                                                                                                                      |
+187	| `idle_prompt`                | Claude finished responding about 60 seconds ago and you haven't typed since                                                                                                                                                                                                                                                                                                                                                                                           |
+188	| `auth_success`               | Authentication completes                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+189	| `elicitation_dialog`         | An MCP server opens an elicitation form and you haven't typed for about six seconds                                                                                                                                                                                                                                                                                                                                                                                   |
+190	| `elicitation_url_dialog`     | An MCP server asks you to open a browser URL and you haven't typed for about six seconds                                                                                                                                                                                                                                                                                                                                                                              |
+191	| `elicitation_complete`       | An MCP server reports that a [URL-mode elicitation](/docs/en/hooks#elicitation-input) is complete                                                                                                                                                                                                                                                                                                                                                                          |
+192	| `elicitation_response`       | An MCP elicitation response is sent back to the server                                                                                                                                                                                                                                                                                                                                                                                                                |
+193	| `agent_needs_input`          | A background session starts waiting on your input while [agent view](/docs/en/agent-view) is open, or the current session asks you an [agent team teammate's terminal setup question](/docs/en/agent-teams#choose-a-display-mode) and you haven't typed for about six seconds                                                                                                                                                                                                   |
+194	| `agent_completed`            | A background session finishes or fails. Fires only while [agent view](/docs/en/agent-view) is open                                                                                                                                                                                                                                                                                                                                                                         |
+195	| `quota_auto_resume_fired`    | Claude Code continues your task after a claude.ai usage limit paused it: at the reset, or sooner when something you do in Claude Code during the wait, such as adding usage credits, upgrading your plan, or switching models, makes usage available again, with the [model-setting exception](/docs/en/interactive-mode#wait-for-a-usage-limit-to-reset)                                                                                                                  |
+196	| `quota_auto_resume_stale`    | A claude.ai usage limit reset while your computer slept for more than about 30 minutes. Claude Code waits for you to press `Enter` instead of continuing. After a shorter sleep it continues and fires `quota_auto_resume_fired` instead                                                                                                                                                                                                                              |
+197	| `quota_auto_resume_disabled` | Claude Code ends its wait for a claude.ai usage limit without continuing your task: [`autoContinueAtUsageLimit`](/docs/en/settings-reference#autocontinueatusagelimit) turned off or the reset moved more than 24 hours away during a wait Claude Code started on its own, the continued task kept hitting the limit, or the continuation was blocked before it reached the model. Doesn't fire when you press `Esc` or `Ctrl+C`, or pick **Don't continue automatically** |
+198	
+199	Claude Code times `permission_prompt` differently in a terminal and in Claude Desktop, the VS Code extension, and other hosts that answer permission requests through the Agent SDK. See [when each notification type fires](/docs/en/hooks#notification) for both timings.
+200	
+201	The `agent_needs_input` and `agent_completed` matchers require Claude Code v2.1.198 or later.
+202	
+203	The `quota_auto_resume_fired`, `quota_auto_resume_stale`, and `quota_auto_resume_disabled` matchers require Claude Code v2.1.234 or later.
+204	
+205	In terminal sessions, `permission_prompt` for a sandboxed command's network request requires Claude Code v2.1.246 or later.
+206	
+207	`agent_needs_input` for a teammate's terminal setup question requires Claude Code v2.1.248 or later.
+208	
+209	Type `/hooks` and select `Notification` to confirm the hook is registered. For the full event schema, see the [Notification reference](/docs/en/hooks#notification).
+210	
+211	### Auto-format code after edits
+212	
+213	Automatically run [Prettier](https://prettier.io/) on every file Claude edits, so formatting stays consistent without manual intervention.
+214	
+215	This hook uses the `PostToolUse` event with an `Edit|Write` matcher, so it runs only after file-editing tools. The command extracts the edited file path with [`jq`](https://jqlang.org/) and passes it to Prettier. Add this to `.claude/settings.json` in your project root:
+216	
+217	```json theme={null}
+218	{
+219	  "hooks": {
+220	    "PostToolUse": [
+221	      {
+222	        "matcher": "Edit|Write",
+223	        "hooks": [
+224	          {
+225	            "type": "command",
+226	            "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write"
+227	          }
+228	        ]
+229	      }
+230	    ]
+231	  }
+232	}
+233	```
+234	
+235	To test the hook, ask Claude to add a line with single-quoted strings to a JavaScript file, then open the file: with Prettier's default settings, the hook rewrites them to double quotes.
+236	
+237	When the hook succeeds, Claude Code shows nothing in the conversation. To confirm the hook ran, check that the edited file is reformatted, or see [Debug techniques](#debug-techniques).
+238	
+239	To reformat a specific file however it changes, including when a `Bash` command rewrites it, use a [FileChanged](/docs/en/hooks#filechanged) hook instead.
+240	
+241	&lt;Note&gt;
+242	  The Bash examples on this page use `jq` for JSON parsing. Install it with `brew install jq` on macOS, `apt-get install jq` on Debian and Ubuntu, or see [`jq` downloads](https://jqlang.org/download/).
+243	&lt;/Note&gt;
+244	
+245	### Block edits to protected files
+246	
+247	Prevent Claude from modifying sensitive files like `.env`, `package-lock.json`, or anything in `.git/`. Claude receives feedback explaining why the edit was blocked, so it can adjust its approach.
+248	
+249	This example uses a separate script file that the hook calls. The script checks the target file path against a list of protected patterns and exits with code 2 to block the edit.
+250	
+251	&lt;Steps&gt;
+252	  &lt;Step title="Create the hook script"&gt;
+253	    Save this to `.claude/hooks/protect-files.sh`:
+254	
+255	    ```bash theme={null}
+256	    #!/bin/bash
+257	    # protect-files.sh
+258	
+259	    INPUT=$(cat)
+260	    FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+261	
+262	    # Normalize Windows backslash separators so the patterns below match
+263	    FILE_PATH="${FILE_PATH//\\//}"
+264	
+265	    PROTECTED_PATTERNS=(".env" "package-lock.json" ".git/")
+266	
+267	    for pattern in "${PROTECTED_PATTERNS[@]}"; do
+268	      if [[ "$FILE_PATH" == *"$pattern"* ]]; then
+269	        echo "Blocked: $FILE_PATH matches protected pattern '$pattern'" &gt;&amp;2
+270	        exit 2
+271	      fi
+272	    done
+273	
+274	    exit 0
+275	    ```
+276	  &lt;/Step&gt;
+277	
+278	  &lt;Step title="Make the script executable on macOS and Linux"&gt;
+279	    Hook scripts must be executable for Claude Code to run them:
+280	
+281	    ```bash theme={null}
+282	    chmod +x .claude/hooks/protect-files.sh
+283	    ```
+284	  &lt;/Step&gt;
+285	
+286	  &lt;Step title="Register the hook"&gt;
+287	    Add a `PreToolUse` hook to `.claude/settings.json` that runs the script before any `Edit` or `Write` tool call:
+288	
+289	    ```json theme={null}
+290
+… truncated (20 KB cap)</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-re</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/.claude/projects/-Users-warrenthompson-Source-LoginID/e179bddc-bee5-4165-90cf-dc54e411a7d6/tool-results/toolu_01GGe31bZeLyLhYWeWRSx3MF.txt",
+  "limit": 500
+}</pre><div class="lbl">result</div><pre>1	&gt; ## Documentation Index
+2	&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+3	&gt; Use this file to discover all available pages before exploring further.
+4	
+5	# Choose a permission mode
+6	
+7	&gt; Control whether Claude asks before acting. Switch permission modes with Shift+Tab in the CLI, the mode indicator in VS Code, or the mode selector in Desktop.
+8	
+9	A permission mode sets which actions Claude can take in a session without asking you first. In Manual mode, Claude Code stops and asks you before most actions that edit files, run shell commands, or reach the network. In [auto mode](#eliminate-prompts-with-auto-mode), a second model, the classifier, reviews actions instead of you; [how the classifier evaluates actions](#how-the-classifier-evaluates-actions) lists which actions it reviews and which skip it.
+10	
+11	On Pro, Max, and Team plans, the built-in starting permission mode is auto mode. [Which mode a session starts in](#which-mode-a-session-starts-in) covers the surfaces and settings that change the starting permission mode. You can also change a running session's permission mode at any time.
+12	
+13	## Available modes
+14	
+15	Each mode makes a different tradeoff between convenience and oversight. The table below shows what Claude can do without a permission prompt in each mode. Manual mode appears under its config value, `default`.
+16	
+17	| Mode                                                                | What runs without asking                                                                                  | Best for                                        |
+18	| :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
+19	| `default`                                                           | Reads only                                                                                                | Reviewing every action yourself, sensitive work |
+20	| [`acceptEdits`](#auto-approve-file-edits-with-acceptedits-mode)     | Reads, file edits, and common filesystem commands (`mkdir`, `touch`, `mv`, `cp`, etc.)                    | Iterating on code you're reviewing              |
+21	| [`plan`](#analyze-before-you-edit-with-plan-mode)                   | Reads, plus classifier-approved commands when [auto mode](#eliminate-prompts-with-auto-mode) is available | Exploring a codebase before changing it         |
+22	| [`auto`](#eliminate-prompts-with-auto-mode)                         | Everything, with background safety checks                                                                 | Long tasks, reducing prompt fatigue             |
+23	| [`dontAsk`](#allow-only-pre-approved-tools-with-dontask-mode)       | Reads and pre-approved tools; anything that would prompt is denied                                        | Locked-down CI and scripts                      |
+24	| [`bypassPermissions`](#skip-all-checks-with-bypasspermissions-mode) | Everything                                                                                                | Isolated containers and VMs only                |
+25	
+26	The mode that reviews every action is named **Manual** in the CLI, in `claude --help`, in the VS Code and JetBrains extensions, and in the desktop app. Its config value is `default`, which is what hooks and SDK integrations use. The CLI accepts `manual` as an alias wherever you type the value, for example `claude --permission-mode manual` or `"defaultMode": "manual"`. The Manual label and the `manual` alias require Claude Code v2.1.200 or later. The desktop app's label doesn't depend on your CLI version.
+27	
+28	Writes to [protected paths](#protected-paths) are never auto-approved except in `bypassPermissions` mode and in plan-mode sessions where bypass permissions are available, meaning sessions started in a way that [puts `bypassPermissions` in the mode cycle](#switch-permission-modes).
+29	
+30	Modes set the baseline. Layer [permission rules](/docs/en/permissions#manage-permissions) on top to pre-approve or block specific tools. Deny rules block in every mode, including `bypassPermissions`. Deny and ask rules don't apply to [`EndConversation`](/docs/en/tools-reference#endconversation-tool-behavior) as long as Claude still has at least one other tool it can call. Allow rules have no effect in `bypassPermissions`.
+31	
+32	&lt;h3 id="actions-no-mode-auto-approves"&gt;
+33	  Actions no mode auto-approves
+34	&lt;/h3&gt;
+35	
+36	Claude Code doesn't auto-approve the following in any mode, including `bypassPermissions`. Each bullet links to the section that says what happens instead in each mode:
+37	
+38	* Tools matched by an explicit [ask rule](/docs/en/permissions#manage-permissions)
+39	* Connector tools your organization [set to `ask`](/docs/en/mcp#organization-controls-on-connector-tools), in sessions where that setting reaches Claude Code
+40	* Tools that require user interaction: the built-in `AskUserQuestion` tool and MCP tools marked [`requiresUserInteraction`](/docs/en/mcp#require-approval-for-a-specific-tool)
+41	* `rm` and `rmdir` removals targeting a [critical path](#critical-paths), which no allow rule or `PreToolUse` hook `"allow"` approves
+42	* The [cross-session messaging safeguards](#skip-all-checks-with-bypasspermissions-mode)
+43	* Reads outside the working directories while [`permissions.blockReadsOutsideWorkingDirectories`](/docs/en/settings-reference#permissions-blockreadsoutsideworkingdirectories) is on: recognized file-reading Bash commands and any [unsandboxed retry](/docs/en/sandboxing#the-unsandboxed-retry-escape-hatch) that needs approval to run outside the sandbox prompt even in auto mode and `bypassPermissions` mode. Requires Claude Code v2.1.257 or later
+44	
+45	## Common setups
+46	
+47	Permission modes decide whether Claude asks before an action, and the [Bash sandbox](/docs/en/sandboxing) and outer [isolation boundaries](/docs/en/sandbox-environments) decide what an action can reach once it runs. Each row below pairs a goal with the flags or settings that get you there and the isolation it needs, as a starting point. [Available modes](#available-modes) lists what runs without a prompt in each mode.
+48	
+49	| You want to                                              | Start with                                                                                                                                                          | Isolation needed                                                                                                                                                                             | Notes                                                                                                                                                                                                                               |
+50	| :------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+51	| Review every action yourself                             | Manual mode: `claude --permission-mode default`                                                                                                                     | None                                                                                                                                                                                         | Sensitive work, unfamiliar code                                                                                                                                                                                                     |
+52	| Iterate locally with fewer prompts, without a classifier | Manual mode plus the Bash sandbox in [auto-allow mode](/docs/en/sandboxing#sandbox-modes): `claude --permission-mode default`, then run `/sandbox` and select auto-allow | The built-in Bash sandbox, on macOS, Linux, and WSL2                                                                                                                                         | Deny rules still apply, and ask rules that name a command, such as `Bash(git push *)`, still prompt. To turn the sandbox on from a settings file instead, set [`sandbox.enabled`](/docs/en/settings-reference#sandbox-enabled) to `true` |
+53	| Explore before changing anything                         | `claude --permission-mode plan`                                                                                                                                     | None                                                                                                                                                                                         | Claude Code blocks edits until you [approve a plan](#review-and-approve-a-plan)                                                                                                                                                     |
+54	| Work hands-off in auto mode                              | `claude --permission-mode auto`, the [built-in starting permission mode](#which-mode-a-session-starts-in) on Pro, Max, and Team                                     | None; a sandbox or container adds defense in depth                                                                                                                                           | Requires a [supported model](#eliminate-prompts-with-auto-mode), and your organization can [turn auto mode off](#eliminate-prompts-with-auto-mode)                                                                                  |
+55	| Run in CI with an exact allowlist                        | `claude -p "run the test suite" --permission-mode dontAsk --allowedTools "Bash(npm test)" "Read"`                                                                   | None beyond what your CI runner provides                                                                                                                                                     | [Claude Code on the web](/docs/en/claude-code-on-the-web) ignores `dontAsk` from settings files                                                                                                                                          |
+56	| Run fully unattended inside a container                  | `claude -p "&lt;prompt&gt;" --dangerously-skip-permissions`                                                                                                               | Required: a container, VM, or the [sandbox runtime](/docs/en/sandbox-environments#sandbox-runtime); on Linux and macOS, run it as a [non-root user](#skip-all-checks-with-bypasspermissions-mode) | Claude Code on the web ignores this mode from settings files. In this `-p` run, the [few calls that would still prompt](#skip-all-checks-with-bypasspermissions-mode) are denied instead                                            |
+57	
+58	The Bash sandbox and auto mode work independently and combine, except in plan mode, where [auto-allow doesn't widen approvals](/docs/en/sandboxing#sandbox-modes). For the full interaction, see [How sandboxing relates to permissions and permission modes](/docs/en/sandboxing#how-sandboxing-relates-to-permissions-and-permission-modes) and [How isolation relates to permission modes](/docs/en/sandbox-environments#how-isolation-relates-to-permission-modes).
+59	
+60	&lt;h2 id="which-mode-a-session-starts-in"&gt;
+61	  Which mode a session starts in
+62	&lt;/h2&gt;
+63	
+64	When you start a new session in a terminal, Claude Code takes the permission mode from the first of these that applies:
+65	
+66	1. The `--permission-mode` flag, or `--dangerously-skip-permissions`
+67	
+68	2. `permissions.defaultMode` in a [settings file](/docs/en/settings#where-settings-live)
+69	
+70	   If you set `"auto"` in `.claude/settings.json` or `.claude/settings.local.json`, the value doesn't take effect, and Claude Code then uses the built-in default rather than a `defaultMode` from `~/.claude/settings.json`. If you set `"bypassPermissions"` in those two files, it doesn't take effect either, and the session starts in Manual mode. The other values apply from any settings file.
+71	
+72	3. The built-in default
+73	
+74	Conversations the VS Code extension starts follow the extension's own list in [Switch permission modes](#switch-permission-modes). For the permission mode Claude Code starts a resumed session in, see [permission mode on resume](/docs/en/sessions#permission-mode-on-resume).
+75	
+76	The built-in `auto` default requires Claude Code v2.1.228 or later on macOS, Linux, and WSL, and v2.1.233 or later on native Windows. On earlier versions, the built-in default is Manual.
+77	
+78	The built-in default depends on how you run Claude Code, on your plan, and on whether Claude Code could fetch its feature flags. The first row that matches your session applies. The table covers sessions you start in a terminal or through the VS Code extension; for the desktop app and claude.ai, see the Desktop and Web tabs in [Switch permission modes](#switch-permission-modes).
+79	
+80	| How you run Claude Code                                                                                                                                                                                                         | Built-in starting permission mode |
+81	| :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------- |
+82	| Any settings file sets `disableAutoMode` to `"disable"`                                                                                                                                                                         | `default`                         |
+83	| [Feature-flag fetching](/docs/en/env-vars#features-that-need-feature-flag-fetching) is off                                                                                                                                           | `default`                         |
+84	| Your [first session after you install Claude Code or upgrade](/docs/en/env-vars#first-session-after-an-install-or-upgrade) to a version that adds this default, unless, after a fresh install, Claude Code fetches the flags in time | `default`                         |
+85	| `claude -p` or the [Agent SDK](/docs/en/agent-sdk/permissions)                                                                                                                                                                       | `default`                         |
+86	| Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry, [Claude Platform on AWS](/docs/en/claude-platform-on-aws), or a signed-in [Claude apps gateway](/docs/en/claude-apps-gateway) session                                   | `default`                         |
+87	| A Pro, Max, or Team plan, in a terminal or through the [VS Code extension](/docs/en/vs-code)                                                                                                                                         | `auto`                            |
+88	| An Enterprise plan or a Claude Console API key                                                                                                                                                                                  | `default`                         |
+89	
+90	When feature-flag fetching is off, or in a [first session after an install or upgrade](/docs/en/env-vars#first-session-after-an-install-or-upgrade) where the flags haven't arrived yet, the VS Code extension ignores every settings file when choosing the starting permission mode.
+91	
+92	When the flag, a settings file, or the built-in default selects `auto` but auto mode isn't available to the session, Claude Code starts the session in Manual instead. Auto mode is unavailable when the session doesn't meet the [availability requirements](#eliminate-prompts-with-auto-mode), such as a settings file turning it off or a model that doesn't support it, or when Anthropic has temporarily turned it off server-side.
+93	
+94	The first time the built-in default starts one of your sessions in auto mode, Claude Code shows a notice that links to this page:
+95	
+96	* In a terminal, once, at the top of the session
+97	* In the VS Code extension, as a card on the new-conversation screen that stays until you dismiss it
+98	
+99	On Pro, Max, and Team plans, if your `~/.claude/settings.json` sets a `defaultMode` other than `auto` and no other settings file sets one, your sessions keep starting in that mode. Claude Code asks once, in the terminal or in the VS Code extension, whether to change the setting to auto mode. If you decline, your setting stays as it is.
+100	
+101	&lt;h3 id="start-in-a-different-mode"&gt;
+102	  Start in a different permission mode
+103	&lt;/h3&gt;
+104	
+105	You can set the starting permission mode for one session, or as a default for every session on a machine, in a project, or in an organization. When more than one settings file sets `permissions.defaultMode`, [settings precedence](/docs/en/settings#settings-precedence) decides, so a project or managed value outranks `~/.claude/settings.json`. To change the permission mode of a session that's already running, see [Switch permission modes](#switch-permission-modes).
+106	
+107	| To set the starting permission mode for          | Do this                                                                                                                                                                                                                                                                                                                                                        |
+108	| :----------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+109	| One session you're about to start                | Pass the permission mode as a flag, for example `claude --permission-mode default`                                                                                                                                                                                                                                                                             |
+110	| Every terminal session you start on this machine | Set `permissions.defaultMode` in `~/.claude/settings.json`. For what the VS Code extension reads, see [Switch permission modes](#switch-permission-modes)                                                                                                                                                                                                      |
+111	| Every terminal session you start in one project  | Set `permissions.defaultMode` in the project's `.claude/settings.json`. Sessions you start in a terminal honor every value except `auto` and `bypassPermissions`; sessions the VS Code extension starts don't read project 
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:44 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/hooks.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/hooks.md",
+  "prompt": "Hook scoping per agent, per directory, CLAUDE_PROJECT_DIR, SessionStart, subagent hooks, EnterPlanMode ExitPlanMode approval routing plan approval_request"
+}</pre><div class="lbl">result</div><pre># Claude Code Hooks Reference - Key Points
+
+## Overview
+
+Hooks are user-defined commands, HTTP endpoints, MCP tools, LLM prompts, or subagents that execute automatically at specific points in Claude Code's lifecycle. They work consistently across terminal sessions, IDE extensions, Desktop app, and web environments.
+
+## Hook Lifecycle
+
+Hooks fire at three cadences:
+- **Per session**: `SessionStart`, `SessionEnd`
+- **Per turn**: `UserPromptSubmit`, `Stop`, `StopFailure`
+- **Per tool call**: `PreToolUse`, `PostToolUse` (except `EndConversation`)
+
+## Configuration Structure
+
+Hooks are defined in JSON with three nesting levels:
+
+```json
+{
+  "hooks": {
+    "EVENT_NAME": [
+      {
+        "matcher": "filter_pattern",
+        "hooks": [
+          {
+            "type": "command|http|mcp_tool|prompt|agent",
+            "command": "...",
+            "if": "optional_permission_rule"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Hook Locations &amp; Scope
+
+| Location | Scope | Shareable |
+|----------|-------|-----------|
+| `~/.claude/settings.json` | All projects | No |
+| `.claude/settings.json` | Single project | Yes |
+| `.claude/settings.local.json` | Single project | No |
+| Plugin `hooks/hooks.json` | When enabled | Yes |
+| Skill/Subagent frontmatter | Duration active | Yes |
+
+## Hook Handler Types
+
+1. **Command** (`type: "command"`): Shell commands receiving JSON on stdin
+2. **HTTP** (`type: "http"`): POST requests to a URL
+3. **MCP Tool** (`type: "mcp_tool"`): Calls to MCP server tools
+4. **Prompt** (`type: "prompt"`): Single-turn model evaluation
+5. **Agent** (`type: "agent"`): Subagent with tool access (experimental)
+
+## Example: Block Destructive Commands
+
+**macOS/Linux:**
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(rm *)",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-rm.sh",
+            "args": []
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Script (.claude/hooks/block-rm.sh):**
+```bash
+#!/bin/bash
+COMMAND=$(jq -r '.tool_input.command')
+
+if echo "$COMMAND" | grep -q 'rm -rf'; then
+  jq -n '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: "Destructive command blocked"
+    }
+  }'
+else
+  exit 0  # no decision
+fi
+```
+
+## Matcher Patterns
+
+| Pattern Type | Example | Behavior |
+|--------------|---------|----------|
+| `"*"` or omitted | match all | Fires on every occurrence |
+| Simple names | `Bash`, `Edit\|Write` | Exact string match |
+| Regex | `^Notebook`, `mcp__.*` | JavaScript regex |
+
+**MCP tool matching:**
+```json
+"matcher": "mcp__memory__.*"  // All tools from memory server
+"matcher": "mcp__.*__write.*" // Any write tool from any server
+```
+
+## Common Hook Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `type` | Yes | Hook type |
+| `if` | No | Permission rule filter (tool events only) |
+| `timeout` | No | Seconds before canceling (default: 600) |
+| `statusMessage` | No | Custom spinner message |
+| `once` | No | Remove after first success (skills only) |
+
+## Exit Codes
+
+- **0**: Success; reads JSON output for decisions
+- **2**: Blocking error; prevents action (strongest signal)
+- **Other**: Non-blocking error (action proceeds)
+
+## Common Input Fields (JSON via stdin)
+
+```json
+{
+  "session_id": "abc123",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/path/to/transcript.jsonl",
+  "cwd": "/current/working/directory",
+  "permission_mode": "default|plan|auto|...",
+  "hook_event_name": "PreToolUse",
+  "agent_id": "optional_subagent_id",
+  "agent_type": "optional_agent_type"
+}
+```
+
+## JSON Output Format
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "EventName",
+    "permissionDecision": "allow|deny|block",
+    "permissionDecisionReason": "explanation",
+    "additionalContext": "context for Claude",
+    "updatedInput": { /* modified tool input */ }
+  },
+  "systemMessage": "message for Claude",
+  "terminalSequence": "terminal escape sequence"
+}
+```
+
+## Path Placeholders
+
+- `${CLAUDE_PROJECT_DIR}`: Project root
+- `${CLAUDE_PLUGIN_ROOT}`: Plugin directory
+- `${CLAUDE_PLUGIN_DATA}`: Plugin data directory
+
+## Key Events
+
+| Event | When it fires |
+|-------|---------------|
+| `SessionStart` | Session begins/resumes |
+| `UserPromptSubmit` | Before Claude processes prompt |
+| `PreToolUse` | Before tool executes (can block) |
+| `PostToolUse` | After tool succeeds |
+| `Stop` | When Claude finishes |
+| `SessionEnd` | Session terminates |
+
+## Disable Hooks
+
+```json
+{
+  "disableAllHooks": true
+}
+```
+
+Or via CLI:
+```bash
+claude --settings '{"disableAllHooks": true}'
+```
+
+## View Configured Hooks
+
+Type `/hooks` in Claude Code to open a read-only browser showing all configured hooks with their sources and details.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:44 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/settings-reference.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/settings-reference.md",
+  "prompt": "model settings, effort, reasoning_effort, reasoning effort level values low medium high"
+}</pre><div class="lbl">result</div><pre># Model Settings and Effort Level Configuration
+
+Based on the Claude Code documentation, here's how to configure model settings and effort levels:
+
+## Key Settings
+
+### `model`
+Sets the default model for new sessions.
+- **Scope**: Any file
+- **Type**: String
+- **Purpose**: Change which Claude model Claude Code starts with
+
+### `effortLevel`
+Sets a default effort level for models without a saved level.
+- **Scope**: Any file
+- **Type**: String
+- **Purpose**: Establish baseline effort across sessions
+
+### `modelSettings`
+Keeps a saved effort level per model, or caps one model's effort.
+- **Scope**: Any file
+- **Purpose**: Maintain individual model preferences or enforce effort caps
+
+### `maxEffortLevel`
+Caps the effort level for every model or per model, on every provider.
+- **Scope**: Any file
+- **Purpose**: Enforce organization-wide or provider-specific effort limits
+
+## Effort Level Values
+
+The documentation references three effort levels:
+- **`low`** - Faster, less resource-intensive responses
+- **`medium`** - Balanced approach
+- **`high`** - Most thorough analysis and reasoning (uses extended thinking)
+
+## Related Settings
+
+### `alwaysThinkingEnabled`
+Turn extended thinking off for every session.
+- **Scope**: Any file
+- **Type**: Boolean
+- **Purpose**: Disable reasoning_effort features globally
+
+### `showThinkingSummaries`
+See summaries of Claude's thinking instead of a collapsed stub.
+- **Scope**: Any file
+- **Type**: Boolean
+- **Purpose**: Display extended thinking results to users
+
+## Example Configuration Structure
+
+```json
+{
+  "model": "claude-3-5-sonnet-20241022",
+  "effortLevel": "medium",
+  "modelSettings": {
+    "claude-3-5-sonnet-20241022": {
+      "effortLevel": "high"
+    }
+  },
+  "maxEffortLevel": {
+    "default": "high"
+  },
+  "alwaysThinkingEnabled": true,
+  "showThinkingSummaries": true
+}
+```
+
+For more details, see the [Settings files and precedence documentation](/docs/en/settings) and [Model configuration guide](/docs/en/model-config#adjust-effort-level).</pre></div></details><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/agent-teams.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/agent-teams.md",
+  "prompt": "plan mode approval, EnterPlanMode, ExitPlanMode, plan approval, teammates, approval routing, messaging"
+}</pre><div class="lbl">result</div><pre>&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# Orchestrate teams of Claude Code sessions
+
+&gt; Coordinate multiple Claude Code instances working together as a team, with shared tasks, inter-agent messaging, and centralized management.
+
+&lt;Warning&gt;
+  Agent teams are experimental and disabled by default. Enable them by setting `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in your [settings.json](/docs/en/settings) or environment. Without that variable, no team is set up at session start, no team directories are written, and Claude does not spawn or propose teammates. Agent teams have [known limitations](#limitations) around session resumption, task coordination, and shutdown behavior.
+&lt;/Warning&gt;
+
+Agent teams let you coordinate multiple Claude Code instances working together. One session acts as the team lead, coordinating work, assigning tasks, and synthesizing results. Teammates work independently, each in its own context window, and communicate directly with each other. You can also talk to any teammate directly without going through the lead.
+
+Before you set up a team, check whether a lighter option does the job. [Subagents](/docs/en/sub-agents) work within a single session, and with [cross-session messaging](/docs/en/cross-session-messaging) Claude can pass findings between the sessions you run yourself.
+
+&lt;Note&gt;
+  This page describes agent teams as of v2.1.178. With `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` set, spawning a teammate no longer needs a setup step, and cleanup happens automatically when the session exits. Before v2.1.178, you asked Claude to create and name a team first, and Claude used the `TeamCreate` and `TeamDelete` tools to set it up and remove it. Both tools no longer exist. The `team_name` input on the Agent tool is accepted but ignored, and the `team_name` field in `TaskCreated`, `TaskCompleted`, and `TeammateIdle` [hook payloads](/docs/en/hooks#taskcreated) carries the session-derived name and is deprecated.
+&lt;/Note&gt;
+
+## When to use agent teams
+
+Agent teams are most effective for tasks where parallel exploration adds real value. See [use case examples](#use-case-examples) for full scenarios. The strongest use cases are:
+
+* **Research and review**: multiple teammates can investigate different aspects of a problem simultaneously, then share and challenge each other's findings
+* **New modules or features**: teammates can each own a separate piece without stepping on each other
+* **Debugging with competing hypotheses**: teammates test different theories in parallel and converge on the answer faster
+* **Cross-layer coordination**: changes that span frontend, backend, and tests, each owned by a different teammate
+
+Agent teams add coordination overhead and use significantly more tokens than a single session. They work best when teammates can operate independently. For sequential tasks, same-file edits, or work with many dependencies, a single session or [subagents](/docs/en/sub-agents) are more effective.
+
+### Compare with subagents
+
+Both agent teams and [subagents](/docs/en/sub-agents) let you parallelize work, but they operate differently. For separate sessions that pass messages to each other without a team, see [cross-session messaging](/docs/en/cross-session-messaging).
+
+&lt;Frame caption="Subagents report results back to the main agent. In agent teams, teammates share a task list, claim work, and communicate directly with each other."&gt;
+  &lt;img src="https://mintcdn.com/claude-code/nsvRFSDNfpSU5nT7/images/subagents-vs-agent-teams-light.png?fit=max&amp;auto=format&amp;n=nsvRFSDNfpSU5nT7&amp;q=85&amp;s=«REDACTED-HEX»" className="dark:hidden" alt="Diagram comparing subagent and agent team architectures. Subagents are spawned by the main agent, do work, and report results back. Agent teams coordinate through a shared task list, with teammates communicating directly with each other." width="4245" height="1615" data-path="images/subagents-vs-agent-teams-light.png" /&gt;
+
+  &lt;img src="https://mintcdn.com/claude-code/nsvRFSDNfpSU5nT7/images/subagents-vs-agent-teams-dark.png?fit=max&amp;auto=format&amp;n=nsvRFSDNfpSU5nT7&amp;q=85&amp;s=«REDACTED-HEX»" className="hidden dark:block" alt="Diagram comparing subagent and agent team architectures. Subagents are spawned by the main agent, do work, and report results back. Agent teams coordinate through a shared task list, with teammates communicating directly with each other." width="4245" height="1615" data-path="images/subagents-vs-agent-teams-dark.png" /&gt;
+&lt;/Frame&gt;
+
+|                   | Subagents                                                                                                                                           | Agent teams                                                                                                                                   |
+| :---------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Context**       | Own context window; results return to the caller                                                                                                    | Own context window; fully independent                                                                                                         |
+| **Communication** | Return a result to the caller. Subagents that Claude named when it spawned them can also [message each other](/docs/en/sub-agents#what-loads-at-startup) | Teammates message each other directly                                                                                                         |
+| **Coordination**  | Main agent manages all work                                                                                                                         | Self-coordination through messages, plus a shared task list for [agents that have the Task tools](/docs/en/tools-reference#task-tool-availability) |
+| **Best for**      | Focused tasks where only the result matters                                                                                                         | Complex work requiring discussion and collaboration                                                                                           |
+| **Token cost**    | Lower: results summarized back to main context                                                                                                      | Higher: each teammate is a separate Claude instance                                                                                           |
+
+Use subagents when you need quick, focused workers that report back. Use agent teams when teammates need to share findings, challenge each other, and coordinate on their own.
+
+## Enable agent teams
+
+Agent teams are disabled by default. Enable them by setting the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` environment variable to `1`, either in your shell environment or through [settings.json](/docs/en/settings):
+
+```json settings.json theme={null}
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+Enabling agent teams also changes ordinary delegation. Claude may [name a subagent](/docs/en/sub-agents#subagent-names) on its own, and while agent teams are enabled, a subagent that Claude names launches as a teammate, so teams can form even when you didn't ask for one. For more, see [How Claude starts agent teams](#how-claude-starts-agent-teams); to turn the behavior off, see [Claude spawns teammates instead of subagents](#claude-spawns-teammates-instead-of-subagents).
+
+Spawning teammates also requires an interactive session. In [non-interactive mode](/docs/en/headless) with the `-p` flag, including Agent SDK sessions, Claude doesn't spawn teammates, and a subagent that Claude names runs as an ordinary [subagent](/docs/en/sub-agents) even with agent teams enabled.
+
+## Start your first agent team
+
+After enabling agent teams, describe the task and the teammates you want in natural language. Claude spawns them and coordinates work based on your prompt.
+
+This example works well because the three roles are independent and can explore the problem without waiting on each other:
+
+```text wrap theme={null}
+I'm designing a CLI tool that helps developers track TODO comments across
+their codebase. Spawn three teammates to explore this from different angles:
+one on UX, one on technical architecture, one playing devil's advocate.
+```
+
+From there, Claude populates a [shared task list](/docs/en/interactive-mode#task-list) in a [session that has the Task tools](/docs/en/tools-reference#task-tool-availability), spawns teammates for each perspective, has them explore the problem, and synthesizes findings when finished.
+
+Claude may sometimes use [subagents](/docs/en/sub-agents) instead of creating a team. Subagents appear in the same agent panel as teammates, so the panel alone doesn't confirm a team formed. If Claude spawned subagents instead, ask again and explicitly request an agent team.
+
+The lead's terminal lists teammates in the agent panel below the prompt input. From the panel:
+
+* **Up and down arrows**: select a teammate
+* **Enter**: open the selected teammate's transcript and message it directly
+* **Escape**: clear the selection. While you're viewing a teammate's transcript, Escape interrupts that teammate's current turn
+
+As of v2.1.199, an idle teammate's row stays in the panel while any teammate or subagent is still working, so you can select it to review its transcript or send it more work. Once every agent in the panel is idle, idle rows hide after 30 seconds and reappear on the teammate's next turn; the teammate stays running and addressable while hidden. In v2.1.181 through v2.1.198, an idle row hid 30 seconds after its own turn ended, even while other teammates were still working; idle rows are not hidden on versions before v2.1.181.
+
+When more than three teammates are idle at once, the rows beyond the first three collapse into a single row that counts the collapsed teammates, such as `2 idle agents` when five are idle. Select it and press Enter to expand the collapsed rows, or press Esc to collapse them again. Working teammates, failed teammates, and the teammate you're viewing always keep their own rows.
+
+If you want each teammate in its own split pane, see [Choose a display mode](#choose-a-display-mode).
+
+## Control your agent team
+
+Tell the lead what you want in natural language. It handles team coordination, task assignment, and delegation based on your instructions.
+
+### Choose a display mode
+
+Agent teams support two display modes:
+
+* **In-process**: all teammates run inside your main terminal. Use the up and down arrow keys in the agent panel to select a teammate, then press Enter to view it and type to message it directly. Works in any terminal, no extra setup required.
+* **Split panes**: each teammate gets its own pane. You can see everyone's output at once and click into a pane to interact directly. Requires tmux, or iTerm2.
+
+&lt;Note&gt;
+  `tmux` has known limitations on certain operating systems and traditionally works best on macOS. Using `tmux -CC` in iTerm2 is the suggested entrypoint into `tmux`.
+&lt;/Note&gt;
+
+The default is `"in-process"`. Before v2.1.179 the default was `"auto"`, so upgraded sessions that previously opened split panes now stay in one terminal unless you set the mode explicitly. Set `"auto"` to enable split panes when you're already running inside a tmux session, or when your terminal is iTerm2 with the `it2` CLI installed, falling back to in-process otherwise. The `"tmux"` setting enables split-pane mode and auto-detects whether to use tmux or iTerm2 based on your terminal.
+
+As of v2.1.186, set `"iterm2"` to use iTerm2 native split panes explicitly. This mode requires the [`it2` CLI](https://github.com/mkusaka/it2) and shows an error with the install command if `it2` is missing. The setup prompt that offers to install `it2` or switch to tmux appears under `"auto"` or `"tmux"` when your terminal is iTerm2 and tmux is available as a fallback.
+
+To override the default, set [`teammateMode`](/docs/en/settings-reference#teammatemode) in `~/.claude/settings.json`:
+
+```json theme={null}
+{
+  "teammateMode": "auto"
+}
+```
+
+To set the mode for a single session, pass it as a flag:
+
+```bash theme={null}
+claude --teammate-mode auto
+```
+
+The `--teammate-mode` flag is experimental and doesn't appear in `claude --help`.
+
+Split-pane mode requires either [tmux](https://github.com/tmux/tmux/wiki) or iTerm2 with the [`it2` CLI](https://github.com/mkusaka/it2). To install manually:
+
+* **tmux**: install through your system's package manager. See the [tmux wiki](https://github.com/tmux/tmux/wiki/Installing) for platform-specific instructions.
+* **iTerm2**: install the [`it2` CLI](https://github.com/mkusaka/it2), then enable the Python API in **iTerm2 → Settings → General → Magic → Enable Python API**.
+
+### Specify teammates and models
+
+Claude decides the number of teammates to spawn based on your task, or you can specify exactly what you want:
+
+```text wrap theme={null}
+Spawn 4 teammates to refactor these modules in parallel. Use Sonnet for
+each teammate.
+```
+
+Claude Code picks each teammate's model from the first of these that applies:
+
+1. The model your spawn prompt names for that teammate.
+2. For a teammate spawned from a [subagent definition](#use-subagent-definitions-for-teammates), the definition's `model`, where `inherit` selects the lead's model.
+3. [`CLAUDE_CODE_SUBAGENT_MODEL`](/docs/en/model-config#environment-variables), when it's set to anything other than `inherit`.
+4. The lead's current model.
+
+If you set [`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`](/docs/en/sub-agents#run-every-subagent-on-one-model), the first two sources don't apply. Claude Code picks every teammate's model from `CLAUDE_CODE_SUBAGENT_MODEL` when it's set to anything other than `inherit`, and from the lead's current model otherwise. Requires Claude Code v2.1.257 or later.
+
+Before v2.1.251, `CLAUDE_CODE_SUBAGENT_MODEL` came first in this order.
+
+&lt;Note&gt;
+  `teammateDefaultModel` was removed in v2.1.234; Claude Code ignores a leftover value. Name the model in your prompt instead.
+&lt;/Note&gt;
+
+Claude Code checks the model it selects for a teammate against your organization's [`availableModels`](/docs/en/model-config#restrict-model-selection) allowlist. When the allowlist blocks a value, Claude Code substitutes another model:
+
+* **Family alias such as `opus`**: On the Anthropic API and Claude Platform on AWS, Claude Code runs the teammate on the newest version of that family the allowlist permits. On providers with provider-specific model IDs, where the [substitution doesn't operate](/docs/en/model-config#restrict-model-selection), a blocked alias falls back like any other blocked value per the next bullet
+* **Any other blocked value, including a family alias on providers where the substitution doesn't operate, or one whose family has no permitted version**: Claude Code runs the teammate on the lead's model instead. If you set `CLAUDE_CODE_SUBAGENT_MODEL`, Claude Code tries that model first, under these same rules
+
+Teammates inherit the lead's [effort level](/docs/en/model-config#adjust-effort-level). In split-pane mode this applies from v2.1.186; earlier versions did not pass the lead's session effort to split-pane teammates.
+
+### Have teammates plan before implementing
+
+For complex or risky tasks, you can have teammates plan before implementing. A teammate that Claude spawns while the lead is in [plan mode](/docs/en/permission-modes#analyze-before-you-edit-with-plan-mode) works in read-only plan mode until its plan is ready. Switch the lead into plan mode first, then ask for the teammate:
+
+```text wrap theme={null}
+Spawn an architect teammate to refactor the authentication module.
+```
+
+When a teammate finishes planning, it sends a plan approval request to the lead. Claude Code approves the plan in the lead's session as soon as the request arrives, without the lead reviewing it. The teammate's edits and commands still go through the permission prompts described in [Permissions](#permissions). Once approved, the teammate exits plan mode and begins implementation.
+
+### Talk to teammates directly
+
+Each teammate is a full, independent Claude Code session. You can message any teammate directly to give additional instructions, ask follow-up questions, or redirect their approach.
+
+* **In-process mode**: use the up and down arrow keys in the agent panel to select a teammate, then press Enter to view its session and type to send it a message. Press `x` on a selected teammate to stop it. Press Ctrl+T to toggle the task list.
+* **Split-pane mode**: click into a teammate's pane to interact with their session directly. Each teammate has a full view of their own terminal.
+
+While you're viewing an in-process teammate, plain text and [skills](/docs/en/skills) go to that teammate, but built-in commands still run in the lead's session.
+
+A teammate's model and fast mode are fixed when it spawns, so `/model` and `/fast` only change the lead's settings. As of v2.1.199, typing either command while viewing a teammate shows a notice that the change applies to the lead; earlier versions applied it to the lead with no indication. `/effort` still applies to the viewed teammate's later turns, because teammates follow the lead's [effort level](/docs/en/model-config#adjust-effort-level).
+
+### Assign and claim tasks
+
+The shared task list coordinates work across the team. The lead creates tasks and teammates work through them. Tasks have three states: pending, in progress, and completed. Tasks can also depend on other tasks: a pending task with unresolved dependencies cannot be claimed until those dependencies are completed.
+
+Agents [without the Task tools](/docs/en/tools-reference#task-tool-availability) coordinate through messages instead of the shared task list.
+
+The lead can assign tasks explicitly, or teammates can self-claim:
+
+* **Lead assigns**: tell the lead which task to give to which teammate
+* **Self-claim**: after finishing a task, a teammate picks up the next unassigned, unblocked task on its own
+
+Task claiming uses file locking to prevent race conditions when multiple teammates try to claim the same task simultaneously.
+
+### Shut down teammates
+
+To gracefully end a teammate's session, refer to it by name. For example, with a teammate named researcher:
+
+```text wrap theme={null}
+Ask the researcher teammate to shut down
+```
+
+The lead sends a shutdown request. The teammate can approve, exiting gracefully, or reject with an explanation.
+
+The team's shared directories are cleaned up automatically when the session ends, so there's no separate cleanup step. See [Architecture](#architecture) for which directories are removed and which persist for resumed sessions.
+
+### Enforce quality gates with hooks
+
+Use [hooks](/docs/en/hooks) to enforce rules when teammates finish work or tasks are created or completed:
+
+* [`TeammateIdle`](/docs/en/hooks#teammateidle): runs when a teammate is about to go idle. Exit with code 2 to send feedback and keep the teammate working.
+* [`TaskCreated`](/docs/en/hooks#taskcreated): runs when a task is being created. Exit with code 2 to prevent creation and send feedback.
+* [`TaskCompleted`](/docs/en/hooks#taskcompleted): runs when a task is being marked complete. Exit with code 2 to prevent completion and send feedback.
+
+## How agent teams work
+
+This section covers the architecture and mechanics behind agent teams. If you want to start using them, see [Control your agent team](#control-your-agent-team) above.
+
+### How Claude starts agent teams
+
+To start a team, ask Claude for teammates. Claude launches a teammate when it 
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:44 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/memory.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/memory.md",
+  "prompt": "@import, @path, CLAUDE.md includes, nested includes, frontmatter"
+}</pre><div class="lbl">result</div><pre>&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# How Claude remembers your project
+
+&gt; Give Claude persistent instructions with CLAUDE.md files, and let Claude accumulate learnings automatically with auto memory.
+
+Each Claude Code session begins with a fresh context window. Two mechanisms carry knowledge across sessions:
+
+* **CLAUDE.md files**: instructions you write to give Claude persistent context
+* **Auto memory**: notes Claude writes itself based on your corrections and preferences
+
+This page covers how to:
+
+* [Write and organize CLAUDE.md files](#claude-md-files)
+* [Scope rules to specific file types](#organize-rules-with-claude/rules/) with `.claude/rules/`
+* [Configure auto memory](#auto-memory) so Claude takes notes automatically
+* [Troubleshoot](#troubleshoot-memory-issues) when instructions aren't being followed
+
+## CLAUDE.md vs auto memory
+
+Claude Code has two complementary memory systems. Both are loaded at the start of every conversation. Claude treats them as context, not enforced configuration. To block an action regardless of what Claude decides, use a [PreToolUse hook](/docs/en/hooks-guide) instead. The more specific and concise your instructions, the more consistently Claude follows them.
+
+|                      | CLAUDE.md files                                   | Auto memory                                                                                      |
+| :------------------- | :------------------------------------------------ | :----------------------------------------------------------------------------------------------- |
+| **Who writes it**    | You                                               | Claude                                                                                           |
+| **What it contains** | Instructions and rules                            | Learnings and patterns                                                                           |
+| **Scope**            | Project, user, or org                             | Per repository, shared across worktrees                                                          |
+| **Loaded into**      | Every session                                     | Every session (first 200 lines or 25KB)                                                          |
+| **Use for**          | Coding standards, workflows, project architecture | Your preferences, corrections you give Claude, project context Claude can't derive from the code |
+
+Use CLAUDE.md files when you want to guide Claude's behavior. Auto memory lets Claude learn from your corrections without manual effort.
+
+Subagents can also maintain their own auto memory. See [subagent configuration](/docs/en/sub-agents#enable-persistent-memory) for details.
+
+## CLAUDE.md files
+
+CLAUDE.md files are markdown files that give Claude persistent instructions for a project, your personal workflow, or your entire organization. You write these files in plain text; Claude reads them at the start of every session.
+
+### When to add to CLAUDE.md
+
+Treat CLAUDE.md as the place you write down what you'd otherwise re-explain. Add to it when:
+
+* Claude makes the same mistake a second time
+* A code review catches something Claude should have known about this codebase
+* You type the same correction or clarification into chat that you typed last session
+* A new teammate would need the same context to be productive
+
+Keep it to facts Claude should hold in every session: build commands, conventions, project layout, "always do X" rules. If an entry is a multi-step procedure or only matters for one part of the codebase, move it to a [skill](/docs/en/skills) or a [path-scoped rule](#organize-rules-with-claude/rules/) instead. The [extension overview](/docs/en/features-overview#build-your-setup-over-time) covers when to use each mechanism.
+
+### Choose where to put CLAUDE.md files
+
+CLAUDE.md files can live in several locations, each with a different scope. The table below lists them in load order, from broadest scope to most specific, so a project instruction appears in context after a user instruction.
+
+| Scope                    | Location                                                                                                                                                                | Purpose                                                    | Use case examples                                                    | Shared with                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------- |
+| **Managed policy**       | • macOS: `/Library/Application Support/ClaudeCode/CLAUDE.md`&lt;br /&gt;• Linux and WSL: `/etc/claude-code/CLAUDE.md`&lt;br /&gt;• Windows: `C:\Program Files\ClaudeCode\CLAUDE.md` | Organization-wide instructions managed by IT/DevOps        | Company coding standards, security policies, compliance requirements | All users in organization       |
+| **User instructions**    | `~/.claude/CLAUDE.md`                                                                                                                                                   | Personal preferences for all projects                      | Code styling preferences, personal tooling shortcuts                 | Just you (all projects)         |
+| **Project instructions** | `./CLAUDE.md` or `./.claude/CLAUDE.md`                                                                                                                                  | Team-shared instructions for the project                   | Project architecture, coding standards, common workflows             | Team members via source control |
+| **Local instructions**   | `./CLAUDE.local.md`                                                                                                                                                     | Personal project-specific preferences; add to `.gitignore` | Your sandbox URLs, preferred test data                               | Just you (current project)      |
+
+CLAUDE.md and CLAUDE.local.md files in the directory hierarchy above the working directory are loaded at launch. Files in subdirectories load on demand when Claude reads files in those directories. See [How CLAUDE.md files load](#how-claude-md-files-load) for the full resolution order.
+
+For large projects, you can break instructions into topic-specific files using [project rules](#organize-rules-with-claude/rules/). Rules let you scope instructions to specific file types or subdirectories.
+
+### Set up a project CLAUDE.md
+
+A project CLAUDE.md can be stored in either `./CLAUDE.md` or `./.claude/CLAUDE.md`. Create this file and add instructions that apply to anyone working on the project: build and test commands, coding standards, architectural decisions, naming conventions, and common workflows. These instructions are shared with your team through version control, so focus on project-level standards rather than personal preferences. To confirm the file loaded, run `/context` in a session and check the list under **Memory files**.
+
+&lt;Tip&gt;
+  Run `/init` to generate a starting CLAUDE.md automatically. Claude analyzes your codebase and creates a file with build commands, test instructions, and project conventions it discovers. If a CLAUDE.md already exists, `/init` suggests improvements rather than overwriting it. Refine from there with instructions Claude wouldn't discover on its own.
+
+  Set `CLAUDE_CODE_NEW_INIT=1` to enable an interactive multi-phase flow. `/init` asks which artifacts to set up: CLAUDE.md files, skills, and hooks. It then explores your codebase with a subagent, fills in gaps via follow-up questions, and presents a reviewable proposal before writing any files.
+&lt;/Tip&gt;
+
+### Write effective instructions
+
+CLAUDE.md files are loaded into the context window at the start of every session, consuming tokens alongside your conversation. The [context window visualization](/docs/en/context-window) shows where CLAUDE.md loads relative to the rest of the startup context. Because they're context rather than enforced configuration, how you write instructions affects how reliably Claude follows them. Specific, concise, well-structured instructions work best.
+
+**Size**: target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence. If your instructions are growing large, use [path-scoped rules](#path-specific-rules) so instructions load only when Claude works with matching files. You can also split content into [imports](#import-additional-files) for organization, though imported files still load and enter the context window at launch.
+
+**Structure**: use markdown headers and bullets to group related instructions. Claude scans structure the same way readers do: organized sections are easier to follow than dense paragraphs.
+
+**Specificity**: write instructions that are concrete enough to verify. For example:
+
+* "Use 2-space indentation" instead of "Format code properly"
+* "Run `npm test` before committing" instead of "Test your changes"
+* "API handlers live in `src/api/handlers/`" instead of "Keep files organized"
+
+**Consistency**: if two rules contradict each other, Claude may pick one arbitrarily. Review your CLAUDE.md files, nested CLAUDE.md files in subdirectories, and [`.claude/rules/`](#organize-rules-with-claude/rules/) periodically to remove outdated or conflicting instructions. In monorepos, use [`claudeMdExcludes`](#exclude-specific-claude-md-files) to skip CLAUDE.md files from other teams that aren't relevant to your work.
+
+### Import additional files
+
+CLAUDE.md files can import additional files using `@path/to/import` syntax. Imported files are expanded and loaded into context at launch alongside the CLAUDE.md that references them.
+
+Both relative and absolute paths are allowed. Relative paths resolve relative to the file containing the import, not the working directory. Imported files can recursively import other files, with a maximum depth of four hops.
+
+Import parsing skips Markdown code spans and fenced code blocks. To mention a path in your CLAUDE.md without importing it, wrap it in backticks: writing `` `@README` `` keeps the text literal, while `@README` outside backticks imports the file.
+
+To pull in a README, package.json, and a workflow guide, reference them with `@` syntax anywhere in your CLAUDE.md:
+
+```text theme={null}
+See @README for project overview and @package.json for available npm commands for this project.
+
+# Additional Instructions
+- git workflow @docs/git-instructions.md
+```
+
+For private per-project preferences that shouldn't be checked into version control, create a `CLAUDE.local.md` at the project root. It loads alongside `CLAUDE.md` and is treated the same way. Add `CLAUDE.local.md` to your `.gitignore` so it isn't committed. With `CLAUDE_CODE_NEW_INIT=1` set, running `/init` and choosing the personal option does this for you.
+
+If you work across multiple git worktrees of the same repository, a gitignored `CLAUDE.local.md` only exists in the worktree where you created it. To share personal instructions across worktrees, import a file from your home directory instead:
+
+```text theme={null}
+# Individual Preferences
+- @~/.claude/my-project-instructions.md
+```
+
+&lt;Warning&gt;
+  An import in a project-level memory file is external when its path resolves outside your working directory, like the home directory import above. The first time Claude Code encounters external imports in a project, it shows an approval dialog listing the files. If you decline, the imports stay disabled and the dialog doesn't appear again.
+
+  Claude Code shows the dialog to protect you from files other people commit to a shared project. User-scope memory files, such as `~/.claude/CLAUDE.md` and `~/.claude/rules/`, are files you wrote yourself. Except in [Cowork](https://claude.com/product/cowork) sessions on your desktop, Claude Code loads their imports without the dialog and trusts them like the rest of your personal configuration.
+
+  In Cowork sessions on your desktop, Claude Code skips any import in a user-scope file that resolves to a path outside the session's working directory and loads the rest of the file. In those sessions it also skips a `~/.claude/CLAUDE.md` that is itself a symlink or hard link, and a symlinked `~/.claude/rules/` directory or rule file that points outside the working directory.
+&lt;/Warning&gt;
+
+### AGENTS.md
+
+Claude Code reads `CLAUDE.md`, not `AGENTS.md`. If your repository already uses `AGENTS.md` for other coding agents, create a `CLAUDE.md` that imports it so both tools read the same instructions without duplicating them. You can also add Claude-specific instructions below the import. Claude loads the imported file at session start, then appends the rest:
+
+```markdown CLAUDE.md theme={null}
+@AGENTS.md
+
+## Claude Code
+
+Use plan mode for changes under `src/billing/`.
+```
+
+A symlink also works if you don't need to add Claude-specific content:
+
+```bash theme={null}
+ln -s AGENTS.md CLAUDE.md
+```
+
+The command prints no output on success. In your next session, run `/context` and confirm `CLAUDE.md` appears under **Memory files**.
+
+On Windows, creating a symlink requires Administrator privileges or Developer Mode, so use the `@AGENTS.md` import instead.
+
+Running [`/init`](/docs/en/commands) reads Cursor rules, in `.cursor/rules/` or `.cursorrules`, and Copilot rules, in `.github/copilot-instructions.md`, and incorporates the relevant parts into the generated `CLAUDE.md`. With `CLAUDE_CODE_NEW_INIT=1` set, `/init` also reads `AGENTS.md`, `.devin/rules/`, `.windsurf/rules/` or `.windsurfrules`, and `.clinerules`.
+
+You can also run [`/import`](/docs/en/commands) to bring a supported coding agent's configuration into Claude Code, which appends a one-time copy of instruction files such as `AGENTS.md` to the matching `CLAUDE.md` and carries over MCP servers, commands, subagents, and skills. Requires Claude Code v2.1.213 or later.
+
+### How CLAUDE.md files load
+
+Claude Code loads `CLAUDE.md` and `CLAUDE.local.md` from your current working directory and every directory above it. Run Claude Code in `foo/bar/` and it loads instructions from `foo/bar/CLAUDE.md`, `foo/CLAUDE.md`, and any `CLAUDE.local.md` files alongside them.
+
+All discovered files are concatenated into context rather than overriding each other. Across the directory tree, content is ordered from the filesystem root down to your working directory. For the `foo/bar/` example, `foo/CLAUDE.md` appears in context before `foo/bar/CLAUDE.md`, so instructions closer to where you launched Claude are read last. Within each directory, `CLAUDE.local.md` is appended after `CLAUDE.md`, so your personal notes are the last thing Claude reads at that level.
+
+Claude also discovers `CLAUDE.md` and `CLAUDE.local.md` files in subdirectories under your current working directory. Instead of loading them at launch, they are included when Claude reads files in those subdirectories.
+
+If you work in a large monorepo where other teams' CLAUDE.md files get picked up, use [`claudeMdExcludes`](#exclude-specific-claude-md-files) to skip them. For the full layout of root and per-directory CLAUDE.md files and rules, see [Monorepos and large repos](/docs/en/large-codebases).
+
+Block-level HTML comments (`&lt;!-- maintainer notes --&gt;`) in CLAUDE.md files are stripped before the content is injected into Claude's context. Use them to leave notes for human maintainers without spending context tokens on them. Comments inside code blocks are preserved. When you open a CLAUDE.md file directly with the Read tool, comments remain visible.
+
+#### Load from additional directories
+
+The `--add-dir` flag gives Claude access to additional directories outside your main working directory. By default, CLAUDE.md files from these directories are not loaded.
+
+To also load memory files from additional directories, set the `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` environment variable:
+
+```bash theme={null}
+CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir ../shared-config
+```
+
+This loads `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md`, and `CLAUDE.local.md` from the additional directory. `CLAUDE.local.md` is skipped if you exclude `local` from [`--setting-sources`](/docs/en/cli-reference).
+
+### Organize rules with `.claude/rules/`
+
+For larger projects, you can organize instructions into multiple files using the `.claude/rules/` directory. This keeps instructions modular and easier for teams to maintain. Rules can also be [scoped to specific file paths](#path-specific-rules), so they only load into context when Claude works with matching files, reducing noise and saving context space.
+
+&lt;Note&gt;
+  Rules load into context every session or when matching files are opened. For task-specific instructions that don't need to be in context all the time, use [skills](/docs/en/skills) instead, which only load when you invoke them or when Claude determines they're relevant to your prompt.
+&lt;/Note&gt;
+
+#### Set up rules
+
+Place markdown files in your project's `.claude/rules/` directory. Each file should cover one topic, with a descriptive filename like `testing.md` or `api-design.md`. All `.md` files are discovered recursively, so you can organize rules into subdirectories like `frontend/` or `backend/`:
+
+```text theme={null}
+your-project/
+├── .claude/
+│   ├── CLAUDE.md           # Main project instructions
+│   └── rules/
+│       ├── code-style.md   # Code style guidelines
+│       ├── testing.md      # Testing conventions
+│       └── security.md     # Security requirements
+```
+
+Rules without [`paths` frontmatter](#path-specific-rules) are loaded at launch with the same priority as `.claude/CLAUDE.md`.
+
+Project rules are skipped if you exclude `project` from [`--setting-sources`](/docs/en/cli-reference). Before v2.1.211, rules that load on demand, including path-scoped rules and rules in nested `.claude/rules/` directories, loaded even when `project` was excluded.
+
+#### Path-specific rules
+
+Rules can be scoped to specific files using YAML frontmatter with the `paths` field. These conditional rules only apply when Claude is working with files matching the specified patterns.
+
+```markdown theme={null}
+---
+paths:
+  - "src/api/**/*.ts"
+---
+
+# API Development Rules
+
+- All API endpoints must include input validation
+- Use the standard error response format
+- Include OpenAPI documentation comments
+```
+
+Rules without a `paths` field are loaded unconditionally and apply to all files. Path-scoped rules trigger when Claude reads files matching the pattern, not on every tool use. As of v2.1.198, matching also works when Claude reaches a file through a symlinked path to the project directory, for example in a symlinked checkout.
+
+Use glob patterns in the `paths` field to match files by extension, directory, or any combination:
+
+| Pattern                | Matches                                  |
+| ---------------------- | ---------------------------------------- |
+| `**/*.ts`              | All TypeScript files in any directory    |
+| `src/**/*`             | All files under `src/` directory         |
+| `*.md`                 | Markdown files in the project root       |
+| `src/components/*.tsx` | React components in a specific directory |
+
+You can specify multiple patterns and use brace expansion to match multiple extensions in one pattern:
+
+```markdown theme={null}
+---
+paths:
+  - "src/**/*.{ts,tsx}"
+  - "lib/**/*.ts"
+  - "tests/**/*.test.ts"
+---
+```
+
+Each brace group multiplies the number of expanded patterns: `src/*.{ts,tsx}` expands to two patterns, and `{a,b}/{c,d}/*.{ts,tsx}` to eight. To k
+… truncated (20 KB cap)</pre></div></details><details><summary><span class="tn">WebFetch</span> https://code.claude.com/docs/en/agent-sdk/overview.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://code.claude.com/docs/en/agent-sdk/overview.md",
+  "prompt": "agent definition, effort level, reasoning effort, model parameters, subagent options"
+}</pre><div class="lbl">result</div><pre>&gt; ## Documentation Index
+&gt; Fetch the complete documentation index at: https://code.claude.com/docs/llms.txt
+&gt; Use this file to discover all available pages before exploring further.
+
+# Agent SDK overview
+
+&gt; Build production AI agents with Claude Code as a library
+
+An agent is an application that completes a task by planning its own steps and calling tools that read files, run commands, or edit code. The Agent SDK gives you the same tools, [agent loop](/docs/en/agent-sdk/agent-loop), and context management that power Claude Code, programmable in Python and TypeScript.
+
+## Compare the Agent SDK to other Claude tools
+
+The Agent SDK, the CLI, the Client SDK, and Managed Agents each fit different needs. Use the table to find the one that matches what you're building.
+
+| If you're...                                                                                            | Use                                                                               | Why                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Building an agent without implementing the tool loop yourself                                           | **Agent SDK**                                                                     | A library that runs the agent loop in your own process, in Python or TypeScript.                     |
+| Doing interactive development or running one-off tasks from a terminal                                  | [**Claude Code CLI**](/docs/en/overview)                                               | The terminal interface, built for daily interactive use.                                             |
+| Calling the API directly and implementing the tool loop yourself                                        | [**Client SDK**](https://platform.claude.com/docs/en/api/client-sdks)             | Direct access to the Anthropic API rather than to Claude Code. You implement the tool loop yourself. |
+| Running long-running or asynchronous agents without managing your own sandbox or session infrastructure | [**Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) | Hosted REST API, a separate product from the Agent SDK. Anthropic runs the agent and the sandbox.    |
+
+The SDK is available as a library for Python and TypeScript only. To drive the same agent loop from another language, [run the CLI as a subprocess](/docs/en/headless) with the `-p` flag and `--output-format json`.
+
+## Capabilities
+
+These Claude Code capabilities are available in the SDK:
+
+| Capability                   | What it does                                                                                 | Learn more                                                                                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Built-in tools               | Read, write, edit files, run commands, and search the web                                    | [Tools reference](/docs/en/tools-reference)                                                                                                                                                                         |
+| Hooks                        | Run custom code at key points in the agent lifecycle                                         | [Hooks](/docs/en/agent-sdk/hooks)                                                                                                                                                                                   |
+| Subagents                    | Spawn specialized agents for focused subtasks                                                | [Subagents](/docs/en/agent-sdk/subagents)                                                                                                                                                                           |
+| MCP                          | Connect external tools and data sources via the Model Context Protocol                       | [MCP](/docs/en/agent-sdk/mcp)                                                                                                                                                                                       |
+| Permissions                  | Control which tools run automatically, which need approval                                   | [Permissions](/docs/en/agent-sdk/permissions)                                                                                                                                                                       |
+| Sessions                     | Maintain context across exchanges, resume or fork later                                      | [Sessions](/docs/en/agent-sdk/sessions)                                                                                                                                                                             |
+| Skills, commands, and memory | Load automatically from your project's `.claude/` and from `~/.claude/`, same as Claude Code | [Skills](/docs/en/agent-sdk/skills), [Commands](/docs/en/agent-sdk/skills#commands-in-agent-sdk-sessions), [Memory](/docs/en/agent-sdk/modifying-system-prompts), [Configuration loading](/docs/en/agent-sdk/claude-code-features) |
+| Plugins                      | Package skills, agents, hooks, and MCP servers, and load them by local path                  | [Plugins](/docs/en/agent-sdk/plugins)                                                                                                                                                                               |
+
+## Get started
+
+Follow the [Quickstart](/docs/en/agent-sdk/quickstart) to install the SDK, set your API key, and build your first agent, one that finds and fixes bugs in existing code.
+
+&lt;Note&gt;
+  Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products, including agents built on the Claude Agent SDK. Use the API key authentication methods described in the [Quickstart](/docs/en/agent-sdk/quickstart) instead.
+&lt;/Note&gt;
+
+## Changelog
+
+View the full changelog for SDK updates, bug fixes, and new features:
+
+* **TypeScript SDK**: [view CHANGELOG.md](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md)
+* **Python SDK**: [view CHANGELOG.md](https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md)
+
+## Report bugs
+
+If you encounter bugs or issues with the Agent SDK:
+
+* **TypeScript SDK**: [report issues on GitHub](https://github.com/anthropics/claude-agent-sdk-typescript/issues)
+* **Python SDK**: [report issues on GitHub](https://github.com/anthropics/claude-agent-sdk-python/issues)
+
+## Branding guidelines
+
+For partners integrating the Claude Agent SDK, use of Claude branding is optional. When referencing Claude in your product:
+
+**Allowed:**
+
+* "Claude Agent", preferred for dropdown menus
+* "Claude", when within a menu already labeled "Agents"
+* "\{YourAgentName} Powered by Claude", if you have an existing agent name
+
+**Not permitted:**
+
+* "Claude Code" or "Claude Code Agent"
+* Claude Code-branded ASCII art or visual elements that mimic Claude Code
+
+Your product should maintain its own branding and not appear to be Claude Code or any Anthropic product. For questions about branding compliance, contact the Anthropic [sales team](https://www.anthropic.com/contact-sales).
+
+## License and terms
+
+Use of the Claude Agent SDK is governed by [Anthropic's Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms), including when you use it to power products and services that you make available to your own customers and end users, except to the extent a specific component or dependency is covered by a different license as indicated in that component's LICENSE file.
+
+## Next steps
+
+These resources cover deeper technical detail and example projects for building with the Agent SDK.
+
+* [Quickstart](/docs/en/agent-sdk/quickstart): build your first agent that finds and fixes bugs
+* [Migration guide](/docs/en/agent-sdk/migration-guide): migrate from the Claude Code SDK packages to the Agent SDK
+* [Agent loop](/docs/en/agent-sdk/agent-loop): how Claude plans, calls tools, and decides when a task is done
+* [Example agents](https://github.com/anthropics/claude-agent-sdk-demos): demo apps for local development
+* [TypeScript SDK](/docs/en/agent-sdk/typescript): full TypeScript API reference and examples
+* [Python SDK](/docs/en/agent-sdk/python): full Python API reference and examples
+* [Agent harness design](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): how the Claude Code team uses dynamic workflows to orchestrate many subagents at once
+</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:45 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Based on the official Claude Code documentation, here are the exact mechanisms:
+
+## 1. Custom agent definition frontmatter fields
+
+**Supported fields** ([sub-agents.md](https://code.claude.com/docs/en/sub-agents.md)):
+- `name` (required)
+- `description` (required)  
+- `tools` or `disallowedTools` (allowlist/denylist)
+- `model`: `sonnet`, `opus`, `haiku`, `fable`, or `inherit`
+- `permissionMode`: `default`, `acceptEdits`, `auto`, `plan`, `bypassPermissions`, `dontAsk`
+- `skills`, `memory`, `isolation`, `maxTurns`
+
+**Not documented**: `effort`, `reasoning_effort`, or any reasoning-level field in agent definitions. Effort is set via settings only (see #4).
+
+**@imports in body**: Yes—CLAUDE.md files support `@path/to/file` syntax ([memory.md](https://code.claude.com/docs/en/memory.md), "Import additional files" section). Agent definition bodies are not explicitly documented to support this, so treat them as plain markdown.
+
+**SDK parameter override**: The Agent tool's `model` parameter does not list `effort` or reasoning-level overrides in the documented signature. Effort cannot be overridden at spawn time.
+
+## 2. Nested spawning
+
+**Yes, subagents spawn subagents.** Default depth limit: 3 levels. Configurable: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` ([sub-agents.md](https://code.claude.com/docs/en/sub-agents.md), "Nested Subagents" section).
+
+**Project `.claude/agents/` applies to subagent sessions**: Yes. The scope table shows project-level definitions apply within the project.
+
+## 3. Plan mode approval routing
+
+**For teammates in agent teams**: When a teammate finishes planning, it "sends a plan approval request to the lead. Claude Code approves the plan in the lead's session as soon as the request arrives, **without the lead reviewing it**" ([agent-teams.md](https://code.claude.com/docs/en/agent-teams.md), "Have teammates plan before implementing" section). There is no separate approval prompt to you; the lead auto-approves.
+
+**EnterPlanMode / ExitPlanMode**: These are tools Claude calls. For individual subagents, approval happens interactively in the calling session (per [permission-modes.md](https://code.claude.com/docs/en/permission-modes.md), "Review and approve a plan" section).
+
+**No documented feature**: plan_approval_request message routing to parent/team-lead at the protocol level. Approval is implicit (automatic for teammates).
+
+## 4. Effort at runtime
+
+**Not documented.** There is no `/effort` command for subagents to change their own effort level. Effort must be set at spawn via settings. Teammates inherit the lead's effort level, and `/effort` in a teammate changes the lead's level, not the teammate's ([agent-teams.md](https://code.claude.com/docs/en/agent-teams.md), "Specify teammates and models" section).
+
+**Settings keys** ([settings-reference.md](https://code.claude.com/docs/en/settings-reference.md)): `effortLevel` (default), `modelSettings` with per-model `effortLevel`, `maxEffortLevel` (cap).
+
+## 5. Hooks scoping
+
+**Global only.** Hooks are configured in:
+- `~/.claude/settings.json` (all projects)
+- `.claude/settings.json` (single project)
+- `.claude/settings.local.json` (single project, not shared)
+- Skill/Subagent frontmatter (for that agent's duration)
+
+**No per-agent scoping** documented beyond including a `hooks` block in an agent definition frontmatter.
+
+**SessionStart behavior**: Fires "When a session begins or resumes" ([hooks-guide.md](https://code.claude.com/docs/en/hooks-guide.md)). **CLAUDE_PROJECT_DIR is documented as a path placeholder** ([hooks.md](https://code.claude.com/docs/en/hooks.md), "Path Placeholders" section), but **not documented**: what it resolves to for subagent sessions. The reference lists it as available but does not specify whether it points to the project root or the subagent's isolated directory.
+
+**Source**: [https://code.claude.com/docs/en/hooks.md](https://code.claude.com/docs/en/hooks.md) (path placeholders); [https://code.claude.com/docs/en/hooks-guide.md](https://code.claude.com/docs/en/hooks-guide.md) ("Re-inject context after compaction" example uses `matcher: "compact"`).</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

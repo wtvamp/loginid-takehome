@@ -1,0 +1,229 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tobias Lindqvist — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Tobias Lindqvist</h1><div class="sub">Hire (track 01) · session 3 of 6 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 10:48 AM PDT – Sep 13, 2026 10:49 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Lead</span><div class="body">Naomi (PO) just drafted `04-infra-devops/refinement/LT-49.md` (observability: logging/metrics/never-log enforcement/retention-sweep alerting), splitting it into 04-side, 03-side, and 02-side criteria, plus a specific open question routed to Priya (05) about whether the alert formula `oldest_surviving_row_age_seconds{class} &gt; retention_window + sweep_interval` needs a third grace term given LT-44's `concurrencyPolicy: Forbid` (a slow sweep run causes the next scheduled run to be *skipped*, not overlapped — could that make a merely-slow-but-healthy sweep look dead to the naive two-term alert?).
+
+Read the refinement doc, plus `04-infra-devops/observability.md` and `03-engineering-delivery/refinement/LT-44.md` for context. Your job: find the strongest real objection to how this refinement doc is scoped or worded — the standing pattern on this project has been catching real gaps (unenforced config, missing fail-loud behavior, concurrency races, mislabeled subsystems), not just style nits. Things worth checking:
+- Is the 03/04 split actually clean, or does something fall in a gap between "03 exposes the metric" and "04 sinks/alerts it" that neither side's criteria actually covers (e.g., who confirms the metric's numeric VALUE is correct, not just that it's exposed)?
+- Is the PO-review-script step 8 ("suspend the CronJob and confirm the alert fires") actually testable within one sweep interval, or does it silently assume a short interval that may not match whatever schedule 04 picks?
+- Does the never-log-list enforcement test (03 side) actually close a real gap the CI lint check (04 side) doesn't, or is it redundant work being asked of the wrong team?
+- Anything else that's underspecified enough that engineering would have to guess.
+
+Give your strongest objection(s), each as a specific, concrete gap — not a vague "consider" note. Under 350 words.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Tobias Lindqvist</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID &amp;&amp; pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-49 refinement — S5: observability (logging, metrics, never-log enforcement, retention-sweep alerting)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Theo Bergman (04, lint check, ingress redaction, RBAC, sink, alert rule), Renata Cole (03, metrics exposure at the sweep-invocation layer, never-log test at the application layer). **Design inputs:** Marcus Ilori (02, never-log-list completeness confirmation), Priya Nandakumar (05, retention-alert-threshold seat). **Source:** `04-infra-devops/backlog.md` Story 5 (LT-49), design already done in `04-infra-devops/observability.md`.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: LT-44's sweep wiring (merged, #55) exists but its metrics have nowhere to land and no alert watches them — `oldest_surviving_row_age_seconds` is worthless as a dead-sweep detector if nothing scrapes or alerts on it. `observability.md` is fully designed already (this is a build story against an existing design, not a fresh design pass), so this is genuinely ready to refine now rather than re-litigated.
+10	
+11	## What this story actually is
+12	
+13	Not a redesign — `observability.md` already specifies every mechanism this story builds:
+14	1. **Logging discipline + lint check** (04): explicit-field `slog` logging, a CI lint rule flagging never-log-list field names/whole-struct log calls.
+15	2. **Ingress-level redaction** (04): search-endpoint `name`/`phone` query fragments never reach an ingress access log.
+16	3. **Audit-log RBAC** (04): a distinct `Role` for audit-log read access, separate from any Secret-read grant.
+17	4. **Retention-sweep metrics + alert** (03 exposes, 04 sinks/alerts): `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class}` per LT-44's sweep, only from `Drained == true` results (LT-44's own criterion, unaffected here — this story is the metrics *sink and alert rule*, not re-deriving the emission-gating logic LT-44 already built).
+18	5. **Never-log-list completeness confirmation** (02, Marcus): a sign-off that all 11 items in `handoff-04-secrets.md`'s list map to a named enforcement site, not just a policy statement — the mapping already exists in `observability.md`'s "operationalized" section; this is Marcus confirming it, not this story inventing new coverage.
+19	
+20	This is genuinely two-track work, per team-lead's framing: 04 builds the sink, alert rule, ingress redaction, RBAC, and lint check; 03 adds/confirms the metrics-exposure code path at the sweep-invocation layer (LT-44's own code) and a never-log-list enforcement test at the application layer (the lint check's *complement* — a test asserting specific known-sensitive values never appear in captured log output, catching what a static lint rule can miss).
+21	
+22	## Acceptance criteria (restated from `backlog.md` S5, split by side)
+23	
+24	**04 side:**
+25	- [ ] The CI lint check (a `golangci-lint` custom rule or CI-run grep) flags any log call passing a whole request/response struct, an `*http.Request` body, or a variable named/typed to match the never-log list's field names (`password`, `token`, `secret`, `dsn`, `client_secret`) — enforcement site: the lint rule itself, run in CI, not a design-doc statement.
+26	- [ ] Ingress-level log-format override or redaction ensures `name`/`phone` query-string fragments on `POST /profiles/search` never appear in ingress access logs — enforcement site: the ingress `ConfigMap`'s log-format setting.
+27	- [ ] Audit-log read access (the log stream carrying `sub`/scope/record-id/timestamp) has its own RBAC `Role`, bound to an incident-review group, distinct from any ServiceAccount's Secret-read grant (LT-46's Vault roles or any residual Kubernetes Secret access) — enforcement site: the log sink's own RBAC/auth layer (Loki or equivalent), not reused from cluster Secret RBAC.
+28	- [ ] `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class="direct"|"idp_cache"|"idp_cache_orphan"}` (LT-44's metrics, exposed via 03's code, per criterion below) reach a real Prometheus-compatible sink 04 already operates — enforcement site: the scrape config or push-gateway wiring, not just "the metric exists in code."
+29	- [ ] The alert rule `oldest_surviving_row_age_seconds{class="X"} &gt; (retention_window_seconds + sweep_interval_seconds)` is configured per class in 04's actual alerting stack (not just theoretically derivable from the metric) — enforcement site: the alert-rule config file/CRD, with the real numeric retention windows (24 months/`direct`, 30 days/`idp_cache`, 7 days/`idp_cache_orphan`, per LT-44/`pii-governance.md`) and the real `sweep_interval_seconds` (the CronJob's own schedule, LT-44's manifest) substituted in, not left as placeholders.
+30	
+31	**03 side:**
+32	- [ ] LT-44's sweep-invocation code exposes `rows_examined`/`rows_deleted`/`oldest_surviving_row_age_seconds` as real Prometheus client-library metrics with the `class` label values above — confirming/completing LT-44's own metrics-emission code path (LT-44's refinement already required emission gated on `Drained == true`; this criterion is that the values reach an actual `prometheus.Client` registration, not just a `log.Printf` or an internal struct field).
+33	- [ ] A never-log-list enforcement **test** exists at the application layer — asserting that a representative sample of never-log-list values (a password, a token, a DSN, a raw vendor error body) passed through the real logging path never appears in captured log output — the lint check's complement, catching what a static grep-style rule can miss (e.g., a value passed through an intermediate variable the lint rule's pattern doesn't match). Enforcement site: a test in `internal/api`/`internal/connector` that captures `slog` output and asserts absence of seeded sensitive values.
+34	
+35	**02 side:**
+36	- [ ] Marcus (02) confirms in writing that `handoff-04-secrets.md`'s 11-item never-log list is fully covered by a named enforcement site (the mapping table in `observability.md`'s "operationalized" section, cross-checked item-by-item) — not a re-derivation, a confirmation that the existing mapping is actually complete.
+37	
+38	## Priya's seat — retention-alert threshold
+39	
+40	**Added per team-lead's routing:** Priya Nandakumar (05) has a seat specifically on whether the alert formula's two terms are the right ones, since she owns the retention-window numbers and the sweep-invocation cadence assumption. Question for her turn: does `retention_window_seconds + sweep_interval_seconds` need a third term — a slack/grace factor for a sweep run that's merely running slow (not dead), given LT-44's `concurrencyPolicy: Forbid` means a slow run causes the *next* scheduled run to be skipped rather than overlapped, which could itself push `oldest_surviving_row_age` past the naive threshold on a run that's behind schedule but not actually broken? Her ruling on whether the two-term formula from `observability.md` already accounts for this (worth checking: `observability.md`'s own text doesn't address the Forbid-causes-skip interaction) is this story's own genuinely open, not-yet-refined question — recorded here rather than assumed either way.
+41	
+42	## Non-goals
+43	
+44	- No new retention windows or data-class definitions — those are `pii-governance.md`'s numbers, already final per LT-44.
+45	- No tracing/OpenTelemetry — explicitly out per `observability.md`'s own "what's deliberately not here."
+46	- No general SLO/error-budget policy or alert catalog beyond the one retention-sweep alert rule this story requires.
+47	- No re-derivation of the never-log list's 11 items or their categorization — that's `handoff-04-secrets.md`'s inventory, already final; this story only confirms and enforces it.
+48	
+49	## PO review script
+50	
+51	1. Read the CI lint-check config/rule directly; confirm it actually flags the named patterns (whole-struct log calls, never-log-list field names) rather than being a no-op placeholder.
+52	2. Confirm the ingress `ConfigMap`'s log-format override is applied to the live ingress (not just committed in a manifest never deployed) and that a live search request's `name`/`phone` query params don't appear in the ingress access log.
+53	3. Confirm the audit-log RBAC `Role` is genuinely distinct from Secret-read RBAC — read both role definitions, confirm no overlap, confirm the incident-review group binding.
+54	4. Confirm the three sweep metrics reach the real sink (query the sink directly for `oldest_surviving_row_age_seconds`, don't just trust the code emits it) and that the alert rule is configured with the real numeric retention windows and real sweep interval substituted in, not placeholders.
+55	5. Confirm 03's never-log-list enforcement test exists, runs in CI, and genuinely fails if a seeded sensitive value leaks into captured log output (mutate the test locally to confirm it can fail, not just that it currently passes).
+56	6. Confirm Marcus's never-log-list completeness confirmation is recorded, and read it against the 11-item list directly rather than trusting a summary.
+57	7. Confirm Priya's ruling on the alert-formula question above is recorded, and that the alert rule matches whatever she rules (two-term formula as-is, or a third grace term).
+58	8. Once deployed: deliberately stop the sweep `CronJob` (suspend it) and confirm the alert fires within one sweep interval of the retention window being exceeded — the one live-tested proof this story's core reasoning ("a dead sweep produces no other symptom") actually holds.
+59	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:48 AM PDT</span><span class="who">Tobias Lindqvist</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-44 refinement — S11: retention sweep, `DeleteExpired`/`DeleteProfile` wiring
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale, Desmond Okafor, Tobias Lindqvist. **Engineering:** Renata Cole (03, sweep-invocation code), Theo Bergman (04, `CronJob` manifest + metrics sink); design inputs: Priya Nandakumar (05, retention windows/clocks/classes), Marcus Ilori (02, seat on subject-deletion audit trail if any).
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO); claims check Desmond Okafor; objection Tobias Lindqvist.
+6	
+7	## Why this one, now
+8	
+9	Per team-lead: without this, the README (LT-43, correctly deferred to write last) would have to list PII retention as stubbed — at a company whose own product framing is PII minimization, that's a real, visible gap in the submission, not a cosmetic one. Desmond's LT-43 finding made the case concretely: `DeleteExpired`/`DeleteProfile` exist and are tested on the DAO composite, but nothing schedules or calls either method — a designed-but-not-operational control. This is roughly a half-day story (a `CronJob` calling a `--sweep` mode of the existing `api-service` image, bounded by the already-built `maxRows`, audited) that turns a stub line into a delivered one.
+10	
+11	## What this story actually is
+12	
+13	Not new DAO methods — `DeleteExpired`/`DeleteProfile` already exist on the composite (05's `multi-db-strategy.md` §3c) and are already tested (LT-38's conformance suite: `TestConformance_DeleteExpired_*`, `TestConformance_OldestSurvivingAt_*`, `TestConformance_Drained_*`, `TestConformance_DeleteWritesExactlyOneDeletionLogRow`, `TestConformance_DeleteExpired_AlreadyCancelledContextDeletesNothing` — all confirmed present during LT-42's full completeness sweep). This story is the **caller**: a scheduled invocation that loops per `RetentionClass` until drained, plus a subject-deletion request path, plus the health metric that tells 04 whether it's actually running.
+14	
+15	**Mechanism (team-lead's recommendation, adopted):** a `CronJob` in `04-infra-devops`'s manifests invoking `cmd/api-service`'s existing image in a new `--sweep` mode (or a distinct small entrypoint, `03`'s call) — not a new binary, not a new image build, reusing what's already deployed.
+16	
+17	## The three retention classes and windows this sweep must implement (from `pii-governance.md`, cited so this story doesn't re-derive them)
+18	
+19	| `RetentionClass` | Clock | Window | Why this clock specifically |
+20	|---|---|---|---|
+21	| `direct` | `updated_at` | 24 months | Proposed POC default, engineering basis only — explicitly **not** a legal ruling (`pii-governance.md`'s own "unknown, needs product/legal ruling" status). This story implements the number as configured, doesn't treat it as settled policy. |
+22	| `idp_cache` | `updated_at` | 30 days | A cache, not a record — re-hydration costs one `/identity` call, so the window trades staleness against re-fetch cost. |
+23	| `idp_cache_orphan` | `created_at`, **deliberately not `updated_at`** | 7 days | Using `updated_at` would let an orphan's own read/re-hydration path reset its expiry indefinitely — the entire reason this class exists as `created_at`-clocked, not a stylistic choice. |
+24	
+25	**These are stated as "Proposed" in `pii-governance.md`, not "Ruled," except `user_credential`'s no-independent-window rule.** This story implements the configured numbers; it is not this story's job to decide whether 24 months/30 days/7 days are the right numbers — that's Priya's/legal's call, already flagged as open in the source document.
+26	
+27	## Acceptance criteria (restated from `backlog.md` S11)
+28	
+29	- [ ] Implements 05's addendum without re-deriving the transaction-boundary or batching reasoning (each `DeleteExpired` call is already one transaction per batch, per the DAO's own implementation).
+30	- [ ] Loops `DeleteExpired` per `RetentionClass` until `Drained` is true, one class at a time, never a mixed/shared predicate — enforcement site: the sweep invocation loop's own structure.
+31	- [ ] `DeleteExpired` is never called with a request-scoped context — the sweep's own job/scheduler context governs it. Enforcement site: the sweep invocation's context construction (the `CronJob`'s own pod lifecycle, not an inbound HTTP request), plus a test asserting an already-cancelled context returns before deleting anything (the DAO layer already has this test per LT-38; this story's own test confirms the *caller* doesn't accidentally pass a request-scoped one).
+32	- [ ] `SweepResult.OldestSurvivingAt` is published to 04's observability **only from a `Drained == true` result** — a non-drained batch reports progress, not health, per `observability.md`'s explicit warning that getting this wrong "means the alert fires on every sweep and gets muted, which is worse than not having it." Enforcement site: the metrics-emission code path, gated on `Drained`.
+33	- [ ] Metrics emitted per class per run: `rows_examined`, `rows_deleted`, `oldest_surviving_row_age_seconds{class="direct"|"idp_cache"|"idp_cache_orphan"}` — matching `observability.md`'s exact label values (not the earlier-corrected, invented `vendor_token_cache`/`idp_identity_cache` names that document itself flagged and fixed).
+34	- [ ] `DeleteProfile` is the only path used for a subject-deletion request; ordinary application deletes still go through `Profiles().Delete` (no log row) — this distinction is preserved, not collapsed for convenience.
+35	- [ ] The `Drained`/`OldestSurvivingAt` coupling gets a one-line doc comment at the field declaration (Oren's note) — already present in the DAO's own code per LT-42's completeness sweep; this story doesn't need to add it again, just not remove or contradict it.
+36	- [ ] **The `CronJob` runs against `api-service`'s existing image** (a `--sweep` mode or distinct entrypoint), not a new image build — matching team-lead's stated "half-day story" framing; a new image/Dockerfile would be disproportionate scope for what this needs.
+37	- [ ] **Bounded by the existing `maxRows` per call** — the sweep doesn't invent a new batching parameter; it uses the DAO's own already-validated `1..10_000` bound.
+38	- [ ] **Audited** — every deletion this sweep performs writes exactly one `deletion_log` row via the DAO's own transaction (already guaranteed by the DAO layer per LT-38's test); this story's job is only to confirm it doesn't bypass that path.
+39	- [ ] **Added per Tobias's objection:** the sweep `CronJob` sets `concurrencyPolicy: Forbid` — Kubernetes' default (`Allow`) would let a slow-running sweep (plausible on the *first* real run, with no prior sweep history and a possible real backlog across all three classes) overlap with its own next scheduled invocation, matching the exact "two schedulers hit the same tables concurrently" risk this project already solved once for the migration `Job` in LT-45 ("only one migration run can reach the migrate stage at a time... enforced by the pipeline's own concurrency group/mutex"), but never carried forward to this `CronJob`. Beyond wasted DB load, two overlapping sweeps for the same class could each independently reach `Drained == true` and each emit `oldest_surviving_row_age_seconds` for that class in the same window — a confusing, duplicate signal undermining the one metric criterion 5's alert rule depends on. `Forbid` silently skips an overlapping run rather than overlapping it — a skipped run must itself be visible in observability (a metric or log line noting the previous run was still active), so a sweep that's perpetually behind schedule doesn't fail silently either.
+40	
+41	## Non-goals
+42	
+43	- No new DAO methods, no schema changes — `DeleteExpired`/`DeleteProfile` and `deletion_log` already exist and are tested.
+44	- No change to the retention windows themselves (24 months/30 days/7 days) — those are Priya's/legal's numbers, implemented as configured, not re-litigated here.
+45	- No new container image — reuses `api-service`'s existing image in a new invocation mode.
+46	- No subject-deletion-request *API endpoint* — `backlog.md`'s S11 wires the DAO-level `DeleteProfile` path; whether/how an external caller triggers a subject-deletion request (a support-tool button, an API route) is a separate, unscoped question not raised by this story's own criteria.
+47	
+48	## PO review script
+49	
+50	1. Confirm the `CronJob` manifest invokes `api-service`'s existing image, not a new one.
+51	2. Confirm the sweep loop calls `DeleteExpired` per class until `Drained`, never a mixed predicate — read the invocation code directly.
+52	3. Confirm the sweep's context is the job's own, not request-scoped — read the code, confirm the cancelled-context test exists at this layer too (not just the DAO's own, already-covered test).
+53	4. Confirm metrics are emitted with the correct label values (`direct`/`idp_cache`/`idp_cache_orphan`), only from `Drained == true` results.
+54	5. Confirm the alert rule (`oldest_surviving_row_age_seconds{class="X"} &gt; retention_window + sweep_interval`) is actually configured in 04's monitoring, not just theoretically possible from the emitted metric.
+55	5a. **Added per Tobias's objection:** read the `CronJob` manifest directly and confirm `concurrencyPolicy: Forbid` is set, not the Kubernetes default `Allow`; confirm a skipped-due-to-overlap run is itself visible in observability (a metric or log line), not silently invisible.
+56	6. Once deployed: confirm the `CronJob` actually runs on schedule (check its last-run status via `kubectl get cronjob`/`kubectl get jobs`) and that at least one run reports real `rows_examined`/`rows_deleted` numbers, not zero-across-the-board from day one (which would be consistent with either a genuinely empty table or a broken sweep — the seeded demo profiles, if old enough, are one way to get a non-trivial signal; otherwise this criterion is "ran without erroring," not "deleted something").
+57	
+58	## Research team review
+59	
+60	**Desmond Okafor — claims check:** Verified the full retention-class/window/clock table and every metrics/label requirement word-for-word against `pii-governance.md` and `observability.md` directly — all accurate. Independently re-checked the DAO-level test claims (rather than trusting his own earlier LT-42 sweep, which hadn't actually named this specific package) — found every cited test present in `internal/dao/conformance/conformance_test.go`, plus the `Drained`/`OldestSurvivingAt` doc comment in `retention.go`. No corrections needed.
+61	
+62	**Tobias Lindqvist — objection:** The `CronJob` had no stated `concurrencyPolicy`, leaving Kubernetes' default `Allow` in place — a slow first-ever sweep run (plausible, given no prior sweep history and a possible real backlog) could overlap with its own next scheduled invocation, recreating the exact "two schedulers hit the same tables concurrently" risk this project already solved once for the migration `Job` in LT-45, never carried forward here. Beyond wasted load, overlapping sweeps could each independently emit `oldest_surviving_row_age_seconds` for the same class, undermining the one metric the alert rule depends on being trustworthy. Counter-proposal accepted: `concurrencyPolicy: Forbid`, plus a requirement that a skipped-due-to-overlap run be itself visible in observability, not silently invisible.
+63	
+64	**Naomi Voss — ruling:** Fix applied. This refinement is accepted and ready to hand off. This is the fourth story in this chain where a pattern already established elsewhere in the project (single-in-flight discipline on the migration `Job`) wasn't carried forward to a structurally identical new component — worth naming as its own recurring category, alongside the NetworkPolicy-scoping pattern Tobias already flagged on LT-52.
+65	
+66	## Update — implementation (Renata Cole, 03), entrypoint/args agreed with Theo (04) first
+67	
+68	**Entrypoint, agreed with Theo before opening the PR:** `APP_MODE=sweep`, a third value alongside `verifier`/`issuer` on the SAME `api-service` binary/image — not a `--sweep` CLI flag, and not a distinct `cmd/sweep-worker` binary. Theo's own reasoning, adopted: `config.Load`/`cmd/api-service/main.go` already dispatch on `APP_MODE`, so a third value keeps one mode-selection mechanism instead of introducing a second (env var + CLI flag) in the same binary. The `CronJob`'s container just sets `APP_MODE: sweep` plus `DB_DRIVER`/`DB_DSN_FILE` (same as every other Deployment) — no `command`/`args` override needed. `internal/app.ModeSweep` is the new typed constant; `config.Load` accepts it; `config.RequiredAuthEnvVars("api-service", "sweep")` returns `(nil, true)` — recognized, requiring nothing, since sweep mode never verifies or issues a JWT.
+69	
+70	**Config:** reuses `DB_DRIVER`/`DB_DSN` as-is, no new DB env vars. Retention windows (24 months/30 days/7 days) and `maxRowsPerBatch` (1000, inside the DAO's own validated 1..10,000 range) are hardcoded constants in `internal/sweep`, not new env vars — per this story's own "not this story's job to decide the numbers" framing, confirmed with Theo.
+71	
+72	**Metrics, agreed with Theo:** stdout lines in a `metric_name{label="value"} value` shape (`internal/sweep.StdoutMetricEmitter`) are the complete, final answer for this project's scope — not a placeholder. Checked against the real cluster: `kube-prometheus-stack` is deployed but there's no Pushgateway, which is the actually-correct tool for a short-lived batch job's metrics (a CronJob pod is typically gone before Prometheus's own scrape interval could catch it), and standing one up is new infrastructure disproportionate to this story's "half-day" framing. Theo is documenting Pushgateway as the named production next step in a decisions doc, so this is a stated scope limit, not a silent gap. `oldest_surviving_row_age_seconds` is emitted only from a `Drained == true` batch, per `internal/sweep.runClass`'s own gating — verified by a dedicated test (`TestRun_MetricsOnlyEmittedOnDrained`) asserting a non-drained intermediate batch never triggers a metrics call.
+73	
+74	**`internal/sweep.Run`** loops `DeleteExpired` per `RetentionClass` until `Drained`, one class at a time (never a mixed predicate, verified by `TestRun_EveryClassCalledOnceEachWithItsOwnPredicate`), summing `RowsExamined`/`RowsDeleted` across every batch a class takes to drain. A cancelled context stops before any class calls `DeleteExpired` at all (`TestRun_AlreadyCancelledContextDeletesNothing`) — `cmd/api-service`'s own `runSweepMode` derives its context from `signal.NotifyContext` (SIGTERM/SIGINT), never a request-scoped one, since there is no HTTP request anywhere in this invocation. One class's error doesn't block the other two (`TestRun_OneClassErrorDoesNotBlockTheOthers`) — a database hiccup on one class shouldn't waste a full sweep of the other two, and a failed class's metrics are never emitted (would be misleadingly partial).
+75	
+76	**Live-verified, not just unit-tested:** ran the actual `api-service` binary with `APP_MODE=sweep` against a real throwaway Postgres container, seeded with rows spanning all three classes (some stale, some fresh). Confirmed: only the stale rows were deleted, the fresh rows survived, `deletion_log` recorded exactly 3 rows with `reason=retention_sweep`, and the emitted metric lines matched the actual examined/deleted counts.
+77	
+78	`DeleteProfile` (subject-deletion path) is untouched by this story, per its own non-goal — no subject-deletion-request endpoint exists to wire it to.
+79	
+80	Full `go build`/`go vet`/`go test`/`staticcheck`/`gofmt`/`gitleaks` clean.
+81	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md"
+}</pre><div class="lbl">result</div><pre>1	# Observability + Never-Log Enforcement
+2	
+3	Design-only. Covers logging, metrics, and tracing for both services, and — the harder half — how `handoff-04-secrets.md`'s never-log list gets enforced as a mechanism, not just stated as a policy.
+4	
+5	## Logging
+6	
+7	Structured logging (`slog`, Go stdlib — no third-party logging library needed for two services this size), JSON output, one line per event. Every log line that touches a request carries `sub` (caller identity), the endpoint, status, and a request id — never the request or response body wholesale. This is the pattern the never-log list requires (hand-off item 8: "full request bodies of `POST /auth` and `POST /identity`... both contain items above by construction") — the enforcement mechanism is that handlers log a small, explicit field set assembled by hand, never `log.Printf("%+v", req)` or equivalent reflection-based dumps of a request/response struct. A struct that contains a password field can't leak through a log statement that never receives the struct.
+8	
+9	**Enforcement beyond "write it carefully":**
+10	- A lint rule (a `golangci-lint` custom check, or a simple `go vet`-style grep in CI) that flags any log call passing a whole request/response struct, a `*http.Request` body, or any variable named/typed to match the never-log list's fields (`password`, `token`, `secret`, `dsn`, `client_secret`). Not foolproof — a determined developer can rename around it — but it catches the accidental case, which is the common one.
+11	- Error-path discipline: wrapped errors are logged with `err.Error()` truncated/sanitized where the error type is known to carry sensitive detail (a DB driver error can echo the DSN; a vendor HTTP client error can echo the response body per hand-off item 4) — the wrapping layer strips those before the error reaches a log call, not the log call itself deciding case-by-case.
+12	
+13	## Metrics
+14	
+15	Standard RED metrics (rate, errors, duration) per endpoint, via Prometheus client library, scraped by whatever the lab cluster already runs (not stood up new for this take-home). Labels: method, route, status class — never a label with cardinality tied to user data (no `sub` or phone number as a metric label; that turns a metrics backend into an accidental PII store with no access control at all, which is a worse leak than a log line since metrics systems are typically more widely readable).
+16	
+17	## Tracing
+18	
+19	Not built out here — a two-service take-home with no running collector doesn't get more credible by naming OpenTelemetry. If ever added, it follows the same field discipline as logging.
+20	
+21	## The never-log list, operationalized
+22	
+23	Hand-off's nine items map to two enforcement surfaces, not nine separate mechanisms:
+24	
+25	1. **Application-level:** the structured-logging discipline above (explicit field sets, the lint check, error-wrapping sanitization) covers items 1, 2, 5, 6, 7 (password, tokens, JWTs, client secrets, DSN) — these never enter a Go `log`/`slog` call in the first place.
+26	2. **Proxy/ingress-level:** item 9 ("search query parameters containing a name or phone fragment... redact or hash before any access log, including proxy and ingress logs 04 controls") is the one item application code can't fully own, since ingress access logs are written by the ingress controller, not the service. Mechanism: an ingress-level log-format override that logs the request path with query string stripped (or a regex redaction on the `phone`/`name` query params specifically) rather than the default full-URL access log format. This is a one-time ingress ConfigMap change, not a per-request code path.
+27	3. Item 3 (PII field values from `/identity` or `user_profile`) and item 4 (raw vendor error bodies) are the same discipline as #1 applied to the connector specifically — the connector logs "called vendor X, got status Y," never the response body.
+28	
+29	## Audit-log access is a separate grant from Secret access
+30	
+31	Per the hand-off's Kubernetes-specific requirements: the log stream carrying `sub`/scope/record-id/timestamp (the "fact of access" the never-log list still permits) is itself sensitive enough to reconstruct who looked up whom, so it gets its own RBAC — a distinct, narrower `Role` bound to an incident-review group, separate from any ServiceAccount's `Secret`-read grant (`./secrets-delivery.md`). Mechanism: if logs go to a cluster-local sink (e.g., Loki), that sink's read API gets its own RBAC/auth in front of it, not the same one guarding `kubectl get secrets`; if logs go to an external platform, the equivalent is a scoped read-only role in that platform, provisioned separately from any cluster credential.
+32	
+33	## Retention-sweep observability (05's S5 requirement, final)
+34	
+35	Per `../05-data-ops/pii-governance.md`: the retention sweep must emit, per data class per run, three metrics — rows examined, rows deleted, and **the age of the oldest surviving row in that class**. An alert fires when that age exceeds the class's stated retention window plus one sweep interval. This is the one metric in this document tied to a specific reasoning worth repeating: a sweep job that silently stops running produces no error and no symptom on its own — "rows deleted" can't tell a broken sweep from a legitimately empty one, since both report zero. Oldest-surviving-row age is the one number that keeps climbing when the job is dead and holds steady when it's healthy, which is why it's the alerting signal, not just a nice-to-have metric alongside the other two.
+36	
+37	Mechanism: the sweep job (whatever invokes it — a CronJob against the lab cluster, per 05's mechanism-agnostic requirement) emits these as Prometheus metrics with a `class` label matching 05's actual retention classes — `source="direct"`, `source="idp_cache"`, and `idp_cache_orphan` for an orphaned `idp_cache` row (`../05-data-ops/pii-governance.md`), never a label carrying the PII itself, same discipline as the RED-metrics rule above. (An earlier draft of this section invented `vendor_token_cache`/`idp_identity_cache` as class names — those don't correspond to anything 05 tracks and described a connector token cache the S3 ruling never adopted; corrected here.) The alert rule is `oldest_surviving_row_age_seconds{class="X"} &gt; (retention_window_seconds + sweep_interval_seconds)`, evaluated per class.
+38	
+39	**Batched sweeps: only a drained result feeds the metric.** 05's `DeleteExpired` is batched (a bounded `maxRows` per call, `SweepResult.Drained` marking the last batch of a sweep) — `OldestSurvivingAt` is meaningful only on a `Drained == true` result, since mid-sweep the oldest deletable row is still present by construction and would read as stale on every batch but the last. The sweep job emits `oldest_surviving_row_age_seconds` only from drained results, never from an intermediate batch; the alert rule above already only ever sees what's published, so this is a constraint on what the job emits, not an extra filter the alert needs to apply. Getting this wrong means the alert fires on every sweep and gets muted, which is worse than not having it.
+40	
+41	## Log-sink retention: the deletion-gap enforcement site
+42	
+43	Application logs, metrics, and traces have no `source` column, no clock tied to a `user_profile` row, and no key a subject-deletion request could reach by cascade — a deleted profile's data can still exist in a log line indefinitely. 05's never-log list (`handoff-04-secrets.md`) and this document's enforcement mechanism (above) are the upstream control — if PII never enters a log, there's nothing in a log to expire — but that only holds for the fields on the list. What's left (chiefly the audit trail: `sub`, scope, opaque record id, timestamp — permitted by design, pseudonymous rather than PII-free) still needs a retention window: `pii-governance.md` § "Retention windows (S5)", the "Audit-log stream" row (clock: the entry's own timestamp; window: proposed, pending a legal ruling; disposal: **expiry at the sink**) names this document's log-sink retention policy as its enforcement site — the citation resolves in both directions. Not a deletion job 04 writes — a retention setting on infrastructure 04 already operates.
+44	
+45	**Not the same object as the `deletion_log` table.** 05's `deletion_log` (rows written transactionally by `DeleteExpired`/`DeleteProfile`) is a separate thing from the audit-log stream above — it's PII-free by construction, carries no `RetentionClass`, and isn't in 05's retention table at all; nothing here applies to it, and no metric from a `SweepResult` does either. If a retention window is ever wanted for that table, it's a DAO contract change (05's to make), not a sink-retention config value (04's).
+46	
+47	## What's deliberately not here
+48	
+49	No SLOs/error-budget policy, no alerting-rule catalog beyond the retention-sweep alert above. A take-home needs the shape of an observability approach and a credible enforcement mechanism for the one hard requirement (never-log); it doesn't need a full SRE runbook.
+50	
+51	---
+52	*AI tooling note: drafted directly by Theo (Sonnet, this session) from `handoff-04-secrets.md` v2's never-log list. Bree's (capability-case) and Callum's (scope-cut) per-deliverable notes reviewed and folded in inline above, per PLAN.md §3.*
+53	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 10:49 AM PDT</span><span class="who">Tobias Lindqvist</span><div class="body">Read `LT-49.md`, `LT-44.md`, and `observability.md`. Two real gaps, one confirmation of Naomi's own flagged question.
+
+**1. Priya's grace-term question is already answerable from what's in front of her, and LT-49's criteria as written let the story close without answering it.** LT-44's own metrics update (03's implementation note) confirms `StdoutMetricEmitter` writes lines a CronJob pod's stdout, scraped by nothing on a fixed cadence — Theo already flagged Pushgateway as absent and deferred it. That fact bears directly on the grace-term question: with `concurrencyPolicy: Forbid`, a slow-but-alive run causes the *next scheduled run to be skipped entirely* — meaning no new metric line is emitted at all for that cycle, not even a stale one. A naive two-term alert reading a stopped-updating gauge as "climbing" is exactly the failure Priya's question describes, and it's worse than the doc's framing suggests: it isn't just "might trip early," it's that the *previous run's last value* is what the alerting stack has to reason about, and whether that's even visible depends on retention/staleness handling in whatever sink 04 picks — a detail neither PLAN.md nor LT-49 pins down. Criterion 4 ("real numeric retention windows and sweep interval substituted in") doesn't ask anyone to check that a skipped-run condition is distinguishable from a dead-sweep condition in the alerting math itself, only that the formula's constants are correct. **Concrete fix:** add an explicit acceptance criterion (not just "Priya rules on it") requiring the skipped-run visibility signal LT-44 already committed to (5a: "a skipped-due-to-overlap run is itself visible in observability") to be wired into the *same* alert's suppression logic, or a separate alert distinguishing "sweep skipped, still healthy" from "sweep dead" — otherwise LT-44's own fix (Forbid + skip-visibility metric) sits unused by the one alert it was built to inform.
+
+**2. Step 8 of the PO review script is untestable as written and nobody has said what the sweep interval actually is.** "Confirm the alert fires within one sweep interval" assumes a short enough interval to observe live within a review session. Nothing in LT-49, LT-44, or `observability.md` states the CronJob's schedule — LT-44's manifest presumably sets one, but it's never cited here, and if it's daily (plausible for a 24-month/30-day/7-day retention regime), step 8 requires suspending the CronJob and waiting up to 24 hours, not something a PO review script should silently assume is a same-session check. **Fix:** either cite the actual schedule value in LT-49 so the PO can judge feasibility before running the script, or rewrite step 8 to accept a manually-triggered off-schedule `Job` run (bypassing the CronJob's own cadence) as an equivalent live proof.
+
+**3. The 03/04 metrics split has the gap you're asking about: nobody's criterion checks the emitted *value* against ground truth, only that a metric line exists and reaches a sink.** 03's criterion (line 32) checks the metric reaches `prometheus.Client` registration; 04's criterion (line 28) checks it reaches the sink. Neither says the number is right. LT-44's own PO review script step 6 comes closest ("at least one run reports real numbers, not zero-across-the-board") but that's LT-44's story, already closed — LT-49 doesn't re-cite or inherit it, so a reviewer following only LT-49's script has no step confirming `oldest_surviving_row_age_seconds`'s actual value against a known seeded row's age, only that a number of some kind arrived at the sink.
+
+**Counter-proposal:** add one PO-review-script line to LT-49 (between current 4 and 5): "seed one row of known age in each class, run the sweep once, query the sink for that class's `oldest_surviving_row_age_seconds`, and confirm it's within a few seconds of the known seeded age — not just present." That closes the value-correctness gap without asking either team to duplicate the other's enforcement site.
+
+Relevant files read: `/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/LT-49.md`, `/Users/warrenthompson/Source/LoginID/03-engineering-delivery/refinement/LT-44.md`, `/Users/warrenthompson/Source/LoginID/04-infra-devops/observability.md`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

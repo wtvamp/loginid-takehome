@@ -1,0 +1,1317 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 9 of 12 · model <span class="mono">claude-opus-5</span> · Sep 12, 2026 10:42 AM PDT – Sep 12, 2026 10:43 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Lead</span><div class="body">Search breadth: medium. Read-only investigation of the profile-gen skill installed at /Users/warrenthompson/.claude/skills/profile-gen (check whether that path is a symlink to /Users/warrenthompson/Source/ProfileGenSkill — run `ls -la /Users/warrenthompson/.claude/skills/profile-gen` and `readlink`). A global SessionStart hook runs `python3 /Users/warrenthompson/Source/ProfileGenSkill/scripts/show_profile.py --root "${CLAUDE_PROJECT_DIR:-$PWD}" --autostart-only`.
+
+Answer these specific questions with file paths and line references:
+
+1. In scripts/show_profile.py (and anything it imports from scripts/profilegen/, e.g. storage.py): when a project root has MULTIPLE personas (several `&lt;!-- profile-gen:start slug=... --&gt;` blocks in CLAUDE.md, or several profiles/&lt;slug&gt;/&lt;slug&gt;.md directories), which persona does `--autostart-only` display? First marker? All of them? Is there a `--slug` or `--profile` selector? Quote the selection logic.
+2. How does `--output file` differ from `claude-md-ref` in scripts/write_profile.py / storage.py — does `file` write anything into CLAUDE.md at all? Where does the markdown land (path pattern)? Can many personas coexist under one root's profiles/ directory without interfering?
+3. The profile schema (references/profile-schema.md, assets/profile.schema.json): is there ANY field for a persona's history/backstory/technical background, or is `personality` (free-form prose) the only place for that? Is there a length limit on `personality`?
+4. references/terminal-display.md: what does the `session_intro.py` hook do, what does `display.autostart` control, and how does `scripts/toggle_display.py` set autostart on/off per slug? Does show_profile.py support a mode that displays a persona by explicit path (e.g. `--profile &lt;path&gt;`)? Confirm the exact CLI flags.
+5. Is there any documented "no-image" / text-only fast path — i.e., can write_profile.py be run with a placeholder or missing image so a persona (name + personality) exists on disk before any picture is generated, with the picture added later via a re-run? Check whether `image` is required by the schema validation in write_profile.py.
+6. Does generate_image.py support a `--seed` and does the comfyui backend accept a `--workflow` path outside the asset dir (we've been reusing /Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json for every persona — confirm that's fine).
+
+Report concisely (under 500 words), organized by question number, with exact flags and file:line citations. Do not modify anything.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">I'll start by checking the symlink and mapping the skill directory.</div><details><summary><span class="tn">Bash</span> ls -la /Users/warrenthompson/.claude/skills/profile-gen; readlink /Users/warrenthompson/.claude/skil</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "ls -la /Users/warrenthompson/.claude/skills/profile-gen; readlink /Users/warrenthompson/.claude/skills/profile-gen; echo \"---\"; find /Users/warrenthompson/Source/ProfileGenSkill -type f -not -path \"*/.git/*\" | head -60",
+  "description": "Check symlink and list skill files"
+}</pre><div class="lbl">result</div><pre>drwxr-xr-x@    - warrenthompson 11 Sep 23:59 .claude
+drwxr-xr-x@    - warrenthompson 12 Sep 00:44 .git
+drwxr-xr-x@    - warrenthompson 10 Sep 16:50 .profiles-assets
+drwxr-xr-x@    - warrenthompson 11 Sep 20:29 .pytest_cache
+drwxr-xr-x@    - warrenthompson 10 Sep 13:44 .venv
+drwxr-xr-x@    - warrenthompson 11 Sep 23:31 assets
+drwxr-xr-x@    - warrenthompson 10 Sep 16:50 profiles
+drwxr-xr-x@    - warrenthompson 12 Sep 00:44 references
+drwxr-xr-x@    - warrenthompson 12 Sep 00:43 scripts
+drwxr-xr-x@    - warrenthompson 11 Sep 23:31 templates
+drwxr-xr-x@    - warrenthompson 12 Sep 10:04 tests
+.rw-r--r--@   88 warrenthompson 11 Sep 22:53 .gitignore
+.rw-r--r--@ 7.2k warrenthompson 11 Sep 23:31 CLAUDE.md
+.rw-r--r--@ 8.5k warrenthompson 11 Sep 22:53 README.md
+.rw-r--r--@   28 warrenthompson 10 Sep 13:44 requirements.txt
+.rw-r--r--@  20k warrenthompson 12 Sep 00:33 SKILL.md
+/Users/warrenthompson/Source/ProfileGenSkill
+---
+/Users/warrenthompson/Source/ProfileGenSkill/requirements.txt
+/Users/warrenthompson/Source/ProfileGenSkill/README.md
+/Users/warrenthompson/Source/ProfileGenSkill/.gitignore
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md
+/Users/warrenthompson/Source/ProfileGenSkill/CLAUDE.md
+/Users/warrenthompson/Source/ProfileGenSkill/.pytest_cache/CACHEDIR.TAG
+/Users/warrenthompson/Source/ProfileGenSkill/.pytest_cache/README.md
+/Users/warrenthompson/Source/ProfileGenSkill/.pytest_cache/.gitignore
+/Users/warrenthompson/Source/ProfileGenSkill/references/backends.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/voices.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/comfyui.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/comfyui-workflow-authoring.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/prompting.md
+/Users/warrenthompson/Source/ProfileGenSkill/references/terminal-display.md
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_gif.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_session_intro.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_grok_backend.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_prompt.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/mock_comfyui_server.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_termimg.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_frontmatter.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_show_profile.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_termstate.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_comfyui_inventory.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_storage.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_toggle_display.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_check_config_node_verification.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_render.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_comfyui_inject.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_e2e_mock.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_grok_cli_backend.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_hud.py
+/Users/warrenthompson/Source/ProfileGenSkill/tests/test_generate_image_square_crop.py
+/Users/warrenthompson/Source/ProfileGenSkill/.claude/settings.json
+/Users/warrenthompson/Source/ProfileGenSkill/.venv/pyvenv.cfg
+/Users/warrenthompson/Source/ProfileGenSkill/.venv/.gitignore
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/session_intro.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/check_config.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/toggle_display.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/inspect_comfyui.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/generate_image.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/show_profile.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/write_profile.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/make_gif.py
+/Users/warrenthompson/Source/ProfileGenSkill/templates/profile.standalone.md.j2
+/Users/warrenthompson/Source/ProfileGenSkill/templates/profile.embedded.md.j2
+/Users/warrenthompson/Source/ProfileGenSkill/assets/profile.schema.json
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/comfyui_inventory.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/config.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/frontmatter.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/discovery.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/render.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/termimg.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/gif.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/__init__.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/http.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/storage.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/hud.py
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/prompt.py</pre></div></details><details><summary><span class="tn">Bash</span> ls -la /Users/warrenthompson/Source/ProfileGenSkill/scripts/ /Users/warrenthompson/Source/ProfileGen</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "ls -la /Users/warrenthompson/Source/ProfileGenSkill/scripts/ /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/ 2&gt;/dev/null",
+  "description": "List scripts dirs"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/ProfileGenSkill/scripts/:
+drwxr-xr-x@     - warrenthompson 12 Sep 10:33 __pycache__
+drwxr-xr-x@     - warrenthompson 12 Sep 10:13 hud
+drwxr-xr-x@     - warrenthompson 12 Sep 10:00 profilegen
+.rw-r--r--@  4.9k warrenthompson 11 Sep 10:54 check_config.py
+.rw-r--r--@  6.5k warrenthompson 11 Sep 15:01 generate_image.py
+.rw-r--r--@  1.7k warrenthompson 10 Sep 14:05 inspect_comfyui.py
+.rw-r--r--@  5.8k warrenthompson 11 Sep 15:47 make_gif.py
+.rw-r--r--@  8.8k warrenthompson 12 Sep 00:43 session_intro.py
+.rw-r--r--@ 10.0k warrenthompson 12 Sep 10:33 show_profile.py
+.rw-r--r--@  4.1k warrenthompson 11 Sep 23:31 toggle_display.py
+.rw-r--r--@  7.3k warrenthompson 11 Sep 23:31 write_profile.py
+
+/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/:
+drwxr-xr-x@    - warrenthompson 12 Sep 10:33 __pycache__
+drwxr-xr-x@    - warrenthompson 11 Sep 20:28 backends
+.rw-r--r--@   76 warrenthompson 10 Sep 12:32 __init__.py
+.rw-r--r--@ 6.4k warrenthompson 11 Sep 10:53 comfyui_inventory.py
+.rw-r--r--@ 3.1k warrenthompson 10 Sep 14:12 config.py
+.rw-r--r--@ 2.0k warrenthompson 11 Sep 22:53 discovery.py
+.rw-r--r--@ 7.3k warrenthompson 11 Sep 23:31 frontmatter.py
+.rw-r--r--@ 4.0k warrenthompson 11 Sep 15:46 gif.py
+.rw-r--r--@ 2.2k warrenthompson 10 Sep 12:35 http.py
+.rw-r--r--@  16k warrenthompson 12 Sep 10:33 hud.py
+.rw-r--r--@ 7.4k warrenthompson 10 Sep 21:55 prompt.py
+.rw-r--r--@ 3.6k warrenthompson 10 Sep 12:35 render.py
+.rw-r--r--@  10k warrenthompson 10 Sep 17:05 storage.py
+.rw-r--r--@ 6.6k warrenthompson 11 Sep 22:53 termimg.py
+.rw-r--r--@ 4.7k warrenthompson 11 Sep 22:53 termstate.py</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Symlink confirmed. Now reading the key files.</div><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/ProfileGenSkill/scripts/show_profile.py</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/ProfileGenSkill/scripts/show_profile.py"
+}</pre><div class="lbl">result</div><pre>1	#!/usr/bin/env python3
+2	"""CLI: display a profile-gen persona -- its picture and/or name -- in the user's terminal.
+3	
+4	Two ways to point it at a persona:
+5	
+6	  --root ROOT
+7	      Default mode. Every persona currently auto-loaded via ROOT/CLAUDE.md's profile-gen marker
+8	      blocks (the same blocks write_profile.py --output claude-md/claude-md-ref maintains).
+9	
+10	  --profile PATH [--root ROOT]
+11	      Exactly one profile's markdown file, skipping CLAUDE.md discovery -- used for the immediate
+12	      preview right after profile-gen writes a persona. --root still matters: `image` fields are
+13	      recorded relative to the project root (see references/profile-schema.md), not to the
+14	      markdown file's own directory.
+15	
+16	Three ways to actually draw it, chosen by --mode (default `auto`):
+17	
+18	  hud      A small always-on-top, click-through overlay window pinned to a corner of the terminal
+19	           window, showing the picture (animated, for a GIF persona) and the name. macOS only.
+20	           This is the default because it's the only option that consumes no terminal rows,
+21	           touches no user configuration, and doesn't depend on terminal image protocols -- so
+22	           tmux is irrelevant to it. See profilegen/hud.py and scripts/hud/PersonaHUD.swift.
+23	  inline   An inline image painted into the text grid via termimg.py (iTerm2/WezTerm, Kitty,
+24	           sixel). Works in a plain terminal, but inside tmux it degrades to a clipped sliver --
+25	           tmux tracks only text cells and loses the image on the next repaint.
+26	  state    iTerm2's badge (the name) and background image (the picture). Survives tmux, but it
+27	           works by overwriting *user-owned* iTerm2 session settings: anyone with a configured
+28	           background image loses it, and clearing sets empty rather than restoring theirs. Never
+29	           chosen by `auto` for that reason -- it's opt-in only.
+30	  auto     `hud` where supported, else `inline`.
+31	  off      Draw nothing. Useful with --clear.
+32	
+33	--clear stops the overlay and clears any badge/background left behind.
+34	
+35	When stdout is not a tty -- an agent's shell tool, whose output is captured for the model rather
+36	than shown to the user -- `state` mode writes its escape sequences directly to the active tmux
+37	pane's device instead, so the persona still reaches the real screen (see
+38	profilegen/termstate.py). In that same case a one-line JSON summary of what was done is printed
+39	to stdout for the calling program; when a human is watching a real terminal, nothing is printed.
+40	
+41	Never errors out over a missing/malformed persona or an unsupported terminal -- a persona failing
+42	to display is not worth interrupting a session over, especially from a SessionStart hook. Exits 0
+43	in every "nothing to show" case.
+44	
+45	Each persona's own `display.image`/`display.name` preference decides what's shown, defaulting to
+46	true/true. --show-image/--no-image and --show-name/--no-name override that for this invocation
+47	only, without touching the persona's stored preference (see toggle_display.py to change it).
+48	
+49	`display.autostart` is a separate question from those: it decides whether a persona appears *on
+50	its own* at session start, not what gets drawn when it does. It's only consulted under
+51	--autostart-only, which is what a SessionStart hook passes -- so a persona can be set to stay
+52	quiet until asked for by `/display-profile` while still displaying normally when it is.
+53	"""
+54	from __future__ import annotations
+55	
+56	import argparse
+57	import json
+58	import sys
+59	from pathlib import Path
+60	
+61	sys.path.insert(0, str(Path(__file__).resolve().parent))
+62	
+63	from profilegen import discovery, frontmatter, hud, termimg, termstate  # noqa: E402
+64	
+65	
+66	def _load_markdown_fields(markdown_path: Path) -&gt; dict | None:
+67	    try:
+68	        text = markdown_path.read_text(encoding="utf-8")
+69	    except OSError:
+70	        return None
+71	    return frontmatter.extract_frontmatter(text)
+72	
+73	
+74	def _resolve_image_path(image: object, root: Path) -&gt; Path | None:
+75	    if not image or not isinstance(image, str):
+76	        return None
+77	    path = Path(image)
+78	    return path if path.is_absolute() else root / path
+79	
+80	
+81	def _display_one(fields: dict, root: Path, args: argparse.Namespace, mode: str) -&gt; dict:
+82	    display = fields.get("display") if isinstance(fields.get("display"), dict) else {}
+83	    show_image = args.show_image if args.show_image is not None else display.get("image", True)
+84	    show_name = args.show_name if args.show_name is not None else display.get("name", True)
+85	
+86	    name = fields.get("name")
+87	    image_path = _resolve_image_path(fields.get("image"), root)
+88	    result = {
+89	        "name": name,
+90	        "mode": mode,
+91	        "hud": False,
+92	        "badge": False,
+93	        "background": False,
+94	        "inline": False,
+95	    }
+96	
+97	    if mode == "hud":
+98	        result["hud"] = hud.launch(
+99	            str(image_path) if (show_image and image_path and image_path.is_file()) else None,
+100	            str(name) if (show_name and name) else None,
+101	            avatar=args.avatar,
+102	            avatar_min=args.avatar_min,
+103	            corner=args.corner,
+104	            margin=args.margin,
+105	        )
+106	        return result
+107	
+108	    if mode == "state":
+109	        tty = termstate.resolve_target_tty()
+110	        if show_name and name:
+111	            result["badge"] = termstate.set_badge(str(name), tty)
+112	        if show_image and image_path is not None and image_path.is_file():
+113	            result["background"] = termstate.set_background_image(str(image_path), tty)
+114	        return result
+115	
+116	    if mode == "inline":
+117	        if show_image and image_path is not None:
+118	            result["inline"] = termimg.display_image(image_path, width_pct=args.width_pct)
+119	        if show_name and name:
+120	            print(f"\033[1m{name}\033[0m")
+121	            result["badge"] = False
+122	    return result
+123	
+124	
+125	def _print_reports(reports: list[dict]) -&gt; None:
+126	    """One JSON object per line on stdout, for a calling program.
+127	
+128	    The leading newline matters: escape sequences written to stdout (the fallback when there's no
+129	    separate pane device to target) don't end in one, so without it the first report would be
+130	    glued onto the tail of a sequence and wouldn't parse as a line of JSON.
+131	    """
+132	    if not reports:
+133	        return
+134	    sys.stdout.write("\n")
+135	    for report in reports:
+136	        print(json.dumps(report))
+137	
+138	
+139	def _clear(args: argparse.Namespace) -&gt; dict:
+140	    tty = termstate.resolve_target_tty()
+141	    return {
+142	        "stopped_hud": hud.stop(),
+143	        "cleared_badge": termstate.clear_badge(tty),
+144	        "cleared_background": termstate.clear_background_image(tty),
+145	    }
+146	
+147	
+148	def main() -&gt; None:
+149	    parser = argparse.ArgumentParser(description=__doc__)
+150	    parser.add_argument(
+151	        "--root", default=".", help="project root personas are resolved against (default: cwd)"
+152	    )
+153	    parser.add_argument(
+154	        "--profile", help="display exactly this one profile markdown file, skipping CLAUDE.md discovery"
+155	    )
+156	    parser.add_argument("--slug", help="only display the persona with this slug")
+157	    parser.add_argument(
+158	        "--mode",
+159	        choices=["auto", "hud", "state", "inline", "off"],
+160	        default="auto",
+161	        help="how to draw: overlay window (hud), in-grid image (inline), "
+162	        "iTerm2 badge+background (state -- overwrites user settings), or auto",
+163	    )
+164	    parser.add_argument("--clear", action="store_true", help="stop the overlay / clear badge+background")
+165	    parser.add_argument(
+166	        "--autostart-only",
+167	        action="store_true",
+168	        help="skip personas whose display.autostart is false (what a SessionStart hook uses)",
+169	    )
+170	    parser.add_argument(
+171	        "--avatar", type=int, default=hud.DEFAULT_AVATAR,
+172	        help="hud avatar's largest size in points; it shrinks to fit narrower tmux panes/windows",
+173	    )
+174	    parser.add_argument(
+175	        "--avatar-min", type=int, default=hud.DEFAULT_AVATAR_MIN,
+176	        help="hud avatar's smallest size in points, however narrow the pane gets",
+177	    )
+178	    parser.add_argument(
+179	        "--corner", choices=["tr", "tl", "br", "bl"], default=hud.DEFAULT_CORNER,
+180	        help="hud corner of the terminal window (default: top-right)",
+181	    )
+182	    parser.add_argument("--margin", type=int, default=hud.DEFAULT_MARGIN, help="hud inset from that corner")
+183	    parser.add_argument("--width-pct", type=int, default=10, help="inline image width as %% of terminal width")
+184	    parser.add_argument("--show-image", dest="show_image", action="store_true", default=None)
+185	    parser.add_argument("--no-image", dest="show_image", action="store_false")
+186	    parser.add_argument("--show-name", dest="show_name", action="store_true", default=None)
+187	    parser.add_argument("--no-name", dest="show_name", action="store_false")
+188	    args = parser.parse_args()
+189	
+190	    machine_readable = not sys.stdout.isatty()
+191	
+192	    if args.clear:
+193	        report = _clear(args)
+194	        if machine_readable:
+195	            _print_reports([report])
+196	        return
+197	
+198	    mode = args.mode
+199	    if mode == "auto":
+200	        # never auto-select `state`: it works by overwriting user-owned iTerm2 settings.
+201	        mode = "hud" if hud.is_supported() else "inline"
+202	    if mode == "off":
+203	        return
+204	
+205	    root = Path(args.root).resolve()
+206	    reports = []
+207	
+208	    def _autostart_allows(fields: dict) -&gt; bool:
+209	        if not args.autostart_only:
+210	            return True
+211	        display = fields.get("display") if isinstance(fields.get("display"), dict) else {}
+212	        return bool(display.get("autostart", True))
+213	
+214	    if args.profile:
+215	        fields = _load_markdown_fields(Path(args.profile))
+216	        if fields and _autostart_allows(fields):
+217	            reports.append(_display_one(fields, root, args, mode))
+218	    else:
+219	        for persona in discovery.discover_personas(root):
+220	            if args.slug and persona.slug != args.slug:
+221	                continue
+222	            if not _autostart_allows(persona.fields):
+223	                continue
+224	            reports.append(_display_one(persona.fields, root, args, mode))
+225	
+226	    if machine_readable:
+227	        _print_reports(reports)
+228	
+229	
+230	if __name__ == "__main__":
+231	    main()
+232	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/storage.py</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/storage.py"
+}</pre><div class="lbl">result</div><pre>1	"""Path policy and idempotent file edits for profile-gen output.
+2	
+3	Two independent choices drive where things land:
+4	
+5	  --output  claude-md | claude-md-ref | file
+6	  --assets  tracked   | gitignored
+7	
+8	+---------------+------------+-----------------------------------+-------------------------+
+9	| output        | assets     | markdown                          | asset dir               |
+10	+---------------+------------+-----------------------------------+-------------------------+
+11	| file          | tracked    | profiles/&lt;slug&gt;/&lt;slug&gt;.md          | profiles/&lt;slug&gt;/         |
+12	| file          | gitignored | .profiles-assets/&lt;slug&gt;/&lt;slug&gt;.md  | .profiles-assets/&lt;slug&gt;/ |
+13	| claude-md-ref | tracked    | profiles/&lt;slug&gt;/&lt;slug&gt;.md          | profiles/&lt;slug&gt;/         |
+14	| claude-md-ref | gitignored | .claude/persona/persona.md         | .claude/persona/         |
+15	| claude-md     | tracked    | ./CLAUDE.md (full block)           | profiles/&lt;slug&gt;/         |
+16	| claude-md     | gitignored | ./CLAUDE.md (full block)           | .profiles-assets/&lt;slug&gt;/ |
+17	+---------------+------------+-----------------------------------+-------------------------+
+18	
+19	``file`` and ``claude-md-ref`` (when tracked) co-locate the persona's own markdown with its
+20	asset directory.
+21	
+22	``claude-md-ref`` additionally keeps a one-line ``@&lt;relative path&gt;`` import for the persona in
+23	the project's real ``CLAUDE.md`` (Claude Code's own file-import syntax -- which only resolves a
+24	specific file, not a bare directory), replaced in place on regeneration -- so a private persona
+25	is still automatically discovered by anyone opening the project, without its content ever being
+26	inlined into a tracked file.
+27	
+28	``claude-md-ref`` + ``gitignored`` (the recommended combo for a private/NSFW persona) uses a
+29	**fixed, generic path** -- ``.claude/persona/persona.md`` -- instead of one derived from the
+30	persona's name, matching the hand-rolled convention this was modeled on (a project's `CLAUDE.md`
+31	importing a fixed `@.claude/PERSONA.md` while that file's own content, not its path, carries the
+32	identity). The tracked `@`-import string is therefore always the same literal text no matter who
+33	the persona is -- nothing about their identity leaks into a tracked file. This means only **one**
+34	private/gitignored persona is addressable this way per project at a time; regenerating with a
+35	different name overwrites the previous one at that same fixed path. Images alongside
+36	``persona.md`` (``persona.png``, ``persona.gif``, an auto-built ComfyUI ``workflow.json``, etc.)
+37	are only ever referenced from within ``persona.md`` itself (never from the tracked CLAUDE.md
+38	directly), so their names don't matter for privacy -- generic names are used for tidiness only.
+39	
+40	A user wanting multiple simultaneous private personas, or a persona meant to be shared/committed
+41	as-is, should use ``--assets tracked`` (visible, slug-named, supports any number of personas) or
+42	``--output claude-md`` (fully inlined, appropriate when the content itself is meant to be
+43	committed).
+44	"""
+45	from __future__ import annotations
+46	
+47	import os
+48	import re
+49	from pathlib import Path
+50	
+51	_GITIGNORE_PATTERN = ".profiles-assets/"
+52	
+53	_PRIVATE_GITIGNORE_PATTERN = ".claude/persona/"
+54	_PRIVATE_MARKER_KEY = "persona"
+55	
+56	_SLUG_INVALID_RE = re.compile(r"[^a-z0-9]+")
+57	
+58	_STANDALONE_MD_OUTPUTS = ("file", "claude-md-ref")
+59	
+60	
+61	def slugify(name: str) -&gt; str:
+62	    slug = _SLUG_INVALID_RE.sub("-", name.strip().lower()).strip("-")
+63	    return slug or "profile"
+64	
+65	
+66	def _is_private_reference(output: str, assets: str) -&gt; bool:
+67	    return output == "claude-md-ref" and assets == "gitignored"
+68	
+69	
+70	def gitignore_pattern_for(output: str, assets: str) -&gt; str:
+71	    """The .gitignore line that should be ensured for this output/assets combo."""
+72	    return _PRIVATE_GITIGNORE_PATTERN if _is_private_reference(output, assets) else _GITIGNORE_PATTERN
+73	
+74	
+75	def plan_paths(root: str | Path, slug: str, output: str, assets: str) -&gt; dict:
+76	    """Return the final markdown_path/asset_dir (and marker_key) for the given output/assets
+77	    combo.
+78	
+79	    ``claude-md-ref`` + ``gitignored`` is special-cased to the fixed
+80	    ``.claude/persona/persona.md`` path (see module docstring) -- every other combo derives its
+81	    path from ``slug`` as usual.
+82	
+83	    ``marker_key`` is what the CLAUDE.md marker comment / ``@`` import path uses to identify
+84	    this persona: the human-readable ``slug`` normally, or the fixed string ``"persona"`` for the
+85	    private combo above.
+86	    """
+87	    root = Path(root)
+88	
+89	    if _is_private_reference(output, assets):
+90	        asset_dir = root / ".claude" / "persona"
+91	        markdown_path = asset_dir / "persona.md"
+92	        return {
+93	            "markdown_path": str(markdown_path),
+94	            "asset_dir": str(asset_dir),
+95	            "marker_key": _PRIVATE_MARKER_KEY,
+96	        }
+97	
+98	    if assets == "tracked":
+99	        asset_dir = root / "profiles" / slug
+100	    elif assets == "gitignored":
+101	        asset_dir = root / ".profiles-assets" / slug
+102	    else:
+103	        raise ValueError(f"unknown assets policy: {assets!r}")
+104	
+105	    if output == "claude-md":
+106	        markdown_path = root / "CLAUDE.md"
+107	    elif output in _STANDALONE_MD_OUTPUTS:
+108	        markdown_path = asset_dir / f"{slug}.md"
+109	    else:
+110	        raise ValueError(f"unknown output policy: {output!r}")
+111	
+112	    return {
+113	        "markdown_path": str(markdown_path),
+114	        "asset_dir": str(asset_dir),
+115	        "marker_key": slug,
+116	    }
+117	
+118	
+119	def ensure_gitignore(root: str | Path, pattern: str = _GITIGNORE_PATTERN) -&gt; bool:
+120	    """Idempotently ensure ``pattern`` is present as a line in ``root/.gitignore``.
+121	
+122	    Returns True if the file was created or modified, False if the pattern
+123	    was already present.
+124	    """
+125	    root = Path(root)
+126	    gitignore_path = root / ".gitignore"
+127	
+128	    if not gitignore_path.exists():
+129	        gitignore_path.write_text(pattern + "\n", encoding="utf-8")
+130	        return True
+131	
+132	    existing = gitignore_path.read_text(encoding="utf-8")
+133	    lines = existing.splitlines()
+134	    if pattern in lines:
+135	        return False
+136	
+137	    if existing and not existing.endswith("\n"):
+138	        existing += "\n"
+139	    gitignore_path.write_text(existing + pattern + "\n", encoding="utf-8")
+140	    return True
+141	
+142	
+143	def _marker_block_re(slug: str) -&gt; "re.Pattern[str]":
+144	    start = re.escape(f"&lt;!-- profile-gen:start slug={slug} --&gt;")
+145	    end = re.escape(f"&lt;!-- profile-gen:end slug={slug} --&gt;")
+146	    return re.compile(rf"{start}.*?{end}\n?", re.DOTALL)
+147	
+148	
+149	def _replace_or_append_block(existing: str, slug: str, block: str) -&gt; str:
+150	    """Return ``existing`` with the profile-gen block for ``slug`` replaced in place if
+151	    present, or appended (with a blank-line separator) otherwise.
+152	    """
+153	    block = block if block.endswith("\n") else block + "\n"
+154	    block_re = _marker_block_re(slug)
+155	
+156	    if block_re.search(existing):
+157	        return block_re.sub(block, existing, count=1)
+158	    if existing.strip():
+159	        sep = "" if existing.endswith("\n\n") else ("\n" if existing.endswith("\n") else "\n\n")
+160	        return existing + sep + block
+161	    return block
+162	
+163	
+164	def write_markdown_output(
+165	    root: str | Path, output: str, assets: str, slug: str, rendered_md: str
+166	) -&gt; str:
+167	    """Write ``rendered_md`` to the location dictated by ``output``/``assets``.
+168	
+169	    ``assets`` is required to disambiguate the tracked vs. gitignored layouts for
+170	    ``file``/``claude-md-ref`` -- see ``plan_paths``, which this function delegates to for the
+171	    exact path.
+172	
+173	    For ``output`` in (``file``, ``claude-md-ref``), ``rendered_md`` is the persona's full
+174	    standalone content; the containing directory is created and the file is overwritten.
+175	
+176	    For ``output == "claude-md"``, ``rendered_md`` must be the
+177	    ``&lt;!-- profile-gen:start slug=... --&gt; ... &lt;!-- profile-gen:end ... --&gt;`` block. If a block
+178	    with this slug already exists in CLAUDE.md, it is replaced in place; otherwise the block is
+179	    appended (with a blank-line separator).
+180	
+181	    Returns the path written to, as a string.
+182	    """
+183	    root = Path(root)
+184	    paths = plan_paths(root, slug, output, assets)
+185	    markdown_path = Path(paths["markdown_path"])
+186	
+187	    if output in _STANDALONE_MD_OUTPUTS:
+188	        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+189	        markdown_path.write_text(rendered_md, encoding="utf-8")
+190	        return str(markdown_path)
+191	
+192	    if output == "claude-md":
+193	        existing = markdown_path.read_text(encoding="utf-8") if markdown_path.exists() else ""
+194	        new_content = _replace_or_append_block(existing, paths["marker_key"], rendered_md)
+195	        markdown_path.write_text(new_content, encoding="utf-8")
+196	        return str(markdown_path)
+197	
+198	    raise ValueError(f"unknown output policy: {output!r}")
+199	
+200	
+201	def write_claude_md_reference(root: str | Path, marker_key: str, target_path: str | Path) -&gt; str:
+202	    """Ensure a one-line ``@&lt;relative path&gt;`` import keyed by ``marker_key`` is present in
+203	    ``root/CLAUDE.md`` (Claude Code's own file-import syntax), replacing any previous
+204	    reference under the same key in place. Used by ``output == "claude-md-ref"`` so a persona's
+205	    own markdown is never inlined into a tracked file -- only a tiny, content-free pointer to it
+206	    is.
+207	
+208	    ``marker_key`` should be ``plan_paths(...)["marker_key"]`` for this persona -- the fixed
+209	    string ``"persona"`` for the private (gitignored) case, so the persona's identity doesn't
+210	    leak into this tracked reference string either.
+211	
+212	    Returns the CLAUDE.md path written to, as a string.
+213	    """
+214	    root = Path(root)
+215	    claude_md_path = root / "CLAUDE.md"
+216	    target = Path(target_path)
+217	
+218	    try:
+219	        rel = target.relative_to(root)
+220	    except ValueError:
+221	        rel = Path(os.path.relpath(target, root))
+222	
+223	    block = (
+224	        f"&lt;!-- profile-gen:start slug={marker_key} --&gt;\n"
+225	        f"@{rel.as_posix()}\n"
+226	        f"&lt;!-- profile-gen:end slug={marker_key} --&gt;\n"
+227	    )
+228	
+229	    existing = claude_md_path.read_text(encoding="utf-8") if claude_md_path.exists() else ""
+230	    new_content = _replace_or_append_block(existing, marker_key, block)
+231	    claude_md_path.write_text(new_content, encoding="utf-8")
+232	    return str(claude_md_path)
+233	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/ProfileGenSkill/scripts/write_profile.py</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/ProfileGenSkill/scripts/write_profile.py"
+}</pre><div class="lbl">result</div><pre>1	#!/usr/bin/env python3
+2	"""CLI: plan output paths, or render+write a profile-gen profile to disk.
+3	
+4	--root is REQUIRED and must be an absolute path to the user's actual project directory --
+5	never omit it or rely on a default. This script's own location (under the skill's install
+6	directory) has nothing to do with --root; passing the wrong directory here is what causes a
+7	persona to be written inside the skill's installation instead of the target project.
+8	
+9	Two modes:
+10	
+11	  --plan-only --name NAME --root ROOT [--output ...] [--assets ...]
+12	      Prints {"markdown_path": ..., "asset_dir": ...} and writes nothing.
+13	      Called before image/gif generation so those scripts know exactly
+14	      where to write their output files.
+15	
+16	  --fields-file FIELDS.json --root ROOT [--output ...] [--assets ...]
+17	      Loads the full profile fields, renders the markdown, writes it out,
+18	      ensures .gitignore is updated when --assets gitignored, and (for
+19	      --output claude-md-ref) keeps a one-line @-import for the persona in
+20	      the project's CLAUDE.md. Prints {"markdown_path", "image_path",
+21	      "gitignore_updated", "claude_md_updated", "claude_md_path"}
+22	      on success, or {"error": "..."} (nonzero exit) on failure.
+23	
+24	--output modes:
+25	  file           standalone markdown, co-located with its assets (tracked or gitignored per
+26	                 --assets); nothing else touched.
+27	  claude-md-ref  same standalone markdown as `file`, PLUS a one-line `@&lt;relative path&gt;` import
+28	                 kept in CLAUDE.md (replaced in place on regeneration) so a private
+29	                 (gitignored) persona is still auto-discovered without inlining its content
+30	                 into a tracked file. Recommended default for personal/NSFW personas. When
+31	                 combined with --assets gitignored, both the on-disk path and the tracked
+32	                 @-import string are the fixed, generic .claude/persona/persona.md -- never
+33	                 derived from the persona's name -- so identity never leaks into a tracked
+34	                 file (matches the hand-rolled convention this was modeled on). Only one such
+35	                 private persona is addressable per project at a time; regenerating with a
+36	                 different name overwrites it.
+37	  claude-md      the full rendered profile is embedded directly in CLAUDE.md -- appropriate
+38	                 when the persona itself is meant to be shared/committed as-is.
+39	
+40	Fields file required keys: name, slug, image, nsfw, generation.
+41	Optional keys: voice, personality, display (an {"image": bool, "name": bool, "autostart": bool}
+42	object -- image/name control whether show_profile.py shows this persona's picture/name at all,
+43	autostart whether a SessionStart hook shows it automatically, which is a separate question: a
+44	persona can be available via /display-profile without appearing on its own. All default to true
+45	when omitted, filled in here before rendering so every written profile has explicit values, even
+46	one predating a field).
+47	
+48	There is a single `image` field -- it holds whichever file is the profile's final picture, a
+49	static PNG or an animated GIF, never both. `generation.gif_mode` says which: null for a plain
+50	static image, "native"/"synthetic" when `image` is an animated GIF.
+51	"""
+52	from __future__ import annotations
+53	
+54	import argparse
+55	import json
+56	import sys
+57	from pathlib import Path
+58	
+59	sys.path.insert(0, str(Path(__file__).resolve().parent))
+60	
+61	from profilegen import render, storage  # noqa: E402
+62	
+63	REQUIRED_FIELD_KEYS = ("name", "slug", "image", "nsfw", "generation")
+64	
+65	
+66	def _fail(message: str) -&gt; None:
+67	    print(json.dumps({"error": message}))
+68	    sys.exit(1)
+69	
+70	
+71	def _plan_only(args: argparse.Namespace) -&gt; None:
+72	    slug = storage.slugify(args.name)
+73	    paths = storage.plan_paths(args.root, slug, args.output, args.assets)
+74	    print(json.dumps(paths))
+75	
+76	
+77	def _write(args: argparse.Namespace) -&gt; None:
+78	    try:
+79	        raw = Path(args.fields_file).read_text(encoding="utf-8")
+80	    except OSError as exc:
+81	        _fail(f"could not read fields file: {exc}")
+82	        return
+83	
+84	    try:
+85	        fields = json.loads(raw)
+86	    except json.JSONDecodeError as exc:
+87	        _fail(f"fields file is not valid JSON: {exc}")
+88	        return
+89	
+90	    missing = [key for key in REQUIRED_FIELD_KEYS if key not in fields]
+91	    if missing:
+92	        _fail(f"fields file missing required keys: {', '.join(missing)}")
+93	        return
+94	
+95	    slug = fields.get("slug") or storage.slugify(fields["name"])
+96	    display = fields.get("display") if isinstance(fields.get("display"), dict) else {}
+97	    fields["display"] = {
+98	        "image": display.get("image", True),
+99	        "name": display.get("name", True),
+100	        "autostart": display.get("autostart", True),
+101	    }
+102	
+103	    try:
+104	        if args.output == "claude-md":
+105	            rendered = render.render_embedded(fields)
+106	        else:
+107	            rendered = render.render_standalone(fields)
+108	    except FileNotFoundError as exc:
+109	        _fail(f"template not found: {exc}")
+110	        return
+111	
+112	    try:
+113	        markdown_path = storage.write_markdown_output(
+114	            args.root, args.output, args.assets, slug, rendered
+115	        )
+116	    except (OSError, ValueError) as exc:
+117	        _fail(f"could not write markdown output: {exc}")
+118	        return
+119	
+120	    claude_md_path = None
+121	    if args.output == "claude-md-ref":
+122	        marker_key = storage.plan_paths(args.root, slug, args.output, args.assets)["marker_key"]
+123	        try:
+124	            claude_md_path = storage.write_claude_md_reference(args.root, marker_key, markdown_path)
+125	        except OSError as exc:
+126	            _fail(f"could not write CLAUDE.md reference: {exc}")
+127	            return
+128	    elif args.output == "claude-md":
+129	        claude_md_path = markdown_path
+130	
+131	    gitignore_updated = False
+132	    if args.assets == "gitignored":
+133	        pattern = storage.gitignore_pattern_for(args.output, args.assets)
+134	        gitignore_updated = storage.ensure_gitignore(args.root, pattern=pattern)
+135	
+136	    print(
+137	        json.dumps(
+138	            {
+139	                "markdown_path": markdown_path,
+140	                "image_path": fields.get("image"),
+141	                "gitignore_updated": gitignore_updated,
+142	                "claude_md_updated": args.output in ("claude-md", "claude-md-ref"),
+143	                "claude_md_path": claude_md_path,
+144	            }
+145	        )
+146	    )
+147	
+148	
+149	def main() -&gt; None:
+150	    parser = argparse.ArgumentParser(description=__doc__)
+151	    parser.add_argument("--plan-only", action="store_true")
+152	    parser.add_argument("--fields-file")
+153	    parser.add_argument("--name", help="required with --plan-only")
+154	    parser.add_argument(
+155	        "--root",
+156	        required=True,
+157	        help="absolute path to the user's actual project directory (never this skill's own "
+158	        "install directory)",
+159	    )
+160	    parser.add_argument(
+161	        "--output", choices=["claude-md", "claude-md-ref", "file"], default="claude-md-ref"
+162	    )
+163	    parser.add_argument(
+164	        "--assets", choices=["tracked", "gitignored"], default="tracked"
+165	    )
+166	    args = parser.parse_args()
+167	
+168	    if args.plan_only:
+169	        if not args.name:
+170	            _fail("--plan-only requires --name")
+171	            return
+172	        _plan_only(args)
+173	        return
+174	
+175	    if not args.fields_file:
+176	        _fail("--fields-file is required unless --plan-only is given")
+177	        return
+178	    _write(args)
+179	
+180	
+181	if __name__ == "__main__":
+182	    main()
+183	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/discovery.py</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/discovery.py"
+}</pre><div class="lbl">result</div><pre>1	"""Shared persona discovery for show_profile.py / toggle_display.py.
+2	
+3	Finds every persona currently auto-loaded via a project's CLAUDE.md profile-gen marker blocks,
+4	alongside the actual markdown file each one's content (and thus its `display:` block) lives in --
+5	a standalone `persona.md`/`profiles/&lt;slug&gt;/&lt;slug&gt;.md` for `claude-md-ref`, or CLAUDE.md itself for
+6	a fully-embedded (`claude-md`) persona. `embedded=True` on the latter tells a caller that wants to
+7	edit the `display:` block that it must confine the edit to that persona's own marker-delimited
+8	region within CLAUDE.md (see `frontmatter.block_span`) -- CLAUDE.md can hold more than one
+9	embedded persona, so an unscoped edit could touch the wrong one's block.
+10	"""
+11	from __future__ import annotations
+12	
+13	from dataclasses import dataclass
+14	from pathlib import Path
+15	
+16	from . import frontmatter
+17	
+18	
+19	@dataclass
+20	class DiscoveredPersona:
+21	    slug: str
+22	    fields: dict
+23	    markdown_path: Path
+24	    embedded: bool
+25	
+26	
+27	def _load_markdown_fields(markdown_path: Path) -&gt; dict | None:
+28	    try:
+29	        text = markdown_path.read_text(encoding="utf-8")
+30	    except OSError:
+31	        return None
+32	    return frontmatter.extract_frontmatter(text)
+33	
+34	
+35	def discover_personas(root: Path) -&gt; list[DiscoveredPersona]:
+36	    claude_md = root / "CLAUDE.md"
+37	    if not claude_md.is_file():
+38	        return []
+39	    try:
+40	        text = claude_md.read_text(encoding="utf-8")
+41	    except OSError:
+42	        return []
+43	
+44	    personas: list[DiscoveredPersona] = []
+45	    for slug in frontmatter.find_marker_slugs(text):
+46	        ref = frontmatter.extract_ref_import(text, slug)
+47	        if ref:
+48	            target = root / ref
+49	            fields = _load_markdown_fields(target)
+50	            if fields:
+51	                personas.append(DiscoveredPersona(slug, fields, target, embedded=False))
+52	            continue
+53	        embedded_fields = frontmatter.extract_embedded_block(text, slug)
+54	        if embedded_fields:
+55	            personas.append(DiscoveredPersona(slug, embedded_fields, claude_md, embedded=True))
+56	    return personas
+57	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Bash</span> grep -n "find_marker_slugs" -A 15 /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/fr</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"find_marker_slugs\" -A 15 /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/frontmatter.py | head -30; echo \"=== SCHEMA ===\"; cat -n /Users/warrenthompson/Source/ProfileGenSkill/assets/profile.schema.json",
+  "description": "Check marker slug ordering and schema"
+}</pre><div class="lbl">result</div><pre>74:def find_marker_slugs(claude_md_text: str) -&gt; list[str]:
+75-    """All profile-gen marker-block slugs present in a CLAUDE.md, in file order."""
+76-    return _MARKER_RE.findall(claude_md_text)
+77-
+78-
+79-def _block(claude_md_text: str, slug: str) -&gt; str | None:
+80-    start = f"&lt;!-- profile-gen:start slug={slug} --&gt;"
+81-    end = f"&lt;!-- profile-gen:end slug={slug} --&gt;"
+82-    if start not in claude_md_text:
+83-        return None
+84-    return claude_md_text.split(start, 1)[1].split(end, 1)[0]
+85-
+86-
+87-def extract_ref_import(claude_md_text: str, slug: str) -&gt; str | None:
+88-    """The ``@&lt;path&gt;`` import line inside a claude-md-ref marker block for ``slug``, or None."""
+89-    block = _block(claude_md_text, slug)
+=== SCHEMA ===
+   1 {
+   2   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   3   "$id": "https://profile-gen.local/profile.schema.json",
+   4   "title": "profile-gen profile",
+   5   "type": "object",
+   6   "required": ["schema_version", "name", "slug", "image", "nsfw", "generation"],
+   7   "properties": {
+   8     "schema_version": { "const": 1 },
+   9     "name": { "type": "string", "minLength": 1 },
+  10     "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+  11     "image": { "type": "string", "minLength": 1 },
+  12     "voice": { "type": ["string", "null"] },
+  13     "personality": { "type": ["string", "null"] },
+  14     "nsfw": { "type": "boolean" },
+  15     "display": {
+  16       "type": "object",
+  17       "properties": {
+  18         "image": { "type": "boolean" },
+  19         "name": { "type": "boolean" },
+  20         "autostart": { "type": "boolean" }
+  21       },
+  22       "additionalProperties": false
+  23     },
+  24     "generation": {
+  25       "type": "object",
+  26       "required": ["backend", "model", "prompt", "seed", "gif_mode", "created_at"],
+  27       "properties": {
+  28         "backend": { "type": "string", "enum": ["chatgpt", "grok", "grok-cli", "comfyui", "mock"] },
+  29         "model": { "type": "string" },
+  30         "prompt": { "type": "string" },
+  31         "negative_prompt": { "type": ["string", "null"] },
+  32         "seed": { "type": ["integer", "null"] },
+  33         "gif_mode": { "type": ["string", "null"], "enum": ["native", "synthetic", null] },
+  34         "created_at": { "type": "string", "format": "date-time" }
+  35       }
+  36     }
+  37   },
+  38   "additionalProperties": false
+  39 }</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "personality\|backstory\|history\|background\|maxLength" /Users/warrenthompson/Source/Profil</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"personality\\|backstory\\|history\\|background\\|maxLength\" /Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md | head -40",
+  "description": "Search schema doc for persona fields"
+}</pre><div class="lbl">result</div><pre>15:| `personality` | no | string or `null` | Free-form prose description of the persona's personality/register. |
+108:loaded automatically, without any of its content (name, personality, prompts, NSFW flag) ever</pre></div></details><details><summary><span class="tn">Bash</span> cat -n /Users/warrenthompson/Source/ProfileGenSkill/scripts/toggle_display.py; echo "=== GENIMG ==="</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat -n /Users/warrenthompson/Source/ProfileGenSkill/scripts/toggle_display.py; echo \"=== GENIMG ===\"; grep -n \"seed\\|workflow\\|add_argument\" /Users/warrenthompson/Source/ProfileGenSkill/scripts/generate_image.py",
+  "description": "Read toggle_display and generate_image flags"
+}</pre><div class="lbl">result</div><pre>   1 #!/usr/bin/env python3
+   2 """CLI: flip a persona's stored display.image/display.name preference in place.
+   3 
+   4 Discovers personas the same way show_profile.py does (via &lt;root&gt;/CLAUDE.md's profile-gen marker
+   5 blocks) and edits whichever markdown file that persona's content actually lives in --
+   6 persona.md/profiles/&lt;slug&gt;/&lt;slug&gt;.md for claude-md-ref, or the right slug's own marker-delimited
+   7 region inside CLAUDE.md itself for a fully-embedded (claude-md) persona. Only the display: block
+   8 is touched; nothing else in the file is regenerated or reformatted.
+   9 
+  10 At least one of --image/--name/--autostart is required. --image/--name control what is drawn;
+  11 --autostart controls whether a SessionStart hook shows this persona on its own, which is a
+  12 separate question -- a persona can stay quiet at startup while still displaying when asked for.
+  13 A persona written before a flag existed simply has it appended to its display: block. Prints one JSON object per persona changed:
+  14 {"slug", "markdown_path", "display": {"image": bool, "name": bool}}, or {"error": "..."}
+  15 (nonzero exit) if nothing was found to change.
+  16 """
+  17 from __future__ import annotations
+  18 
+  19 import argparse
+  20 import json
+  21 import sys
+  22 from pathlib import Path
+  23 
+  24 sys.path.insert(0, str(Path(__file__).resolve().parent))
+  25 
+  26 from profilegen import discovery, frontmatter  # noqa: E402
+  27 
+  28 
+  29 def _fail(message: str) -&gt; None:
+  30     print(json.dumps({"error": message}))
+  31     sys.exit(1)
+  32 
+  33 
+  34 def main() -&gt; None:
+  35     parser = argparse.ArgumentParser(description=__doc__)
+  36     parser.add_argument(
+  37         "--root", default=".", help="project root to discover personas under (default: cwd)"
+  38     )
+  39     parser.add_argument(
+  40         "--slug", help="only touch the persona with this slug (default: all discovered personas)"
+  41     )
+  42     parser.add_argument("--image", choices=["on", "off"])
+  43     parser.add_argument("--name", choices=["on", "off"])
+  44     parser.add_argument(
+  45         "--autostart",
+  46         choices=["on", "off"],
+  47         help="whether a SessionStart hook shows this persona automatically",
+  48     )
+  49     args = parser.parse_args()
+  50 
+  51     if args.image is None and args.name is None and args.autostart is None:
+  52         _fail("nothing to do: pass --image, --name and/or --autostart as on|off")
+  53         return
+  54 
+  55     root = Path(args.root).resolve()
+  56     personas = discovery.discover_personas(root)
+  57     if args.slug:
+  58         personas = [p for p in personas if p.slug == args.slug]
+  59 
+  60     if not personas:
+  61         _fail("no persona found (is CLAUDE.md missing a profile-gen block, or --slug wrong?)")
+  62         return
+  63 
+  64     image = (args.image == "on") if args.image else None
+  65     name = (args.name == "on") if args.name else None
+  66     autostart = (args.autostart == "on") if args.autostart else None
+  67 
+  68     results = []
+  69     for persona in personas:
+  70         try:
+  71             text = persona.markdown_path.read_text(encoding="utf-8")
+  72         except OSError as e:
+  73             _fail(f"could not read {persona.markdown_path}: {e}")
+  74             return
+  75 
+  76         region = None
+  77         if persona.embedded:
+  78             region = frontmatter.block_span(text, persona.slug)
+  79             if region is None:
+  80                 _fail(f"could not locate marker block for slug {persona.slug}")
+  81                 return
+  82 
+  83         try:
+  84             new_text = frontmatter.set_display_flags(
+  85                 text, image=image, name=name, autostart=autostart, region=region
+  86             )
+  87         except ValueError as e:
+  88             _fail(f"{persona.markdown_path}: {e}")
+  89             return
+  90 
+  91         persona.markdown_path.write_text(new_text, encoding="utf-8")
+  92 
+  93         if persona.embedded:
+  94             updated_fields = frontmatter.extract_embedded_block(new_text, persona.slug)
+  95         else:
+  96             updated_fields = frontmatter.extract_frontmatter(new_text)
+  97 
+  98         results.append(
+  99             {
+ 100                 "slug": persona.slug,
+ 101                 "markdown_path": str(persona.markdown_path),
+ 102                 "display": (updated_fields or {}).get("display", {}),
+ 103             }
+ 104         )
+ 105 
+ 106     for result in results:
+ 107         print(json.dumps(result))
+ 108 
+ 109 
+ 110 if __name__ == "__main__":
+ 111     main()
+=== GENIMG ===
+21:Prints one JSON object to stdout: {"path", "backend", "model", "seed", "width", "height",
+88:    parser.add_argument("--backend", required=True, choices=["chatgpt", "grok", "grok-cli", "comfyui", "mock"])
+89:    parser.add_argument("--prompt-file", required=True)
+90:    parser.add_argument("--negative-file")
+91:    parser.add_argument("--nsfw", action="store_true")
+92:    parser.add_argument("--out", required=True)
+93:    parser.add_argument("--seed", type=int)
+94:    parser.add_argument("--width", type=int, default=1024)
+95:    parser.add_argument("--height", type=int, default=1024)
+96:    parser.add_argument("--workflow", help="override comfyui_workflow path (e.g. a freshly authored one)")
+97:    parser.add_argument("--style-preset", help="optional short style clause, e.g. 'anime style'")
+104:        cfg = config.resolve(args.backend, {"comfyui_workflow": args.workflow})
+120:            seed=args.seed,
+143:                    "seed": result.seed,</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Bash</span> grep -rn "profile.schema.json\|jsonschema" /Users/warrenthompson/Source/ProfileGenSkill --include=*.</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -rn \"profile.schema.json\\|jsonschema\" /Users/warrenthompson/Source/ProfileGenSkill --include=*.py --include=*.md --include=*.txt --include=*.json -l | grep -v \".venv\\|.git/\"; echo \"=== ref grep ===\"; grep -rn \"placeholder\\|no-image\\|text-only\\|later\\|re-run\" /Users/warrenthompson/Source/ProfileGenSkill/SKILL.md /Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md | head -20",
+  "description": "Check schema validation usage and placeholder docs"
+}</pre><div class="lbl">result</div><pre>(eval):1: no matches found: --include=*.py
+=== ref grep ===
+/Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md:24:| `image` | yes | boolean | Show the profile picture inline in a supporting terminal (iTerm2/WezTerm, Kitty, or sixel via `img2sixel`) when `show_profile.py` runs. Set at generation time via `--show-image`/`--no-image`; `true` by default. |
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:4:argument-hint: "[description hints] [--backend chatgpt|grok|grok-cli|comfyui] [--nsfw] [--gif] [--voice NAME] [--output claude-md-ref|claude-md|file] [--assets tracked|gitignored] [--name NAME] [--no-image] [--no-name]"
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:37:`--no-image`, `--no-name`. Anything not recognized as a flag is a description hint.
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:39:`--no-image`/`--no-name` control this persona's stored `display.image`/`display.name`
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:244:if step 8 was skipped. Set `display.image`/`display.name` from step 1's `--no-image`/`--no-name`
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:281:either, wire it in now rather than telling them to do it themselves later.
+/Users/warrenthompson/Source/ProfileGenSkill/SKILL.md:287:block was replaced vs. newly appended (re-running with the same name/slug always replaces in</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "autostart\|session_intro\|--profile\|--slug\|--mode" /Users/warrenthompson/Source/ProfileGe</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"autostart\\|session_intro\\|--profile\\|--slug\\|--mode\" /Users/warrenthompson/Source/ProfileGenSkill/references/terminal-display.md",
+  "description": "Grep terminal-display doc"
+}</pre><div class="lbl">result</div><pre>13:| `--mode` | What it does | Where it works |
+41:`display.autostart` answers a different question: not *what* to draw, but whether this persona appears **on its own** at session start. It's consulted only under `--autostart-only`, which is what the `SessionStart` hook passes — so `autostart: false` keeps a persona fully displayable via `/display-profile` while stopping it appearing unprompted. Useful when several projects each have a persona and only some should announce themselves. Defaults to `true`, so personas written before the field keep appearing rather than silently stopping.
+45:- `--profile &lt;markdown_path&gt; --root &lt;PROJECT_ROOT&gt;` — shows exactly one profile, used right after `write_profile.py` for an immediate preview (SKILL.md step 10).
+46:- `--root &lt;PROJECT_ROOT&gt;` (no `--profile`) — discovers every persona currently auto-loaded via `&lt;PROJECT_ROOT&gt;/CLAUDE.md`'s `profile-gen` marker blocks and shows each one. This is the mode for a `SessionStart` hook (below), since it needs no argument beyond the project root to find whatever persona(s) are active in that project.
+82:`show_profile.py --profile ...` (SKILL.md step 10) only previews a persona for the rest of the session it was just generated in. To have a persona show automatically at the start of *every* future session in a project — the point of this feature, since the whole reason to want it is "I forget who I'm talking to" — add a `SessionStart` hook to the project's `.claude/settings.json`:
+103:This hook needs no `--profile` argument — plain `--root` mode discovers whichever persona(s) are referenced from that project's `CLAUDE.md` on its own. Use the `update-config` skill to actually apply a settings.json change like this one, rather than hand-editing it.
+107:`scripts/session_intro.py` is a separate `SessionStart` hook script that makes Claude actually introduce itself at the top of a session — name, personality, and a one-sentence gesture at what's recently been touched. That signal is the most-recently-modified files under the project root (by mtime), read fresh on every session start — not the auto-memory index (`MEMORY.md`). An earlier version used the memory index and it produced a persona that confidently narrated a "most recently we've been working on..." story pulled from stale memory, unrelated to what was actually current; memory is written once and organized by topic, not chronology (see the memory system's own guidance on this), so it can describe work from weeks ago as if it were live. File mtimes can't be stale that way. `git log` is a fallback only, for a project where file recency isn't a useful signal. The prompt also explicitly tells Claude not to invent a narrative about *why* a file changed — just to notice *that* it did, and stay honest if it isn't sure. It's independent of the `hud`/`inline`/`state` display above (it prints text/context, not an image), so the two can be wired in together or separately.
+117:            "command": "python3 &lt;SKILL_DIR&gt;/scripts/session_intro.py --root \"$CLAUDE_PROJECT_DIR\""
+138:python3 scripts/toggle_display.py --root &lt;PROJECT_ROOT&gt; [--slug SLUG] [--image on|off] [--name on|off]
+141:It uses the same `&lt;PROJECT_ROOT&gt;/CLAUDE.md` discovery as `show_profile.py` (via the shared `profilegen.discovery` module), so it finds whichever persona(s) are currently referenced there — pass `--slug` to target just one if more than one is discovered. It edits whichever file that persona's content actually lives in: the standalone `persona.md`/`profiles/&lt;slug&gt;/&lt;slug&gt;.md` for `claude-md-ref`, or that persona's own marker-delimited region inside `CLAUDE.md` itself for a fully-embedded (`claude-md`) persona — `frontmatter.block_span()` confines the edit so a different embedded persona's block is never touched. Prints one JSON object per persona changed: `{"slug", "markdown_path", "display": {...}}`, or `{"error": "..."}` (nonzero exit) if no persona was found.</pre></div></details><details><summary><span class="tn">Bash</span> cat -n /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/config.py; grep -n "workflow"</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat -n /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/config.py; grep -n \"workflow\" /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/backends/comfyui.py | head -30",
+  "description": "Read config and comfyui workflow handling"
+}</pre><div class="lbl">result</div><pre>   1 """Config resolution: CLI flag &gt; env var &gt; ./.claude/profile-gen.json &gt; ~/.claude/profile-gen.json."""
+   2 from __future__ import annotations
+   3 
+   4 import json
+   5 import os
+   6 from pathlib import Path
+   7 from typing import Any
+   8 
+   9 # key -&gt; env var name
+  10 _KEYS = {
+  11     "openai_api_key": "OPENAI_API_KEY",
+  12     "xai_api_key": "XAI_API_KEY",
+  13     "comfyui_url": "COMFYUI_URL",
+  14     "comfyui_workflow": "COMFYUI_WORKFLOW",
+  15     "comfyui_gif_workflow": "COMFYUI_GIF_WORKFLOW",
+  16     "comfyui_timeout_s": "COMFYUI_TIMEOUT_S",
+  17     "comfyui_client_id": "COMFYUI_CLIENT_ID",
+  18     "openai_base_url": "OPENAI_BASE_URL",
+  19     "openai_image_model": "OPENAI_IMAGE_MODEL",
+  20     "xai_image_model": "XAI_IMAGE_MODEL",
+  21     "grok_cli_bin": "GROK_CLI_BIN",
+  22     "grok_cli_workdir": "GROK_CLI_WORKDIR",
+  23     "grok_cli_timeout_s": "GROK_CLI_TIMEOUT_S",
+  24     "default_backend": "PROFILEGEN_DEFAULT_BACKEND",
+  25     "default_voice": "PROFILEGEN_DEFAULT_VOICE",
+  26     "style_preset": "PROFILEGEN_STYLE_PRESET",
+  27 }
+  28 
+  29 _INT_KEYS = {"comfyui_timeout_s", "grok_cli_timeout_s"}
+  30 
+  31 
+  32 class ConfigError(Exception):
+  33     """Raised when a config file is malformed or otherwise unusable."""
+  34 
+  35 
+  36 def _load_json_file(path: Path) -&gt; dict[str, Any]:
+  37     if not path.exists():
+  38         return {}
+  39     try:
+  40         text = path.read_text(encoding="utf-8")
+  41     except OSError as e:
+  42         raise ConfigError(f"Could not read config file {path}: {e}") from e
+  43     try:
+  44         data = json.loads(text)
+  45     except json.JSONDecodeError as e:
+  46         raise ConfigError(f"Malformed JSON in config file {path}: {e}") from e
+  47     if not isinstance(data, dict):
+  48         raise ConfigError(f"Config file {path} must contain a JSON object")
+  49     return data
+  50 
+  51 
+  52 def _coerce(key: str, value: Any) -&gt; Any:
+  53     if value is None:
+  54         return None
+  55     if key in _INT_KEYS:
+  56         try:
+  57             return int(value)
+  58         except (TypeError, ValueError):
+  59             return value
+  60     return value
+  61 
+  62 
+  63 def resolve(backend: str, cli_overrides: dict[str, Any] | None = None) -&gt; dict[str, Any]:
+  64     """Merge config with precedence: cli_overrides &gt; env vars &gt; ./.claude/profile-gen.json
+  65     &gt; ~/.claude/profile-gen.json. Returns a dict with all known keys (missing ones as None),
+  66     plus a ``backend`` key set to the requested backend name.
+  67     """
+  68     cli_overrides = cli_overrides or {}
+  69 
+  70     home_cfg = _load_json_file(Path.home() / ".claude" / "profile-gen.json")
+  71     local_cfg = _load_json_file(Path.cwd() / ".claude" / "profile-gen.json")
+  72 
+  73     result: dict[str, Any] = {"backend": backend}
+  74     for key in _KEYS:
+  75         value = None
+  76         if key in home_cfg:
+  77             value = home_cfg[key]
+  78         if key in local_cfg:
+  79             value = local_cfg[key]
+  80         env_name = _KEYS[key]
+  81         if env_name in os.environ:
+  82             value = os.environ[env_name]
+  83         if key in cli_overrides and cli_overrides[key] is not None:
+  84             value = cli_overrides[key]
+  85         result[key] = _coerce(key, value)
+  86 
+  87     # pass through any extra CLI overrides not in the known key set (e.g. one-off flags)
+  88     for key, value in cli_overrides.items():
+  89         if key not in result and value is not None:
+  90             result[key] = value
+  91 
+  92     return result
+1:"""ComfyUI backend: fully generic, driven by a user-supplied API-format workflow JSON.
+41:def _find_by_title(workflow: dict, titles: set[str]) -&gt; Optional[str]:
+42:    for node_id, node in workflow.items():
+48:def _find_sampler(workflow: dict) -&gt; Optional[str]:
+49:    for node_id, node in workflow.items():
+55:def _resolve_link_source(workflow: dict, node_id: Optional[str], input_key: str) -&gt; Optional[str]:
+58:    node = workflow.get(node_id)
+67:def _find_latent_node(workflow: dict) -&gt; Optional[str]:
+68:    node_id = _find_by_title(workflow, {_LATENT_TITLE})
+71:    for node_id, node in workflow.items():
+80:def _find_output_node(workflow: dict) -&gt; Optional[str]:
+81:    for node_id, node in workflow.items():
+98:def inject(workflow: dict, spec: PromptSpec) -&gt; tuple[dict, dict]:
+99:    """Mutate a copy of ``workflow`` with the given PromptSpec. Returns (workflow, resolved)
+102:    wf = json.loads(json.dumps(workflow))  # deep copy
+150:def _load_workflow(path: str) -&gt; dict:
+153:        raise BackendError(f"ComfyUI workflow file not found: {path}")
+157:        raise BackendError(f"Invalid JSON in ComfyUI workflow file {path}: {e}") from e
+165:        self.supports_native_gif = bool(cfg.get("comfyui_gif_workflow"))
+171:        workflow_path = cfg.get("comfyui_workflow")
+172:        if not workflow_path:
+173:            errors.append("comfyui_workflow is not set (env COMFYUI_WORKFLOW)")
+175:            p = Path(workflow_path)
+177:                errors.append(f"comfyui_workflow file does not exist: {workflow_path}")
+182:                    errors.append(f"comfyui_workflow is not valid JSON: {e}")
+195:    def _run_workflow(self, workflow_path: str, spec: PromptSpec, output_key: str) -&gt; ImageResult:
+200:        if not workflow_path:
+201:            raise BackendError("comfyui workflow is not set")
+204:        workflow = _load_workflow(workflow_path)
+205:        injected, resolved = inject(workflow, spec)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:42 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Bash</span> grep -rn "jsonschema\|profile.schema.json" /Users/warrenthompson/Source/ProfileGenSkill/scripts /Use</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -rn \"jsonschema\\|profile.schema.json\" /Users/warrenthompson/Source/ProfileGenSkill/scripts /Users/warrenthompson/Source/ProfileGenSkill/SKILL.md /Users/warrenthompson/Source/ProfileGenSkill/references /Users/warrenthompson/Source/ProfileGenSkill/requirements.txt 2&gt;/dev/null | head; echo \"=== seed ===\"; grep -n \"seed\" /Users/warrenthompson/Source/ProfileGenSkill/scripts/profilegen/backends/comfyui.py | head -20",
+  "description": "Check schema validation usage and seed handling"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md:3:Canonical definition: `assets/profile.schema.json`. This document explains each field in
+=== seed ===
+14:Seed is set on every node that has a "seed" or "noise_seed" input, to
+15:``spec.seed`` (or a random 32-bit int if unset) -- the used value is reported in
+16:``resolved["seed_used"]`` so it's consistent across all nodes touched.
+34:_SEED_KEYS = ("seed", "noise_seed")
+100:    where resolved is {positive_node, negative_node, seed_nodes, latent_node, seed_used}.
+130:    seed_used = spec.seed if spec.seed is not None else random.getrandbits(32)
+131:    seed_nodes: list[str] = []
+134:        for seed_key in _SEED_KEYS:
+135:            if seed_key in inputs:
+136:                inputs[seed_key] = seed_used
+137:                seed_nodes.append(node_id)
+142:        "seed_nodes": seed_nodes,
+145:        "seed_used": seed_used,
+252:            seed=resolved["seed_used"],</pre></div></details><details><summary><span class="tn">Bash</span> sed -n '1,40p' /Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "sed -n '1,40p' /Users/warrenthompson/Source/ProfileGenSkill/references/profile-schema.md",
+  "description": "Read profile schema doc top"
+}</pre><div class="lbl">result</div><pre># Profile schema reference
+
+Canonical definition: `assets/profile.schema.json`. This document explains each field in
+plain language and shows one example of each render mode.
+
+## Fields
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `schema_version` | yes | `1` (const) | Bump only if the schema shape changes. |
+| `name` | yes | string | Human-readable display name, e.g. `"Ada Sterling"`. |
+| `slug` | yes | string | `^[a-z0-9]+(-[a-z0-9]+)*$` — derived from `name` via `storage.slugify()`. Used in file/dir names and as the CLAUDE.md marker-block key. |
+| `image` | yes | string (path) | Path to the profile's single picture, relative to the repo root — a static PNG, or an animated GIF if one was generated (see `generation.gif_mode`). There is only ever one image field; a GIF replaces the PNG here rather than sitting alongside it. |
+| `voice` | no | string or `null` | Opaque voice-name reference (e.g. a Kokoro TTS voice like `af_jessica`). Metadata only — no audio is synthesized. See `references/voices.md`. |
+| `personality` | no | string or `null` | Free-form prose description of the persona's personality/register. |
+| `nsfw` | yes | boolean | Whether this profile was generated in NSFW mode. Threads through to `generation.prompt`/`generation.negative_prompt` and the backend call — see `references/prompting.md`. |
+| `display` | yes | object | Whether `scripts/show_profile.py` shows this persona's picture/name inline in the terminal. See below. |
+| `generation` | yes | object | Provenance of how the image was produced. See below. |
+
+### `display` object
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `image` | yes | boolean | Show the profile picture inline in a supporting terminal (iTerm2/WezTerm, Kitty, or sixel via `img2sixel`) when `show_profile.py` runs. Set at generation time via `--show-image`/`--no-image`; `true` by default. |
+| `name` | yes | boolean | Print the persona's name when `show_profile.py` runs. Set via `--show-name`/`--no-name`; `true` by default. |
+| `autostart` | yes | boolean | Whether a `SessionStart` hook shows this persona *on its own*. Separate from `image`/`name`, which say what gets drawn once it is shown — `autostart: false` keeps a persona fully available via `/display-profile` while stopping it appearing unprompted. Only consulted under `show_profile.py --autostart-only` (what the hook passes); `true` by default. |
+
+Written by every profile-gen run from this point forward. A profile written before this field
+existed simply lacks it — `show_profile.py` treats a missing `display` (or a missing `image`/
+`name` key within it) as `true`, so older profiles keep behaving as if both were on. See
+`references/terminal-display.md` for how `show_profile.py` uses this.
+
+### `generation` object
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `backend` | yes | `"chatgpt"` \| `"grok"` \| `"grok-cli"` \| `"comfyui"` \| `"mock"` | Which backend produced the image. |
+| `model` | yes | string | Backend-reported model identifier (e.g. `gpt-image-1`, `grok-2-image`). |
+| `prompt` | yes | string | Final positive prompt sent to the backend (including the NSFW clause, if any). |
+| `negative_prompt` | no | string or `null` | Final negative prompt, if the backend supports one (ComfyUI). `null` for backends without a negative-prompt concept. |</pre></div></details><details><summary><span class="tn">Bash</span> grep -n "personality\|def \|autostart\|--root\|add_argument" /Users/warrenthompson/Source/ProfileGen</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n \"personality\\|def \\|autostart\\|--root\\|add_argument\" /Users/warrenthompson/Source/ProfileGenSkill/scripts/session_intro.py | head -30",
+  "description": "Scan session_intro.py"
+}</pre><div class="lbl">result</div><pre>52:def _personality_section(markdown_path: Path) -&gt; str | None:
+60:        if line.strip().lower() == "## personality":
+74:def _recent_files_activity(root: Path, count: int = FILE_COUNT) -&gt; str | None:
+113:def _git_activity(root: Path, count: int = 8) -&gt; str | None:
+129:def _recent_activity(root: Path) -&gt; tuple[str | None, str]:
+139:def build_context(name: str | None, personality: str | None, activity: str | None, source: str) -&gt; str | None:
+143:        if personality:
+144:            persona_bit += f" Personality: {personality}"
+178:def _first_activity_teaser(activity: str, source: str) -&gt; str | None:
+189:def build_system_message(name: str | None, activity: str | None, source: str) -&gt; str | None:
+204:def main() -&gt; int:
+206:    parser.add_argument("--root", required=True, help="project root to inspect")
+214:    personality = None
+218:        personality = _personality_section(persona.markdown_path)
+220:    context = build_context(name, personality, activity, source)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:43 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Bash</span> sed -n '204,235p' /Users/warrenthompson/Source/ProfileGenSkill/scripts/session_intro.py</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "sed -n '204,235p' /Users/warrenthompson/Source/ProfileGenSkill/scripts/session_intro.py",
+  "description": "Read session_intro main"
+}</pre><div class="lbl">result</div><pre>def main() -&gt; int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", required=True, help="project root to inspect")
+    args = parser.parse_args()
+
+    root = Path(args.root)
+    personas = discovery.discover_personas(root)
+    activity, source = _recent_activity(root)
+
+    name = None
+    personality = None
+    if personas:
+        persona = personas[0]
+        name = persona.fields.get("name") or persona.slug
+        personality = _personality_section(persona.markdown_path)
+
+    context = build_context(name, personality, activity, source)
+    system_message = build_system_message(name, activity, source)
+
+    output = {}
+    if context:
+        output["hookSpecificOutput"] = {
+            "hookEventName": "SessionStart",
+            "additionalContext": context,
+        }
+    if system_message:
+        output["systemMessage"] = system_message
+    if output:
+        print(json.dumps(output))
+    return 0</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 10:43 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Symlink confirmed: `/Users/warrenthompson/.claude/skills/profile-gen` → `/Users/warrenthompson/Source/ProfileGenSkill` (readlink output). All paths below are in that repo.
+
+**1. Multi-persona under `--autostart-only`: ALL of them, in CLAUDE.md file order.**
+- `scripts/show_profile.py:219-224` loops over every discovered persona: `for persona in discovery.discover_personas(root): if args.slug and persona.slug != args.slug: continue; if not _autostart_allows(persona.fields): continue; reports.append(_display_one(...))`.
+- Discovery = every marker slug in `&lt;root&gt;/CLAUDE.md`, `profilegen/discovery.py:45` via `frontmatter.find_marker_slugs` ("in file order", `frontmatter.py:74-76`). Personas that exist only as `profiles/&lt;slug&gt;/&lt;slug&gt;.md` but have no CLAUDE.md marker are NOT discovered at all.
+- Yes, there is a selector: `--slug SLUG` (`show_profile.py:156`) and `--profile PATH` (`:154`). Autostart gate: `show_profile.py:208-212`, default `True` when `display.autostart` is absent.
+- Note: `scripts/session_intro.py:215-218` uses only `personas[0]` (first marker in CLAUDE.md) — that hook is single-persona, unlike show_profile.
+
+**2. `--output file` vs `claude-md-ref`.**
+- `file` writes nothing into CLAUDE.md. In `write_profile.py:121-129`, the CLAUDE.md reference is written only for `claude-md-ref`; `claude_md_updated` is false for `file` (`:142`).
+- Markdown path: `storage.plan_paths` (`storage.py:98-110`) — `--assets tracked` → `&lt;root&gt;/profiles/&lt;slug&gt;/&lt;slug&gt;.md` with asset dir `&lt;root&gt;/profiles/&lt;slug&gt;/`; `gitignored` → `.profiles-assets/&lt;slug&gt;/&lt;slug&gt;.md`. Same paths for `claude-md-ref` + tracked.
+- Many personas coexist fine: each gets its own slug-named directory. The only single-slot case is `claude-md-ref` + `gitignored`, which hard-codes `.claude/persona/persona.md` (`storage.py:89-96`, docstring `:32-38`). So `--output file --assets tracked` is the unlimited-personas mode; you would then add the `@profiles/&lt;slug&gt;/&lt;slug&gt;.md` CLAUDE.md line yourself if you want autostart discovery.
+
+**3. No backstory/history field.** `assets/profile.schema.json:7-23` has exactly: `schema_version, name, slug, image, voice, personality, nsfw, display, generation`, and `"additionalProperties": false` (`:38`) — so a custom `backstory` key would be schema-invalid. `personality` is `{"type": ["string","null"]}` (`:13`) with **no maxLength**; `references/profile-schema.md:15` calls it "free-form prose". Backstory/technical background must go in `personality` (or in prose body sections of the markdown; `session_intro.py:52-60` reads the `## Personality` section from the file).
+
+**4. terminal-display.md / autostart / toggle.**
+- `session_intro.py` is a separate SessionStart hook that emits JSON `hookSpecificOutput.additionalContext` + `systemMessage` so Claude introduces itself with name + personality + a recent-file-mtime activity line (`references/terminal-display.md:107-117`; `session_intro.py:204-232`). No image.
+- `display.autostart` only gates unprompted display under `--autostart-only` (`terminal-display.md:41`; `show_profile.py:208-212`).
+- `toggle_display.py` flags: `--root`, `--slug`, `--image on|off`, `--name on|off`, `--autostart on|off` (`toggle_display.py:36-48`); at least one of the three required (`:51-52`); edits the `display:` block in place via `frontmatter.set_display_flags` (`:84-86`), scoped to the slug's marker region for embedded personas.
+- Yes — `show_profile.py --profile &lt;markdown_path&gt; --root &lt;PROJECT_ROOT&gt;` displays one persona by explicit path, skipping CLAUDE.md discovery (`show_profile.py:214-217`). Full flag set: `--root --profile --slug --mode {auto,hud,state,inline,off} --clear --autostart-only --avatar --avatar-min --corner {tr,tl,br,bl} --margin --width-pct --show-image/--no-image --show-name/--no-name`.
+
+**5. Text-only fast path: not documented, but structurally possible.** `write_profile.py` does **no JSON-Schema validation at all** — `jsonschema` appears nowhere in `scripts/` or `requirements.txt`; `assets/profile.schema.json` is referenced only by docs. Validation is a bare key-presence check: `REQUIRED_FIELD_KEYS = ("name","slug","image","nsfw","generation")` (`write_profile.py:63`) and `missing = [key for key in REQUIRED_FIELD_KEYS if key not in fields]` (`:90-92`). So the `image` **key** must be present, but its value is never opened, resolved, or existence-checked — `"image": "profiles/x/x.png"` pointing at a nonexistent file (or `""`/`null`) writes fine. Display degrades gracefully: `show_profile.py:99` and `:112` both require `image_path.is_file()` before drawing, so a missing image just shows the name. Re-running `write_profile.py` with the same slug overwrites `profiles/&lt;slug&gt;/&lt;slug&gt;.md` (`storage.py:187-190`) and replaces the CLAUDE.md marker block in place (`storage.py:156-157`), so adding the picture later is a clean re-run.
+
+**6. `generate_image.py` flags.** `--seed INT` exists (`generate_image.py:93`), threaded to the backend at `:120`; if unset, comfyui picks a random 32-bit value and stamps it into every node with `seed`/`noise_seed`, reporting it as `seed_used` (`profilegen/backends/comfyui.py:130-145`, docstring `:14-16`). `--workflow` (`generate_image.py:96`) is an arbitrary filesystem path — it becomes the `comfyui_workflow` CLI override (`:104`) and is loaded by plain `Path`/`open` with no directory restriction (`comfyui.py:150-157`, `:195-205`). Reusing `/Users/warrenthompson/Source/LoginID/profiles/dana-whitfield/comfyui-workflow.json` for every persona is fine; prompt/negative/seed/latent nodes are injected into a deep copy (`comfyui.py:102`), so the file on disk is never mutated.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

@@ -1,0 +1,1431 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nolan Reyes — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Nolan Reyes</h1><div class="sub">Hire (track 03) · session 15 of 15 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 6:56 AM PDT – Sep 13, 2026 6:58 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #44 on github.com/wtvamp/loginid-takehome, branch fix/jwks-fetch-observability, for track 03-engineering-delivery, from your usual production-failure-mode lens. Worktree at /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging (based on origin/main).
+
+Context: a live-review finding. With a correctly-minted token, the verifier still 401s because the JWKS fetch is refused (a Service port mismatch in the cluster manifests, being fixed separately by 04) — and the pod log showed NOTHING except the startup line. The PM's ruling: fail-closed is the right behavior, but silent is not — add logging plus fix a misclassification, specifically:
+1. A log line (no token material) on JWKS fetch failure with the URL host and error class, rate-limited to once per failure streak (not once per request).
+2. A distinct audit event kind for "verification unavailable" vs "token invalid" so operators can tell an outage from an attack.
+
+What was actually wrong, found while investigating: `internal/api/jwks.go`'s `refresh()` only ever logged via `enforceStaleness()`, and only once max-staleness was actually exceeded — an ordinary fetch failure (including the very FIRST fetch a pod ever makes, before any cache exists at all — the "cold start" case, which is exactly what happened in the live incident) logged nothing whatsoever. Separately, that same cold-start case returned the raw fetch error from `refresh()`, not wrapped in anything `internal/api/jwtmiddleware.go`'s `logAuthnFailure` checked for (it only checked `errors.Is(err, ErrJWKSStale)`) — so a JWKS-infrastructure failure got miscategorized as an ordinary `AuditAuthnFailure` ("this specific token is invalid"), indistinguishable in the audit trail from a genuinely bad credential.
+
+Fix implemented:
+- New `ErrJWKSUnreachable` sentinel (alongside the existing `ErrJWKSStale`) for the cold-start case (no cache exists yet, fetch failed). `refresh()`'s `noCache` branch now returns `fmt.Errorf("%w: %w", ErrJWKSUnreachable, err)` instead of the bare `err`.
+- `logAuthnFailure` now checks `errors.Is(err, ErrJWKSStale) || errors.Is(err, ErrJWKSUnreachable)` for the `AuditJWKSUnavailable` kind.
+- `refresh()` now logs on EVERY failure via `log.Printf`, gated on `c.consecutiveFailures == 1` (i.e. only at the moment a failure streak BEGINS, not on every subsequent failed request during a sustained outage) — format includes `jwksURLHost(c.url)` (extracts just the host via `net/url.Parse`, falling back to the raw string if parsing fails) and `classifyJWKSFetchError(err)` (a small string-matching function bucketing the error into `request_build_error`/`network_error`/`http_status_error`/`response_read_error`/`response_parse_error`/`unknown` based on substrings already present in `fetch()`'s own `fmt.Errorf` messages).
+- A matching recovery log line fires once when a fetch succeeds after `priorFailures &gt; 0` (captured before resetting `c.consecutiveFailures` to 0).
+- The pre-existing max-staleness log line in `enforceStaleness()` also gained the host for consistency.
+
+New tests: `TestJWKSCache_ColdStartFailure_WrapsErrJWKSUnreachable`, `TestLogAuthnFailure_ColdStartJWKSFailure_IsAuditJWKSUnavailable`, `TestJWKSCache_RecoveryAfterFailureStreak_ResetsFailureCount` (directly inspects `cache.consecutiveFailures` after a fail-then-recover sequence, using a test-controlled `atomic.Bool` on the test HTTP server and manually clearing `cache.lastAttempt` to bypass the retry-interval floor), `TestJWKSURLHost`, `TestClassifyJWKSFetchError`.
+
+Please run `go build ./...`, `go vet ./...`, `go test ./... -race`, and `staticcheck ./...` (at $(go env GOPATH)/bin/staticcheck if installed, else `go install honnef.co/go/tools/cmd/staticcheck@latest`) yourself in that worktree. Then focus on:
+
+1. **Does the "once per failure streak" rate limiting actually hold under concurrent access?** `KeyForKid` can be called concurrently by many goroutines serving simultaneous verification requests (per its own existing doc comment — it deliberately does NOT hold a lock across the network fetch, so concurrent callers can both decide a refresh is due and both fetch). Walk through what happens if two goroutines both call `refresh()` at roughly the same time during the transition into a failure streak — could BOTH see `c.consecutiveFailures == 1` and both log (defeating the "once per streak" claim), or is there a genuine race that could make NEITHER log (an under-count, worse than over-logging)? Same question for the recovery log line's `priorFailures &gt; 0` check.
+2. **classifyJWKSFetchError's string-matching approach** — is bucketing by substring match against `fetch()`'s own `fmt.Errorf` message text a fragile coupling (a future edit to fetch()'s error message wording would silently break classification, with no test catching it since the test in this PR constructs synthetic error strings rather than calling the real `fetch()` and classifying its real output)? Is there a cheap way to make this more robust, or is it acceptable given the messages are internal to this same file/package?
+3. **Log volume under a sustained outage with the per-kid unknown-kid mechanism also active.** If the JWKS endpoint is down AND an attacker (or a legitimately-rotating key) is also triggering `reserveUnknownKidRetry`'s own out-of-band refetch path, does that path also call `refresh()` in a way that could re-trigger the "streak start" log line repeatedly (e.g., if `consecutiveFailures` gets reset to something unexpected between the ordinary refresh path and the unknown-kid retry path), or is the streak-counting genuinely global across both call sites and therefore still just once per streak regardless of which path triggered the refresh attempts?
+4. **The cold-start case in a real production topology**: is there a realistic scenario where a verifier pod repeatedly restarts (e.g., a bad readiness probe, a crash loop from an unrelated cause) such that it NEVER gets past the cold-start state long enough to log anything useful before being killed and restarted — i.e., could the fix's own log line itself get lost in a fast crash-loop the same way the original silence did, or does this fix genuinely improve that scenario too?
+5. Anything else from your production-failure-mode pattern-matching — this touches the same JWKS caching code you've reviewed and found real bugs in twice before (PR #30's original review and its round-3 re-review).
+
+Report your findings in plain prose to Renata Cole (03 lead), as you'd normally report a review. Distinguish real bugs from acceptable, already-understood trade-offs that deserve a documentation note, not rework. If everything holds up, say so plainly.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- **Before declaring anything handed off, merged-ready, or done, run `git status` and `git diff origin/main -- &lt;your track&gt;/`.** Four times in this project a finished artifact sat unpushed or on a dead branch while its author reported it complete (2026-09-12/13). The author is the worst-placed person to notice, because they can see the work; the reviewer looking at `origin/main` sees the truth. Also check `gh pr view &lt;n&gt; --json state` before pushing to a story branch — once the PM merges, that branch is dead and pushes to it go nowhere.
+69	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+70	
+71	## Status
+72	
+73	Planning (Phases 0–4) closed 2026-09-12: five track plans, 18 hires, three cross-track consistency passes (`decisions/cross-track-consistency.md`), and a Jira backlog (`LT-1`…`LT-52`). Implementation began the same evening as an agile loop (`LOG.md` from "Implementation go" onward). As of 2026-09-13 06:00 PDT: **Done end to end** (deployed to the public URL and PO-reviewed) — LT-34 walking skeleton, LT-32 issuer split-Deployment, LT-52 in-namespace Postgres + migrations. **Live:** `https://loginid-takehome.uplifttech.org/healthz` (build SHA == `main`, `db: ok`); `/profiles/search` and `/profiles/{id}` deployed behind RS256 JWT verification and failing closed; `/auth/token` a 501 placeholder until LT-51. **In Test** awaiting one joint live review with a real token: LT-36/37 (Postgres/CockroachDB and SQLite DAOs), LT-38 (conformance suite), LT-39 (REST search/read), LT-40 (auth middleware). **In dev:** LT-51 (client-credentials issuance; PRs #34 + #36), LT-41 (idp-connector, Q3). PRs #1–#37 merged. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`).
+74	
+75	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+76	@profiles/dana-whitfield/dana-whitfield.md
+77	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+78	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+37	
+38	&lt;!-- profile-gen:start slug=renata-cole --&gt;
+39	@profiles/renata-cole/renata-cole.md
+40	&lt;!-- profile-gen:end slug=renata-cole --&gt;
+41	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Bash</span> cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/nolan-reyes/nolan-reyes.md"
+}</pre><div class="lbl">result</div><pre>---
+schema_version: 1
+name: "Nolan Reyes"
+slug: "nolan-reyes"
+image: "profiles/nolan-reyes/nolan-reyes.png"
+
+nsfw: false
+display:
+  image: true
+  name: true
+  autostart: false
+generation:
+  backend: "comfyui"
+  model: "comfyui-workflow.json"
+  prompt: "Nolan Reyes, a dry and unhurried man in his mid 40s with graying short hair, weathered calm expression, wearing a simple gray quarter-zip pullover, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+  seed: null
+  gif_mode: null
+  created_at: "2026-09-12T00:00:00Z"
+---
+
+# Nolan Reyes
+
+![Nolan Reyes](profiles/nolan-reyes/nolan-reyes.png)
+
+
+## Personality
+
+Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; git status &amp;&amp; git log --onel</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; git status &amp;&amp; git log --oneline -5"
+}</pre><div class="lbl">result</div><pre>On branch fix/jwks-fetch-observability
+Your branch is up to date with 'origin/fix/jwks-fetch-observability'.
+
+nothing to commit, working tree clean
+e5ea1ef fix: JWKS fetch failures were silent; cold-start miscategorized as auth failure
+e6d8b32 LOG: first real mint at the URL; two deploy gaps found in PM pre-check (unset AUTH_JWT_*, Service port); LT-41 overflow-bucket ruling
+c063c2e Merge PR #42: fail startup loudly when AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE are unset (verifier/issuer modes)
+1faf0a8 fix: fail startup loudly when AUTH_JWT_ISSUER/AUTH_JWT_AUDIENCE unset
+8530902 Merge PR #41: AUTH_JWT_ISSUER/AUDIENCE on api-service + issuer, CONNECTOR_JWT_AUDIENCE on connector, AUTHZ_QA_* for the read:own review client</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks.go"
+}</pre><div class="lbl">result</div><pre>1	// jwks.go implements a minimal RFC 7517 JSON Web Key Set client: fetch,
+2	// parse RSA public keys, cache with a short TTL. handoff-03-auth.md v4:
+3	// "Public-key distribution for the verifier ... JWKS served by the issuer
+4	// Deployment, reachable only in-cluster via its own ClusterIP Service ...
+5	// Verifier caches the fetched key set in memory with a short TTL (matching
+6	// token TTL is reasonable) to avoid a JWKS fetch on every single
+7	// verification."
+8	package api
+9	
+10	import (
+11		"context"
+12		"crypto/rsa"
+13		"encoding/base64"
+14		"encoding/json"
+15		"errors"
+16		"fmt"
+17		"io"
+18		"log"
+19		"math/big"
+20		"net/http"
+21		"net/url"
+22		"strings"
+23		"sync"
+24		"time"
+25	)
+26	
+27	// jwk is one entry in a JWKS response — only the fields this verifier
+28	// needs to reconstruct an RSA public key (RFC 7517 §4, RFC 7518 §6.3.1).
+29	// Fields this verifier doesn't use (x5c, x5t, ...) are simply not
+30	// unmarshaled; unknown fields in the source JSON are not an error.
+31	type jwk struct {
+32		Kty string `json:"kty"`
+33		Kid string `json:"kid"`
+34		Alg string `json:"alg"`
+35		Use string `json:"use"`
+36		N   string `json:"n"` // base64url, unpadded — the RSA modulus
+37		E   string `json:"e"` // base64url, unpadded — the RSA public exponent
+38	}
+39	
+40	type jwksResponse struct {
+41		Keys []jwk `json:"keys"`
+42	}
+43	
+44	// parseJWKS decodes a JWKS JSON document into a map of kid -&gt; public key.
+45	// Any key with kty != "RSA" is skipped (not an error) — a future non-RSA
+46	// key in the set (e.g. during an algorithm migration) shouldn't break
+47	// verification of tokens signed with the RSA keys that ARE present.
+48	func parseJWKS(data []byte) (map[string]*rsa.PublicKey, error) {
+49		var resp jwksResponse
+50		if err := json.Unmarshal(data, &amp;resp); err != nil {
+51			return nil, fmt.Errorf("api: parsing JWKS: %w", err)
+52		}
+53		keys := make(map[string]*rsa.PublicKey, len(resp.Keys))
+54		for _, k := range resp.Keys {
+55			if k.Kty != "RSA" {
+56				continue
+57			}
+58			if k.Kid == "" {
+59				return nil, fmt.Errorf("api: JWKS RSA key missing kid")
+60			}
+61			pub, err := rsaPublicKeyFromJWK(k)
+62			if err != nil {
+63				return nil, fmt.Errorf("api: JWKS key %q: %w", k.Kid, err)
+64			}
+65			keys[k.Kid] = pub
+66		}
+67		return keys, nil
+68	}
+69	
+70	func rsaPublicKeyFromJWK(k jwk) (*rsa.PublicKey, error) {
+71		nBytes, err := base64.RawURLEncoding.DecodeString(k.N)
+72		if err != nil {
+73			return nil, fmt.Errorf("decoding n: %w", err)
+74		}
+75		eBytes, err := base64.RawURLEncoding.DecodeString(k.E)
+76		if err != nil {
+77			return nil, fmt.Errorf("decoding e: %w", err)
+78		}
+79		n := new(big.Int).SetBytes(nBytes)
+80		e := new(big.Int).SetBytes(eBytes)
+81		if !e.IsInt64() {
+82			return nil, fmt.Errorf("exponent out of range")
+83		}
+84		return &amp;rsa.PublicKey{N: n, E: int(e.Int64())}, nil
+85	}
+86	
+87	// KeySource resolves a kid to the RSA public key that should verify a
+88	// token carrying it. JWKSCache is the real implementation; tests use a
+89	// map-backed fake. ctx carries the calling request's own deadline —
+90	// KeyForKid's real implementation must bound its network I/O by it, not
+91	// by some separate, undocumented timeout (Nolan Reyes, PR #30 review: a
+92	// hung fetch that ignores the caller's context defeats the deadline
+93	// middleware's whole guarantee).
+94	type KeySource interface {
+95		KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error)
+96	}
+97	
+98	// ErrJWKSStale is returned by JWKSCache.KeyForKid when the cached key set
+99	// has exceeded its max-staleness bound and could not be refreshed — the
+100	// verifier must fail closed rather than trust keys this old (Tomasz
+101	// Wrede, 02 cold review; PM ruling). Exported so NewJWTMiddleware can log
+102	// a distinct audit event (AuditJWKSUnavailable) for this specific
+103	// failure mode, rather than folding it into an ordinary auth failure.
+104	var ErrJWKSStale = errors.New("api: JWKS cache exceeded max staleness and could not be refreshed")
+105	
+106	// ErrJWKSUnreachable is returned by JWKSCache.KeyForKid when no cached
+107	// key set exists yet at all and a fetch attempt failed — the cold-start
+108	// case (e.g. a pod that hasn't completed its first successful fetch
+109	// yet, including a sustained outage from process start), distinct from
+110	// ErrJWKSStale (a cache DOES exist but has aged past max staleness).
+111	// Both represent the same operator-facing signal — "verification is
+112	// unavailable," not "this specific token is invalid" — a live finding
+113	// during the joint LT-40/LT-51 review confirmed the middleware
+114	// previously miscategorized this cold-start case as an ordinary
+115	// AuditAuthnFailure, indistinguishable from a genuinely bad token, with
+116	// no log line anywhere naming the actual cause (a JWKS Service port
+117	// mismatch, in that incident). logAuthnFailure now checks both
+118	// sentinels for AuditJWKSUnavailable.
+119	var ErrJWKSUnreachable = errors.New("api: JWKS cache not yet populated and fetch failed")
+120	
+121	// jwksMaxStalenessMultiple and jwksUnknownKidRefetchInterval are the
+122	// concrete numbers the PM ruled on for Tomasz Wrede's two findings:
+123	//   - a signing key can be revoked BECAUSE it's compromised; if the JWKS
+124	//     endpoint is also unreachable during that same incident, a
+125	//     stale-cache-forever fallback would keep verifying tokens signed by
+126	//     the revoked key for as long as fetches keep failing. Bounding
+127	//     staleness at a multiple of the normal refresh interval (ttl) turns
+128	//     "fail open forever" into "fail open for a bounded window, then
+129	//     fail closed" — resilient to a brief blip, not to an extended one.
+130	//   - an unknown kid could be a key the issuer rotated in since the last
+131	//     TTL-driven refresh; without an out-of-band refetch, a freshly
+132	//     rotated key would be rejected for up to a full TTL. Rate-limited
+133	//     so an unknown-kid flood can't be used to hammer the issuer's JWKS
+134	//     endpoint.
+135	const (
+136		jwksMaxStalenessMultiple      = 3
+137		jwksUnknownKidRefetchInterval = 30 * time.Second
+138	
+139		// jwksMinRefreshRetryInterval floors how often a TTL-expired cache
+140		// with a just-failed refresh will attempt another real network
+141		// fetch. Without this, every single request during a sustained
+142		// issuer outage triggers its own fetch attempt for as long as the
+143		// outage lasts (up to maxStaleness) — the same "don't hammer a
+144		// struggling dependency" reasoning already applied to the
+145		// unknown-kid path, missing from the ordinary refresh path (Oren
+146		// Castellan, PR #30 re-review). Short relative to ttl/maxStaleness:
+147		// this only throttles retries during an active failure, it must not
+148		// delay picking up a healthy issuer again once it recovers.
+149		//
+150		// Assumes ttl is meaningfully larger than this floor (the real
+151		// wiring uses a 15-minute ttl — see jwksCacheTTL in
+152		// internal/app/verifier_router.go — three orders of magnitude
+153		// above it). A ttl configured smaller than jwksMinRefreshRetryInterval
+154		// would let this floor gate the NORMAL refresh cadence, not just
+155		// outage retries — not this codebase's configuration, but worth
+156		// stating as an assumption rather than leaving it implicit (Nolan
+157		// Reyes, PR #30 round-3 review).
+158		jwksMinRefreshRetryInterval = 5 * time.Second
+159	
+160		// jwksMaxTrackedUnknownKids bounds how many distinct kids can hold an
+161		// outstanding unknown-kid retry reservation at once. Without this,
+162		// keying the reservation per-kid (see reserveUnknownKidRetry) reopens
+163		// its own version of the same map-growth concern a flood of DISTINCT
+164		// garbage kids would create: capped here, so an attacker sending many
+165		// different fabricated kids can force at most this many extra
+166		// fetches per jwksUnknownKidRefetchInterval, not one per distinct
+167		// value they bother to send.
+168		//
+169		// Known, accepted limitation (Nolan Reyes, PR #30 round-3 review): a
+170		// sustained flood holding all jwksMaxTrackedUnknownKids slots at once
+171		// denies the fast-path out-of-band refetch to any OTHER kid,
+172		// including a real newly-rotated one — but that kid still gets
+173		// picked up by the ordinary TTL-driven refresh on its normal
+174		// schedule regardless. The flood degrades unknown-kid handling back
+175		// to TTL-only (this mechanism's pre-existing baseline before the
+176		// per-kid fix), it does not create a worse outcome than that
+177		// baseline — a bounded, cheap-to-sustain-for-the-attacker
+178		// degradation, not a lockout.
+179		jwksMaxTrackedUnknownKids = 64
+180	)
+181	
+182	// JWKSCache fetches a JWKS document from url and caches the parsed key
+183	// set for ttl, refetching only after it expires — "to avoid a JWKS fetch
+184	// on every single verification" (handoff-03-auth.md v4). Supports at
+185	// least two concurrently valid kids during a rotation overlap window by
+186	// construction: it caches the WHOLE key set the issuer publishes, not
+187	// just the most recent key, so an old and a new key both verify
+188	// successfully for as long as the issuer's own JWKS response lists both.
+189	type JWKSCache struct {
+190		url          string
+191		ttl          time.Duration
+192		maxStaleness time.Duration
+193		httpClient   *http.Client
+194		now          func() time.Time
+195	
+196		mu                  sync.Mutex
+197		keys                map[string]*rsa.PublicKey
+198		fetchedAt           time.Time // last SUCCESSFUL fetch
+199		lastAttempt         time.Time // last fetch ATTEMPT, success or failure
+200		consecutiveFailures int
+201		staleAlerted        bool
+202		unknownKidRetryAt   map[string]time.Time // per-kid, not global — see reserveUnknownKidRetry
+203	}
+204	
+205	// defaultJWKSClientTimeout backstops a hung fetch (a connection that
+206	// accepts but never responds — not a hard refusal, which fails fast on
+207	// its own) when no context deadline is shorter. Distinct from and
+208	// independent of a per-request context deadline: this fires even for a
+209	// call that somehow reaches fetch() with no deadline on its context at
+210	// all, which the http.Client.Timeout field guards against regardless of
+211	// context (Nolan Reyes, PR #30 review — the shipped wiring passed nil
+212	// for httpClient, resolving to http.DefaultClient, whose zero-value
+213	// Timeout means "none").
+214	const defaultJWKSClientTimeout = 10 * time.Second
+215	
+216	// NewJWKSCache constructs a cache fetching from url, refetching at most
+217	// once per ttl (and, for an unrecognized kid specifically, at most once
+218	// per jwksUnknownKidRefetchInterval outside the normal TTL cycle). A nil
+219	// httpClient constructs one with defaultJWKSClientTimeout — never
+220	// http.DefaultClient, whose Timeout is unset (no bound at all) by
+221	// default. maxStaleness is jwksMaxStalenessMultiple * ttl.
+222	func NewJWKSCache(url string, ttl time.Duration, httpClient *http.Client) *JWKSCache {
+223		if httpClient == nil {
+224			httpClient = &amp;http.Client{Timeout: defaultJWKSClientTimeout}
+225		}
+226		return &amp;JWKSCache{
+227			url:          url,
+228			ttl:          ttl,
+229			maxStaleness: jwksMaxStalenessMultiple * ttl,
+230			httpClient:   httpClient,
+231			now:          time.Now,
+232		}
+233	}
+234	
+235	// KeyForKid never holds c.mu across a network fetch (Nolan Reyes, PR #30
+236	// review, finding #2): the prior shape held the lock for the whole
+237	// function body, so one hung fetch stalled every other concurrent
+238	// request through this same cache instance — i.e. every authenticated
+239	// request the verifying Deployment was serving, not just the one that
+240	// triggered the refresh. Concurrent callers that both decide a refresh
+241	// is due may both fetch; that's cheap, occasional duplicate work, and far
+242	// preferable to serializing the whole authenticated surface behind one
+243	// goroutine's network call.
+244	func (c *JWKSCache) KeyForKid(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+245		c.mu.Lock()
+246		needsRefresh := c.keys == nil || c.now().Sub(c.fetchedAt) &gt;= c.ttl
+247		canAttempt := c.now().Sub(c.lastAttempt) &gt;= jwksMinRefreshRetryInterval
+248		c.mu.Unlock()
+249	
+250		if needsRefresh {
+251			if canAttempt {
+252				if err := c.refresh(ctx); err != nil {
+253					return nil, err
+254				}
+255			} else if err := c.enforceStaleness(); err != nil {
+256				// Backing off from a very recent failed attempt (see
+257				// jwksMinRefreshRetryInterval) — no new network call this
+258				// time, but the staleness ceiling must still be enforced
+259				// against the existing cache regardless of whether this
+260				// particular call was the one that tried to refresh it.
+261				return nil, err
+262			}
+263		}
+264	
+265		if key, ok := c.lookupKey(kid); ok {
+266			return key, nil
+267		}
+268	
+269		// Unknown kid: might be a key the issuer rotated in since the last
+270		// TTL-driven refresh. One rate-limited out-of-band refetch before
+271		// giving up, so a freshly-rotated key isn't rejected for up to a
+272		// full TTL (Tomasz Wrede, 02 cold review). Best-effort: its error is
+273		// deliberately ignored here — the outcome that matters is whether
+274		// the retry populated the kid we're actually looking for, and a
+275		// refresh() failure here has already been handled (logged / staleness
+276		// tracked) inside refresh() itself.
+277		if c.reserveUnknownKidRetry(kid) {
+278			_ = c.refresh(ctx)
+279			if key, ok := c.lookupKey(kid); ok {
+280				return key, nil
+281			}
+282		}
+283	
+284		return nil, fmt.Errorf("api: no key found for kid %q", kid)
+285	}
+286	
+287	func (c *JWKSCache) lookupKey(kid string) (*rsa.PublicKey, bool) {
+288		c.mu.Lock()
+289		defer c.mu.Unlock()
+290		k, ok := c.keys[kid]
+291		return k, ok
+292	}
+293	
+294	// reserveUnknownKidRetry reports whether an unknown-kid-triggered refetch
+295	// may proceed now for THIS specific kid, and if so atomically marks one
+296	// as just having started. Keyed per kid, not by one global timestamp
+297	// (Ingrid Solano, 02 cold re-check): KeyForKid runs before signature
+298	// verification, so an unauthenticated caller can send a token with a
+299	// fabricated kid at no cost — a single global gate lets that caller
+300	// permanently occupy the one reservation slot by repeating it every
+301	// jwksUnknownKidRefetchInterval, pushing a legitimately-rotated real
+302	// key's own refetch back to the full calendar-TTL rollover, silently
+303	// recreating most of the original gap this mechanism exists to close.
+304	// Per-kid closes that: a garbage kid's repeated reservation never blocks
+305	// a DIFFERENT (real) kid's own reservation. jwksMaxTrackedUnknownKids
+306	// caps how many distinct kids can hold a reservation at once, so a flood
+307	// of distinct fabricated kids still can't hammer the issuer past that
+308	// bound — rate-limiting is scoped per-kid, not removed.
+309	func (c *JWKSCache) reserveUnknownKidRetry(kid string) bool {
+310		c.mu.Lock()
+311		defer c.mu.Unlock()
+312	
+313		if c.unknownKidRetryAt == nil {
+314			c.unknownKidRetryAt = make(map[string]time.Time)
+315		}
+316		if last, ok := c.unknownKidRetryAt[kid]; ok &amp;&amp; c.now().Sub(last) &lt; jwksUnknownKidRefetchInterval {
+317			return false
+318		}
+319	
+320		// Sweep expired entries before checking the size cap, so a kid
+321		// that's aged out of its own window doesn't count against another
+322		// kid's chance to reserve.
+323		for k, t := range c.unknownKidRetryAt {
+324			if c.now().Sub(t) &gt;= jwksUnknownKidRefetchInterval {
+325				delete(c.unknownKidRetryAt, k)
+326			}
+327		}
+328		if len(c.unknownKidRetryAt) &gt;= jwksMaxTrackedUnknownKids {
+329			// At capacity with distinct in-flight-window kids — deny this
+330			// one rather than let the map grow further. The ordinary
+331			// TTL-driven refresh still eventually picks up a real rotated
+332			// key regardless of this outcome.
+333			return false
+334		}
+335		c.unknownKidRetryAt[kid] = c.now()
+336		return true
+337	}
+338	
+339	// refresh performs the network fetch (no lock held during it) and
+340	// updates cache state. Returns an error only when the caller must fail
+341	// the whole verification: no cache exists yet (cold start against an
+342	// unreachable issuer — wrapped in ErrJWKSUnreachable), or the existing
+343	// cache has exceeded maxStaleness (wrapped in ErrJWKSStale) — so the
+344	// middleware can log AuditJWKSUnavailable rather than an ordinary auth
+345	// failure in either case. A transient failure within the staleness
+346	// bound returns nil: the stale cache is still good enough to use, per
+347	// the resilience this mechanism exists for.
+348	//
+349	// Every failure is logged, rate-limited to once per failure STREAK
+350	// (on the transition into failure and the transition back out of it),
+351	// never once per request — a sustained outage would otherwise log at
+352	// whatever rate verification requests arrive, which is exactly the log
+353	// volume this mechanism's own request-rate independence (jwksMinRefreshRetryInterval)
+354	// already exists to avoid on the network side; the log line shouldn't
+355	// reintroduce that problem on the logging side. No token material is
+356	// ever in scope for these lines — the JWKS fetch has no token at all,
+357	// only the verifier's own outbound request to the issuer.
+358	func (c *JWKSCache) refresh(ctx context.Context) error {
+359		c.mu.Lock()
+360		c.lastAttempt = c.now()
+361		c.mu.Unlock()
+362	
+363		fresh, err := c.fetch(ctx)
+364	
+365		c.mu.Lock()
+366		if err == nil {
+367			priorFailures := c.consecutiveFailures
+368			c.keys = fresh
+369			c.fetchedAt = c.now()
+370			c.consecutiveFailures = 0
+371			c.staleAlerted = false
+372			c.mu.Unlock()
+373			if priorFailures &gt; 0 {
+374				log.Printf("api: JWKS fetch recovered (host=%s) after %d consecutive failures", jwksURLHost(c.url), priorFailures)
+375			}
+376			return nil
+377		}
+378		c.consecutiveFailures++
+379		streakStart := c.consecutiveFailures == 1
+380		noCache := c.keys == nil
+381		c.mu.Unlock()
+382	
+383		if streakStart {
+384			log.Printf("api: JWKS fetch failed (host=%s, class=%s): %v", jwksURLHost(c.url), classifyJWKSFetchError(err), err)
+385		}
+386	
+387		if noCache {
+388			return fmt.Errorf("%w: %w", ErrJWKSUnreachable, err)
+389		}
+390		return c.enforceStaleness()
+391	}
+392	
+393	// jwksURLHost extracts just the host from c.url for logging — the PM's
+394	// own ruling on this finding named "the URL host," not the full URL, as
+395	// what belongs in an operational log line; url.Parse failing (c.url
+396	// itself malformed) falls back to the raw string rather than losing the
+397	// log line entirely.
+398	func jwksURLHost(rawURL string) string {
+399		u, err := url.Parse(rawURL)
+400		if err != nil || u.Host == "" {
+401			return rawURL
+402		}
+403		return u.Host
+404	}
+405	
+406	// classifyJWKSFetchError buckets a fetch() error into a coarse class for
+407	// the log line — enough for an operator to tell "the issuer refused the
+408	// connection" from "the issuer responded but with a bad status" from
+409	// "the response body didn't parse" at a glance, without needing to read
+410	// the full error text (which is still logged alongside this, so nothing
+411	// is lost — this is a categorization aid, not a replacement for detail).
+412	func classifyJWKSFetchError(err error) string {
+413		msg := err.Error()
+414		switch {
+415		case strings.Contains(msg, "building JWKS request"):
+416			return "request_build_error"
+417		case strings.Contains(msg, "status "):
+418			return "http_status_error"
+419		case strings.Contains(msg, "reading JWKS response"):
+420			return "response_read_error"
+421		case strings.Contains(msg, "parsing JWKS"):
+422			return "response_parse_error"
+423		case strings.Contains(msg, "fetching JWKS from"):
+424			return "network_error"
+425		default:
+426			return "unknown"
+427		}
+428	}
+429	
+430	// enforceStaleness checks the existing cache against maxStaleness and
+431	// fails closed (ErrJWKSStale) if it's been exceeded — factored out of
+432	// refresh
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; grep -n "logAuthnFailure\|Au</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; grep -n \"logAuthnFailure\\|AuditJWKSUnavailable\\|AuditAuthnFailure\" internal/api/jwtmiddleware.go | head -50"
+}</pre><div class="lbl">result</div><pre>158:// (ErrJWKSStale) logs AuditJWKSUnavailable first, since that's a
+170:				logAuthnFailure(ctx, audit, nil)
+176:				logAuthnFailure(ctx, audit, err)
+186:func logAuthnFailure(ctx context.Context, audit AuditLogger, err error) {
+190:	kind := AuditAuthnFailure
+201:		kind = AuditJWKSUnavailable</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks_test.go"
+}</pre><div class="lbl">result</div><pre>1	package api
+2	
+3	import (
+4		"context"
+5		"crypto/rand"
+6		"crypto/rsa"
+7		"encoding/base64"
+8		"encoding/json"
+9		"errors"
+10		"fmt"
+11		"net/http"
+12		"net/http/httptest"
+13		"sync/atomic"
+14		"testing"
+15		"time"
+16	)
+17	
+18	func jwkFromPublicKey(kid string, pub *rsa.PublicKey) jwk {
+19		return jwk{
+20			Kty: "RSA",
+21			Kid: kid,
+22			Alg: "RS256",
+23			Use: "sig",
+24			N:   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+25			E:   base64.RawURLEncoding.EncodeToString(bigEndianExponent(pub.E)),
+26		}
+27	}
+28	
+29	func bigEndianExponent(e int) []byte {
+30		// Standard RSA public exponent (65537) fits in 3 bytes; encode
+31		// minimally, matching how real JWKS producers encode "e".
+32		b := []byte{byte(e &gt;&gt; 16), byte(e &gt;&gt; 8), byte(e)}
+33		i := 0
+34		for i &lt; len(b)-1 &amp;&amp; b[i] == 0 {
+35			i++
+36		}
+37		return b[i:]
+38	}
+39	
+40	func jwksBody(t *testing.T, kid string, pub *rsa.PublicKey) []byte {
+41		t.Helper()
+42		doc := jwksResponse{Keys: []jwk{jwkFromPublicKey(kid, pub)}}
+43		body, err := json.Marshal(doc)
+44		if err != nil {
+45			t.Fatalf("marshaling JWKS: %v", err)
+46		}
+47		return body
+48	}
+49	
+50	func TestParseJWKS_RoundTrip(t *testing.T) {
+51		key, err := rsa.GenerateKey(rand.Reader, 2048)
+52		if err != nil {
+53			t.Fatalf("generating key: %v", err)
+54		}
+55		data := jwksBody(t, "key-1", &amp;key.PublicKey)
+56	
+57		keys, err := parseJWKS(data)
+58		if err != nil {
+59			t.Fatalf("parseJWKS: %v", err)
+60		}
+61		got, ok := keys["key-1"]
+62		if !ok {
+63			t.Fatal("parsed key set missing key-1")
+64		}
+65		if got.N.Cmp(key.N) != 0 || got.E != key.E {
+66			t.Error("parsed public key does not match the original")
+67		}
+68	}
+69	
+70	func TestParseJWKS_SkipsNonRSAKeys(t *testing.T) {
+71		data := []byte(`{"keys":[{"kty":"EC","kid":"ec-1","crv":"P-256","x":"AAAA","y":"AAAA"}]}`)
+72		keys, err := parseJWKS(data)
+73		if err != nil {
+74			t.Fatalf("parseJWKS: %v", err)
+75		}
+76		if len(keys) != 0 {
+77			t.Errorf("expected a non-RSA key to be skipped, got %d keys", len(keys))
+78		}
+79	}
+80	
+81	func TestParseJWKS_MissingKidIsError(t *testing.T) {
+82		data := []byte(`{"keys":[{"kty":"RSA","n":"AAAA","e":"AQAB"}]}`)
+83		if _, err := parseJWKS(data); err == nil {
+84			t.Error("expected an error for an RSA key with no kid")
+85		}
+86	}
+87	
+88	// jwksTestServer serves body while up, or a configurable failure while
+89	// down — atomic so it's safe to flip from the test goroutine while the
+90	// cache's own fetches run (any of them) against it.
+91	type jwksTestServer struct {
+92		srv  *httptest.Server
+93		up   atomic.Bool
+94		body []byte
+95	}
+96	
+97	func newJWKSTestServer(body []byte) *jwksTestServer {
+98		s := &amp;jwksTestServer{body: body}
+99		s.up.Store(true)
+100		s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+101			if !s.up.Load() {
+102				w.WriteHeader(http.StatusInternalServerError)
+103				return
+104			}
+105			w.Header().Set("Content-Type", "application/json")
+106			_, _ = w.Write(s.body)
+107		}))
+108		return s
+109	}
+110	
+111	func (s *jwksTestServer) Close() { s.srv.Close() }
+112	
+113	func TestJWKSCache_FetchesAndCaches(t *testing.T) {
+114		key, err := rsa.GenerateKey(rand.Reader, 2048)
+115		if err != nil {
+116			t.Fatalf("generating key: %v", err)
+117		}
+118		var requests atomic.Int32
+119		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+120		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+121			requests.Add(1)
+122			w.Header().Set("Content-Type", "application/json")
+123			_, _ = w.Write(body)
+124		}))
+125		defer srv.Close()
+126	
+127		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+128		ctx := context.Background()
+129		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+130			t.Fatalf("first KeyForKid: %v", err)
+131		}
+132		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+133			t.Fatalf("second KeyForKid: %v", err)
+134		}
+135		if requests.Load() != 1 {
+136			t.Errorf("fetched the JWKS endpoint %d times, want exactly 1 (cached within TTL)", requests.Load())
+137		}
+138	}
+139	
+140	func TestJWKSCache_RefetchesAfterTTLExpires(t *testing.T) {
+141		key, err := rsa.GenerateKey(rand.Reader, 2048)
+142		if err != nil {
+143			t.Fatalf("generating key: %v", err)
+144		}
+145		var requests atomic.Int32
+146		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+147		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+148			requests.Add(1)
+149			w.Header().Set("Content-Type", "application/json")
+150			_, _ = w.Write(body)
+151		}))
+152		defer srv.Close()
+153	
+154		cache := NewJWKSCache(srv.URL, time.Minute, nil)
+155		fakeNow := time.Now()
+156		cache.now = func() time.Time { return fakeNow }
+157		ctx := context.Background()
+158	
+159		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+160			t.Fatalf("first KeyForKid: %v", err)
+161		}
+162		fakeNow = fakeNow.Add(time.Minute + time.Second)
+163		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+164			t.Fatalf("second KeyForKid: %v", err)
+165		}
+166		if requests.Load() &lt; 2 {
+167			t.Errorf("fetched the JWKS endpoint %d times, want at least 2 (TTL should have expired)", requests.Load())
+168		}
+169	}
+170	
+171	func TestJWKSCache_UnknownKidWithNoStaleCacheIsError(t *testing.T) {
+172		key, err := rsa.GenerateKey(rand.Reader, 2048)
+173		if err != nil {
+174			t.Fatalf("generating key: %v", err)
+175		}
+176		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+177		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+178			w.Header().Set("Content-Type", "application/json")
+179			_, _ = w.Write(body)
+180		}))
+181		defer srv.Close()
+182	
+183		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+184		if _, err := cache.KeyForKid(context.Background(), "no-such-kid"); err == nil {
+185			t.Error("expected an error for an unrecognized kid")
+186		}
+187	}
+188	
+189	// TestJWKSCache_StaleCacheSurvivesTransientFetchFailure covers the
+190	// resilience case within the staleness bound: a fetch failure well
+191	// inside maxStaleness still serves the last-good key set.
+192	func TestJWKSCache_StaleCacheSurvivesTransientFetchFailure(t *testing.T) {
+193		key, err := rsa.GenerateKey(rand.Reader, 2048)
+194		if err != nil {
+195			t.Fatalf("generating key: %v", err)
+196		}
+197		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+198		s := newJWKSTestServer(body)
+199		defer s.Close()
+200	
+201		cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3*ttl = 3min
+202		fakeNow := time.Now()
+203		cache.now = func() time.Time { return fakeNow }
+204		ctx := context.Background()
+205	
+206		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+207			t.Fatalf("first KeyForKid: %v", err)
+208		}
+209		fakeNow = fakeNow.Add(time.Minute + time.Second) // TTL expired, well within the 3min staleness bound
+210		s.up.Store(false)
+211		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+212			t.Errorf("KeyForKid during a transient fetch failure = %v, want the stale cache to still serve the key", err)
+213		}
+214	}
+215	
+216	// TestJWKSCache_FailsClosedPastMaxStaleness is the PM's ruling on Tomasz
+217	// Wrede's HIGH finding: a signing key can be revoked because it's
+218	// compromised, and if the JWKS endpoint is unreachable during that same
+219	// incident, an unbounded stale-cache fallback would keep verifying
+220	// tokens signed by the revoked key for as long as fetches keep failing.
+221	// Past maxStaleness (3x ttl, per the PM's ruling), the cache must fail
+222	// closed — ErrJWKSStale — rather than serve the stale set indefinitely.
+223	func TestJWKSCache_FailsClosedPastMaxStaleness(t *testing.T) {
+224		key, err := rsa.GenerateKey(rand.Reader, 2048)
+225		if err != nil {
+226			t.Fatalf("generating key: %v", err)
+227		}
+228		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+229		s := newJWKSTestServer(body)
+230		defer s.Close()
+231	
+232		cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min
+233		fakeNow := time.Now()
+234		cache.now = func() time.Time { return fakeNow }
+235		ctx := context.Background()
+236	
+237		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+238			t.Fatalf("first KeyForKid: %v", err)
+239		}
+240		s.up.Store(false)
+241		// Advance past maxStaleness (3min) from the last successful fetch.
+242		fakeNow = fakeNow.Add(4 * time.Minute)
+243		_, err = cache.KeyForKid(ctx, "key-1")
+244		if err == nil {
+245			t.Fatal("expected an error once the cache exceeds max staleness with the issuer still unreachable")
+246		}
+247		if !errors.Is(err, ErrJWKSStale) {
+248			t.Errorf("error = %v, want it to wrap ErrJWKSStale so the middleware can log a distinct audit event", err)
+249		}
+250	}
+251	
+252	// TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch is the PM's
+253	// ruling on Tomasz Wrede's MEDIUM-HIGH finding: an unknown kid (a key
+254	// the issuer may have just rotated in) triggers one out-of-band refetch
+255	// before the cache gives up, rather than waiting up to a full TTL for
+256	// the next calendar-scheduled refresh.
+257	func TestJWKSCache_UnknownKidTriggersOneRateLimitedRefetch(t *testing.T) {
+258		oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+259		if err != nil {
+260			t.Fatalf("generating key: %v", err)
+261		}
+262		newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+263		if err != nil {
+264			t.Fatalf("generating key: %v", err)
+265		}
+266	
+267		var requests atomic.Int32
+268		var serveNewKey atomic.Bool
+269		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+270			requests.Add(1)
+271			w.Header().Set("Content-Type", "application/json")
+272			if serveNewKey.Load() {
+273				_, _ = w.Write(jwksBody(t, "key-new", &amp;newKey.PublicKey))
+274			} else {
+275				_, _ = w.Write(jwksBody(t, "key-old", &amp;oldKey.PublicKey))
+276			}
+277		}))
+278		defer srv.Close()
+279	
+280		// A long TTL so the calendar-scheduled refresh would NOT fire on its
+281		// own within this test — proving any successful lookup of "key-new"
+282		// came from the unknown-kid-triggered refetch, not an ordinary TTL
+283		// rollover.
+284		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+285		ctx := context.Background()
+286	
+287		if _, err := cache.KeyForKid(ctx, "key-old"); err != nil {
+288			t.Fatalf("priming the cache with key-old: %v", err)
+289		}
+290		requestsAfterPriming := requests.Load()
+291	
+292		// The issuer rotates: key-new is now published, but the cache's TTL
+293		// hasn't expired.
+294		serveNewKey.Store(true)
+295		if _, err := cache.KeyForKid(ctx, "key-new"); err != nil {
+296			t.Fatalf("KeyForKid(key-new) = %v, want the unknown-kid refetch to find it", err)
+297		}
+298		if requests.Load() &lt;= requestsAfterPriming {
+299			t.Error("expected an extra fetch triggered by the unknown kid, beyond the priming fetch")
+300		}
+301	}
+302	
+303	func TestJWKSCache_UnknownKidRefetchIsRateLimited(t *testing.T) {
+304		key, err := rsa.GenerateKey(rand.Reader, 2048)
+305		if err != nil {
+306			t.Fatalf("generating key: %v", err)
+307		}
+308		var requests atomic.Int32
+309		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+310		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+311			requests.Add(1)
+312			w.Header().Set("Content-Type", "application/json")
+313			_, _ = w.Write(body)
+314		}))
+315		defer srv.Close()
+316	
+317		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+318		fakeNow := time.Now()
+319		cache.now = func() time.Time { return fakeNow }
+320		ctx := context.Background()
+321	
+322		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+323			t.Fatalf("priming: %v", err)
+324		}
+325		requestsAfterPriming := requests.Load()
+326	
+327		// Two lookups for an unknown kid in quick succession (same fake
+328		// "now") must trigger at most one extra refetch between them, not
+329		// one per lookup — that's the rate limit closing the "unknown-kid
+330		// flood hammers the issuer" gap.
+331		_, _ = cache.KeyForKid(ctx, "no-such-kid")
+332		afterFirstUnknown := requests.Load()
+333		_, _ = cache.KeyForKid(ctx, "no-such-kid")
+334		afterSecondUnknown := requests.Load()
+335	
+336		if afterFirstUnknown != requestsAfterPriming+1 {
+337			t.Errorf("first unknown-kid lookup triggered %d extra fetch(es), want exactly 1", afterFirstUnknown-requestsAfterPriming)
+338		}
+339		if afterSecondUnknown != afterFirstUnknown {
+340			t.Errorf("second unknown-kid lookup (within the rate-limit window) triggered an extra fetch: %d -&gt; %d, want no change", afterFirstUnknown, afterSecondUnknown)
+341		}
+342	}
+343	
+344	// TestJWKSCache_FailedRefreshDoesNotHammerIssuer is Oren Castellan's PR
+345	// #30 re-review finding: without a floor on retry attempts, every single
+346	// request during a sustained issuer outage triggered its own network
+347	// fetch (bounded only by maxStaleness, not by request volume) — the same
+348	// "don't hammer a struggling dependency" reasoning already applied to the
+349	// unknown-kid path, missing from the ordinary TTL-refresh path. Multiple
+350	// KeyForKid calls in quick succession, all past TTL with the issuer down,
+351	// must make only one real fetch attempt per jwksMinRefreshRetryInterval.
+352	func TestJWKSCache_FailedRefreshDoesNotHammerIssuer(t *testing.T) {
+353		key, err := rsa.GenerateKey(rand.Reader, 2048)
+354		if err != nil {
+355			t.Fatalf("generating key: %v", err)
+356		}
+357		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+358		s := newJWKSTestServer(body)
+359		defer s.Close()
+360	
+361		cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min, min retry floor = 5s
+362		fakeNow := time.Now()
+363		cache.now = func() time.Time { return fakeNow }
+364		ctx := context.Background()
+365	
+366		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+367			t.Fatalf("priming: %v", err)
+368		}
+369	
+370		s.up.Store(false)
+371		fakeNow = fakeNow.Add(time.Minute + time.Second) // TTL expired
+372	
+373		var requestsBefore int32
+374		// Read the server's own request counter via a second server field
+375		// would require plumbing; instead assert indirectly: repeated calls
+376		// within the retry floor must all return the SAME error quickly
+377		// (served from enforceStaleness, not a fresh fetch attempt) — a real
+378		// per-call fetch would each take however long the (down) server's
+379		// connection refusal takes, which is fast here, so we assert on
+380		// lastAttempt not advancing instead.
+381		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+382			t.Fatalf("first post-TTL call: %v", err)
+383		}
+384		cache.mu.Lock()
+385		firstAttempt := cache.lastAttempt
+386		cache.mu.Unlock()
+387		_ = requestsBefore
+388	
+389		fakeNow = fakeNow.Add(time.Second) // still within jwksMinRefreshRetryInterval (5s) of firstAttempt
+390		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+391			t.Fatalf("second post-TTL call (within retry floor): %v", err)
+392		}
+393		cache.mu.Lock()
+394		secondAttempt := cache.lastAttempt
+395		cache.mu.Unlock()
+396	
+397		if !secondAttempt.Equal(firstAttempt) {
+398			t.Errorf("a second call within jwksMinRefreshRetryInterval triggered a new fetch attempt (lastAttempt moved from %v to %v) — want it to back off and reuse the stale cache instead", firstAttempt, secondAttempt)
+399		}
+400	
+401		// Past the retry floor, a new attempt IS made.
+402		fakeNow = fakeNow.Add(jwksMinRefreshRetryInterval)
+403		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+404			t.Fatalf("third post-TTL call (past retry floor): %v", err)
+405		}
+406		cache.mu.Lock()
+407		thirdAttempt := cache.lastAttempt
+408		cache.mu.Unlock()
+409		if thirdAttempt.Equal(firstAttempt) {
+410			t.Error("a call past jwksMinRefreshRetryInterval should have made a new fetch attempt")
+411		}
+412	}
+413	
+414	// TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry proves the
+415	// staleness ceiling isn't silently suspended while the retry floor is
+416	// skipping real fetch attempts — enforceStaleness must still fire once
+417	// maxStaleness is exceeded, even on a call that isn't itself attempting
+418	// a fetch.
+419	func TestJWKSCache_StalenessEnforcedEvenWhenBackingOffFromRetry(t *testing.T) {
+420		key, err := rsa.GenerateKey(rand.Reader, 2048)
+421		if err != nil {
+422			t.Fatalf("generating key: %v", err)
+423		}
+424		body := jwksBody(t, "key-1", &amp;key.PublicKey)
+425		s := newJWKSTestServer(body)
+426		defer s.Close()
+427	
+428		cache := NewJWKSCache(s.srv.URL, time.Minute, nil) // maxStaleness = 3min
+429		fakeNow := time.Now()
+430		cache.now = func() time.Time { return fakeNow }
+431		ctx := context.Background()
+432	
+433		if _, err := cache.KeyForKid(ctx, "key-1"); err != nil {
+434			t.Fatalf("priming: %v", err)
+435		}
+436		s.up.Store(false)
+437	
+438		// One real attempt right after TTL expires, which fails and sets
+439		// lastAttempt.
+440		fakeNow = fakeNow.Add(time.Minute + time.Second)
+441		_, _ = cache.KeyForKid(ctx, "key-1")
+442	
+443		// Jump straight past maxStaleness (3min from the last SUCCESSFUL
+444		// fetch), but still within jwksMinRefreshRetryInterval of the last
+445		// ATTEMPT — this call must back off from a new fetch attempt and
+446		// still correctly fail closed via enforceStaleness, not silently
+447		// succeed with the stale cache because no new attempt was made.
+448		fakeNow = fakeNow.Add(4 * time.Minute)
+449		_, err = cache.KeyForKid(ctx, "key-1")
+450		if err == nil {
+451			t.Fatal("expected an error once past max staleness, even on a call that backs off from a new fetch attempt")
+452		}
+453		if !errors.Is(err, ErrJWKSStale) {
+454			t.Errorf("error = %v, want ErrJWKSStale", err)
+455		}
+456	}
+457	
+458	// TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal is Ingrid
+459	// Solano's (02) cold re-check finding: KeyForKid runs before signature
+460	// verification, so an unauthenticated caller can send a token with a
+461	// fabricated kid at no cost. A single GLOBAL reservation gate would let
+462	// that caller occupy the one slot by repeating a garbage kid every
+463	// jwksUnknownKidRefetchInterval, starving a DIFFERENT, legitimately
+464	// rotated-in real kid's own refetch back to the full calendar TTL —
+465	// silently recreating most of the original gap. Reserving per kid closes
+466	// this: a garbage kid's own reservation must not block a different real
+467	// kid's reservation in the same window.
+468	func TestJWKSCache_UnknownKidReservationIsPerKidNotGlobal(t *testing.T) {
+469		oldKey, err := rsa.GenerateKey(rand.Reader, 2048)
+470		if err != nil {
+471			t.Fatalf("generating key: %v", err)
+472		}
+473		newKey, err := rsa.GenerateKey(rand.Reader, 2048)
+474		if err != nil {
+475			t.Fatalf("generating key: %v", err)
+476		}
+477	
+478		var serveNewKey atomic.Bool
+479		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+480			w.Header().Set("Content-Type", "application/json")
+481			if serveNewKey.Load() {
+482				_, _ = w.Write(jwksBody(t, "key-new", &amp;newKey.PublicKey))
+483			} else {
+484				_, _ = w.Write(jwksBody(t, "key-old", &amp;oldKey.PublicKey))
+485			}
+486		}))
+487		defer srv.Close()
+488	
+489		cache := NewJWKSCache(srv.URL, time.Hour, nil)
+490		ctx := context.Background()
+491	
+492		if _, err := cache.KeyForKid(ctx, "key-old"); err != nil {
+493			t.Fatalf("priming: %v", err)
+494		}
+495	
+496		// Attacker occupies the reservation for a garbage kid.
+497		_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+498		// Repeats it immediately — this must be denied (rate-limited), same
+499		// as before the fix.
+500		_, _ = cache.KeyForKid(ctx, "garbage-kid-from-attacker")
+501	
+502		// The issuer rotates for real. A legitimate lookup for the new kid,
+503		// in the SAME window the attacker's garbage kid already consumed,
+504		// must still get its own reservation and succeed — not be starved by
+505		// the attacker's unrelated kid.
+506		serveNewKey.Store(true)
+507		if _, err := cache.KeyForKid(ctx, "key-new"); err != nil {
+508			t.Errorf("KeyForKid(key-new) = %v, want the real rotated key's own reservation to succeed regardless of an attacker's unrelated garbage-kid reservation", err)
+509		}
+510	}
+511	
+512	// TestJWKSCache_UnknownKidReservationCapsDistinctKids is the other half
+513	// of Ingrid's ru
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Now let me run the build/test/vet/staticcheck as requested, and look at the middleware file fully.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; go build ./... 2&gt;&amp;1 | tail -</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; go build ./... 2&gt;&amp;1 | tail -50 &amp;&amp; echo \"---VET---\" &amp;&amp; go vet ./... 2&gt;&amp;1 | tail -50 &amp;&amp; echo \"---TEST---\" &amp;&amp; go test ./... -race 2&gt;&amp;1 | tail -80"
+}</pre><div class="lbl">result</div><pre>---VET---
+---TEST---
+ok  	loginid-takehome/cmd/api-service	(cached)
+?   	loginid-takehome/cmd/idp-connector	[no test files]
+ok  	loginid-takehome/internal/api	(cached)
+ok  	loginid-takehome/internal/app	(cached)
+ok  	loginid-takehome/internal/config	(cached)
+ok  	loginid-takehome/internal/dao	(cached)
+ok  	loginid-takehome/internal/dao/conformance	(cached)
+ok  	loginid-takehome/internal/dao/postgres	(cached)
+ok  	loginid-takehome/internal/dao/sqlite	(cached)
+?   	loginid-takehome/internal/model	[no test files]</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwtmiddleware.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwtmiddleware.go",
+  "offset": 130,
+  "limit": 80
+}</pre><div class="lbl">result</div><pre>130			case ScopeReadOwn, ScopeReadAny, ScopeSearch:
+131				found[Scope(f)] = true
+132			}
+133		}
+134		switch len(found) {
+135		case 0:
+136			return "", errors.New("token scope claim names no recognized scope")
+137		case 1:
+138			for s := range found {
+139				return s, nil
+140			}
+141			panic("unreachable")
+142		default:
+143			return "", errors.New("token scope claim names more than one distinct recognized scope, which this verifier does not disambiguate per request")
+144		}
+145	}
+146	
+147	// NewJWTMiddleware verifies every request's bearer token and populates
+148	// AuthContext on success, per handoff-03-auth.md v3/v4: public-key-only
+149	// verification (keys never includes signing-key material — enforced
+150	// structurally, since KeySource's real implementation, JWKSCache, only
+151	// ever holds *rsa.PublicKey values parsed from a JWKS response), pinned
+152	// RS256, kid-based key selection supporting a rotation overlap window (a
+153	// KeySource backed by the issuer's full published key set, not a single
+154	// cached key), and issuer/audience checks. Verification failure returns
+155	// 401 via writeUnauthorized — the same path LT-39's handlers already use
+156	// for a missing AuthContext, not a new response shape — with one
+157	// exception: a KeySource failing closed on exceeded JWKS staleness
+158	// (ErrJWKSStale) logs AuditJWKSUnavailable first, since that's a
+159	// token-infrastructure degradation, not an ordinary bad-credential
+160	// attempt, and worth distinguishing in the audit trail (Tomasz Wrede, 02
+161	// cold review). audit may be nil (tests that don't care about audit
+162	// output); production wiring always passes a real AuditLogger.
+163	func NewJWTMiddleware(keys KeySource, issuer, audience string, audit AuditLogger) func(http.Handler) http.Handler {
+164		v := &amp;jwtVerifier{keys: keys, issuer: issuer, audience: audience}
+165		return func(next http.Handler) http.Handler {
+166			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+167				ctx := r.Context()
+168				tokenString, ok := bearerToken(r)
+169				if !ok {
+170					logAuthnFailure(ctx, audit, nil)
+171					writeUnauthorized(w)
+172					return
+173				}
+174				ac, err := v.verify(ctx, tokenString)
+175				if err != nil {
+176					logAuthnFailure(ctx, audit, err)
+177					writeUnauthorized(w)
+178					return
+179				}
+180				r = r.WithContext(WithAuthContext(ctx, ac))
+181				next.ServeHTTP(w, r)
+182			})
+183		}
+184	}
+185	
+186	func logAuthnFailure(ctx context.Context, audit AuditLogger, err error) {
+187		if audit == nil {
+188			return
+189		}
+190		kind := AuditAuthnFailure
+191		// Both sentinels mean "verification is unavailable" (a
+192		// token-infrastructure problem), not "this specific token is
+193		// invalid" — ErrJWKSStale (a cache exists but aged past max
+194		// staleness) and ErrJWKSUnreachable (no cache exists yet at all,
+195		// the cold-start case) get the same distinct audit kind. A live
+196		// review finding caught this middleware previously only checking
+197		// ErrJWKSStale, so a cold-start JWKS failure (e.g. a Service port
+198		// mismatch discovered on the very first mint) was miscategorized as
+199		// an ordinary bad-credential attempt.
+200		if errors.Is(err, ErrJWKSStale) || errors.Is(err, ErrJWKSUnreachable) {
+201			kind = AuditJWKSUnavailable
+202		}
+203		audit.Log(ctx, AuditEvent{Kind: kind, Timestamp: time.Now().UTC()})
+204	}
+205	
+206	// bearerToken's scheme match is case-insensitive ("Bearer", "bearer",
+207	// "BEARER" all accepted) per RFC 7235 §2.1, which defines the
+208	// auth-scheme token as case-insensitive — a prior case-sensitive match
+209	// would 401 a structurally valid request from any client that happened</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Build and vet pass, tests pass. Now let's run staticcheck.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; which staticcheck || ls $(go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; which staticcheck || ls $(go env GOPATH)/bin/staticcheck 2&gt;&amp;1"
+}</pre><div class="lbl">result</div><pre>staticcheck not found
+/Users/warrenthompson/go/bin/staticcheck</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:56 AM PDT</span><span class="who">Nolan Reyes</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; /Users/warrenthompson/go/bin</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging &amp;&amp; /Users/warrenthompson/go/bin/staticcheck ./... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>(Bash completed with no output)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:57 AM PDT</span><span class="who">Nolan Reyes</span><div class="body">Ran the requested checks in the worktree at `/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging`: `go build ./...` clean, `go vet ./...` clean, `go test ./... -race` all pass (`internal/api` included), `staticcheck ./...` (at `/Users/warrenthompson/go/bin/staticcheck`) clean, no findings. Read `internal/api/jwks.go` and the touched section of `internal/api/jwtmiddleware.go` (lines 147–204) end to end.
+
+To Renata Cole — findings on PR #44 (`fix/jwks-fetch-observability`), Nolan Reyes.
+
+Last time I saw a "silent JWKS starvation" incident, the postmortem action item was exactly this — log the cold path, not just the steady-state one. This PR does that and I don't have a scenario that breaks the "once per streak" claim. Walking your specific questions:
+
+**1. Concurrency on the streak counter.** No bug. `refresh()` increments `c.consecutiveFailures` and computes `streakStart := c.consecutiveFailures == 1` inside the same mutex critical section, then logs outside the lock using that captured bool. Since the increment is serialized by the mutex, two goroutines racing into a failure transition can never both read the post-increment value as 1 — one gets 1 (logs), the other gets 2+ (doesn't). Same reasoning for recovery: `priorFailures := c.consecutiveFailures` is read and the counter reset to 0 in the same critical section, so a second concurrent successful fetch reads `priorFailures == 0` and correctly stays silent. I can't construct an interleaving that gets you zero logs (under-count) or two logs (over-count) for the same transition — the mutex is doing the actual work here, the boolean is just carrying the decision out of the lock. This is the right shape; I've seen the "check-then-log outside the lock without capturing the decision inside it" version of this bug before and it's not present here.
+
+One real but minor consequence, not a bug: under a flaky-not-fully-down network, two concurrent duplicate fetches (already an accepted trade-off per `KeyForKid`'s own doc comment) can have one fail and one succeed within the same moment, producing a "failed" log immediately followed by a "recovered after 1 failure" log. That's inherent to the already-accepted duplicate-fetch design, not something this PR introduces. Worth a one-line note in the log-format doc comment so a future on-call engineer doesn't mistake a flip-flop pair for a bug, but not rework.
+
+**2. `classifyJWKSFetchError` string matching.** This is a real, if bounded, fragility. The classifier substring-matches against `fetch()`'s own `fmt.Errorf` wording, and the new test (`TestClassifyJWKSFetchError`) constructs synthetic strings that mirror today's wording rather than calling real `fetch()` — so a future wording edit to `fetch()` (say, someone rewords "building JWKS request" to "constructing JWKS request" during an unrelated cleanup) silently degrades classification to `unknown` for that path, and nothing in this test suite would catch it. It's the same class of coupling I flagged on PR #30 for the retry-floor assumption — implicit contract between two things that live in the same file today but nobody's obligated to notice they're coupled tomorrow.
+
+Given it's same-file, same-PR-review-surface coupling, I'd call it acceptable to ship as-is, but cheap to harden: add one test that hits the real `fetch()` against a broken test server (bad URL for build-error, 503 response for status-error, truncated/invalid JSON body for parse-error) and classifies the actual returned error, not a hand-written string. That would catch wording drift without needing typed sentinel errors. I'd ask for that as a fast follow, not a blocker on this PR — the log line downstream still includes the full error text either way, so nothing is silently lost if the bucket comes back `unknown`, just less precise.
+
+**3. Log volume with the unknown-kid path also active during an outage.** Checked this specifically because it's exactly the kind of "two mechanisms doing rate-limiting independently, do they compound or fight" scenario that's burned me before. They don't fight here: `reserveUnknownKidRetry`'s retry path calls the same `refresh()` function, through the same mutex, incrementing the same `consecutiveFailures` field — there's no separate counter for that call site. So the "once per streak" gate is genuinely global across both trigger paths, not per-path. An attacker flooding fabricated kids during a real outage gets bounded extra fetch *attempts* (capped by `jwksMaxTrackedUnknownKids`, already reviewed on PR #30), but not bounded extra *log lines* beyond the one-per-streak — because none of those attempts move `consecutiveFailures` back to 1 once the streak's already started. No bug found here.
+
+**4. Cold-start inside a fast crash loop.** Two different scenarios need separating, and the PR only fixes one of them — worth being explicit with the PM about which. If the crash loop is *caused by* something unrelated to JWKS (bad readiness probe, OOM, whatever) and the pod never gets far enough to serve a single verification request, then `KeyForKid` is never called at all, `refresh()` never runs, and this fix's log line never fires — same silence as before, because the code path it's fixed on is simply unreached. That's not a regression, it's a boundary the fix doesn't claim to cover, but I'd rather Renata and the PM hear it named now than assume "we fixed cold-start logging" covers every crash-loop shape. The scenario this PR *does* fix — a pod that's up and serving traffic, whose first real verification request hits an unreachable JWKS endpoint — is a genuine improvement, and it's the scenario that actually happened in the live incident (the task description says the pod log showed the startup line, meaning it stayed up and took traffic). `log.Printf`'s default output goes to stderr unbuffered per call, so it should survive being captured by the container runtime's log pipe even under a subsequent fast kill; I have no reason to think the line gets lost between being written and being scraped, unlike a buffered/async logging library where I would ask that question.
+
+**5. Nothing else jumps out as a new bug.** The rest of the diff is consistent with the two prior review rounds' findings (the retry floor, the per-kid reservation cap, the staleness enforcement on the backoff path) — this PR doesn't touch any of that logic, only adds observability around it, and the existing tests for those mechanisms still pass. `jwksURLHost`'s fallback-to-raw-string on a parse failure is fine — it can't itself leak token material, and a malformed configured URL is an ops problem you'd want visible anyway, not a mask.
+
+Bottom line: the fail-closed-but-log fix does what the PM asked for, the concurrency handling is sound (mutex discipline, not luck), and I have one real finding (item 2, the string-matching coupling) that I'd want a fast-follow test for rather than a blocking rework, plus one scope note (item 4) so nobody oversells what "fixed cold-start logging" covers in a crash-loop world.
+
+Files reviewed: `/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwks_test.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-40-jwks-logging/internal/api/jwtmiddleware.go`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

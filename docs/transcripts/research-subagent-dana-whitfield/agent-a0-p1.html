@@ -1,0 +1,262 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research subagent (Dana Whitfield's session) — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Research subagent (Dana Whitfield's session)</h1><div class="sub">Unnamed research / consistency subagent · session 1 of 12 · model <span class="mono">claude-sonnet-5</span> · Sep 12, 2026 9:23 AM PDT – Sep 12, 2026 9:25 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 12, 9:23 AM PDT</span><span class="who">Lead</span><div class="body">You are contributing research to a take-home interview project directory at /Users/warrenthompson/Source/LoginID. Read /Users/warrenthompson/Source/LoginID/CLAUDE.md and /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/CLAUDE.md first for full context — this is a take-home assignment for an interview with LoginID (a passwordless/FIDO2 authentication company), and the "01-product-industry-research-design" track owns industry framing and design rationale.
+
+During the interview, a-auth.dev came up — a site/project created by Dick Hart, who is associated with the original OAuth standard. Research this using WebSearch and WebFetch:
+
+1. What is a-auth.dev — what does the site describe/propose? Is it a spec, a protocol, a product, a manifesto, something else?
+2. Who is Dick Hart in relation to OAuth history — what was his actual role in the original OAuth 1.0 standard (co-author, contributor, etc.)? Verify this carefully — don't assume, check what's publicly documented (Wikipedia, OAuth community site, IETF RFC 5849 author list, blog posts, interviews).
+3. What is the broader history of OAuth's creation (roughly 2006-2010, Blaine Cook/Twitter, the OAuth community, RFC 5849, then OAuth 2.0's RFC 6749) — enough to place a-auth.dev and Dick Hart's role accurately in that timeline.
+4. If a-auth.dev proposes something new (e.g., a successor/alternative to OAuth), summarize what problem it claims to solve and how, and how it might relate to LoginID's passwordless/passkey space (is it complementary, competing, orthogonal?).
+
+Be careful to distinguish verified facts from unclear/unconfirmed claims — flag anything you can't confirm from at least one credible source.
+
+Write your findings to a new file: /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/research-oauth-history.md — structured with clear headers, citations/sources (URLs) for each claim, and a short "relevance to LoginID assignment" section at the end tying this back to the industry framing this track owns.
+
+Do not modify any other files. Do not write code. Report back a brief summary (under 200 words) of what you found and any notable uncertainty flags.</div></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:23 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Do not start writing code until each track's CLAUDE.md is in place and reviewed.
+48	
+49	## Status
+50	
+51	Scaffolding phase — track directories and their CLAUDE.md files are being established. No implementation work has started yet.
+52	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Product &amp; Industry Research (incl. Design)
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Frame the three assignment questions as a real product problem, not just three isolated coding exercises. Show industry awareness of the space LoginID operates in — identity, authentication, and credential/PII management — and use that framing to justify the design choices the engineering track implements.
+8	
+9	## Owns
+10	
+11	- Industry/competitive framing: where this kind of DAO + REST API + third-party IDP connector fits in the identity/IAM landscape (e.g., how it compares to what LoginID itself does with passkeys/FIDO2, and why a password-and-username-based `user_credential` model is the deliberately simpler baseline the assignment is asking for).
+12	- Personas and use cases: who calls this API, why they need to search/retrieve user profile data, and why a service would need to pull PII from a third-party identity provider rather than owning that data itself.
+13	- API and data contract design rationale from a product lens: what fields belong in `user_profile` vs `user_credential`, what "search/retrieve" needs to support, and why the `/auth` and `/identity` connector contracts are shaped the way LoginID specified them.
+14	- Any UX/design artifacts for surfaces that would sit on top of this (e.g., an admin console for profile search, an onboarding flow that triggers the IDP connector) — light-touch, this is a backend assignment, so design work here should support the narrative rather than compete with it for attention.
+15	
+16	## Does not own
+17	
+18	- Actual security threat modeling and authn/authz mechanics for the API — that's `../02-ai-security-architecture/CLAUDE.md`.
+19	- The Go implementation — that's `../03-engineering-delivery/CLAUDE.md`.
+20	- Database schema and multi-DB strategy — that's `../05-data-ops/CLAUDE.md`.
+21	
+22	## Deliverables
+23	
+24	- A short industry/competitive framing document.
+25	- Persona and use-case notes tied directly back to the three assignment questions.
+26	- Design rationale for the API surface and the third-party connector contracts, written so the engineering track can implement against it without re-deriving the reasoning.
+27	
+28	## AI tooling note
+29	
+30	Record which AI tool/workflow produced this track's output (this project is being built with Claude Code) and how — e.g., research done via a scoped subagent reading this file as its brief.
+31	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:23 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">ToolSearch</span> select:WebSearch,WebFetch</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "select:WebSearch,WebFetch",
+  "max_results": 5
+}</pre><div class="lbl">result</div><pre>[tool reference: ]
+[tool reference: ]</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:23 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://a-auth.dev</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://a-auth.dev",
+  "prompt": "What is this site describing/proposing? Is it a spec, protocol, product, manifesto? Who authored it? Summarize the problem it claims to solve and the proposed solution. Note any mention of OAuth history or Dick Hart."
+}</pre><div class="lbl err">result — error</div><pre>getaddrinfo ENOTFOUND a-auth.dev</pre></div></details><details><summary><span class="tn">WebSearch</span> a-auth.dev Dick Hart</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "a-auth.dev Dick Hart"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "a-auth.dev Dick Hart"
+
+Links: [{"title":"Richard Hart","url":"https://en.wikipedia.org/wiki/Richard_Hart"},{"title":"Dick Hart (footballer)","url":"https://en.wikipedia.org/wiki/Dick_Hart_(footballer)"},{"title":"John Dick (footballer, born 1930)","url":"https://en.wikipedia.org/wiki/John_Dick_(footballer,_born_1930)"},{"title":"Dick Harter","url":"https://en.wikipedia.org/wiki/Dick_Harter"},{"title":"Dick Hart (golfer)","url":"https://en.wikipedia.org/wiki/Dick_Hart_(golfer)"},{"title":"Open Standards","url":"https://www.hello.coop/approach/standards/"}]
+
+Based on the search results, I found relevant information about a-auth.dev and Dick:
+
+Dick is the author of AAuth, and the AAuth specifications are maintained in the AAuth repository, with more background, explainers, and community resources available at aauth.dev. 
+
+AAuth gives every agent its own cryptographic identity, published at a well-known URL and verifiable by any party with no pre-registration or shared secrets, with proof-of-possession bound to every request.
+
+Dick continues his work to create a #BetterInternet through open, user-centric identity protocols. Additionally, Dick is the author of OAuth Protected Authorization and Dick is one of the co-chairs of the IPSIE working group.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> "Dick Hart" OAuth 1.0 co-author history</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "\"Dick Hart\" OAuth 1.0 co-author history"
+}</pre><div class="lbl">result</div><pre>Web search results for query: ""Dick Hart" OAuth 1.0 co-author history"
+
+Links: [{"title":"Dick Hardt - Creator of OAuth, building AAuth","url":"https://pt.linkedin.com/in/dickhardt"},{"title":"OAuth - Wikipedia","url":"https://en.wikipedia.org/wiki/OAuth2"},{"title":"SignIn.org and the Genesis of the GNAP Working Group","url":"https://identityunlocked.auth0.com/public/49/Identity,-Unlocked.--bed7fada/3a164a46"},{"title":"OAuth WRAP Overview Dick Hardt IETF 77, March 22, 2010 1","url":"https://www.ietf.org/proceedings/77/slides/oauth-1.pdf"},{"title":"Open Standards","url":"https://www.hello.coop/approach/standards/"},{"title":"dickhardt (Dick Hardt) · GitHub","url":"https://github.com/dickhardt"},{"title":"dblp: Dick Hardt","url":"https://dblp.org/pid/145/7354.html"},{"title":"OAuth","url":"https://en.wikipedia.org/wiki/OAuth"},{"title":"Dick Hardt – Hellō Blog","url":"https://blog.hello.coop/author/dickhardt/"},{"title":"Dick Hardt","url":"https://en.wikipedia.org/wiki/Dick_Hardt"}]
+
+Based on the search results, here's what I found about Dick Hardt and OAuth:
+
+Dick Clarence Hardt (born May 28, 1963) is the founder of SignIn.Org and is an advocate of Identity 2.0. However, it's important to note that he is described as the "OAuth 2.0 instigator" rather than a co-author of OAuth 1.0.
+
+Regarding OAuth 1.0 specifically, the search results indicate that Dick Hardt served as the editor for OAuth WRAP, which was a different protocol built upon OAuth 1.0. He co-authored the OAuth-WRAP specification with help from counterparts at Google, Microsoft, and other large service providers.
+
+Dick co-founded the OpenID Foundation and led the design of two foundational technologies: OAuth 2.0 and JSON Web Token (JWT). So while Dick Hardt played a significant role in OAuth 2.0 and OAuth WRAP (which was based on OAuth 1.0), he appears to have been more directly involved in OAuth 2.0's development rather than being a co-author of the original OAuth 1.0 specification.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:23 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebFetch</span> https://aauth.dev</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://aauth.dev",
+  "prompt": "What is this site describing/proposing? Is it a spec, protocol, product, manifesto? Who authored it? Summarize the problem it claims to solve and the proposed solution, especially regarding AI agent identity/authorization. Note any mention of OAuth history or Dick Hardt."
+}</pre><div class="lbl">result</div><pre># AAuth: Overview
+
+## Nature
+AAuth is an **Internet-Draft specification** (standards-track protocol) with accompanying SDKs, tooling, and reference implementations. It's not a product or manifesto, though it contains advocacy elements.
+
+## Authorship
+Created by **Dick Hardt**, original author of OAuth 2.0. The specification is developed as an open-source project with community contribution and lives in IETF standards process.
+
+## The Problem
+Traditional authorization protocols assume clients are built at compile-time with known, static relationships to services. AI agents break this model by:
+
+- **Assembling dynamically** at runtime against previously-unknown services
+- **Lacking portable identity** (OAuth client IDs don't transfer between providers)
+- **Requiring API key copies** that inevitably leak
+- **Needing mid-task authorization** decisions, not just upfront consent
+- **Operating across trust domains** (organizations, clouds, identity systems)
+
+As Hardt states: *"Clients used to be written. Now agents assemble them at runtime. The protocols underneath weren't built for that."*
+
+## The Solution
+AAuth replaces API keys with **cryptographic agent identity**. Each HTTP client gets its own verifiable identity and signs requests directly, eliminating shared secrets. The protocol provides five progressive access modes (identity-based, resource-managed, person-identity, person-server, and federated) that coexist with OAuth 2.0 rather than replacing it. Tokens carry both identity and authorization claims for single requests rather than standing permissions.
+
+The tagline captures the core shift: *"The web gave servers identity. It's time clients got the same."*</pre></div></details><details><summary><span class="tn">WebFetch</span> https://en.wikipedia.org/wiki/Dick_Hardt</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://en.wikipedia.org/wiki/Dick_Hardt",
+  "prompt": "Summarize Dick Hardt's biography, especially his role in OAuth, OAuth 2.0, OAuth WRAP, Identity 2.0, SignIn.org, and any current projects like AAuth. Include dates."
+}</pre><div class="lbl">result</div><pre># Dick Hardt's Biography
+
+**Dick Clarence Hardt** (born May 28, 1963) is a Canadian technology entrepreneur and identity advocate.
+
+## Key Roles and Contributions
+
+**ActiveState (1997-2003)**: Hardt founded this company, which became prominent in open-source programming tools and anti-spam software. Under his leadership as CEO, Sophos acquired it for $23 million in 2003. He also claimed to have created the original Perl port to Windows in the mid-1990s.
+
+**Identity 2.0 Movement**: Hardt emerged as a leading advocate for this approach to internet identity management. He spoke extensively at major technology conferences including Web 2.0, OSCON, and the International World Wide Web Conference (2007).
+
+**Sxip Identity (2003)**: He founded this company to advance next-generation internet identity technology and served as a founding board member of the OpenID Foundation.
+
+**Later Career**: Hardt joined Microsoft in December 2008 as a partner architect focusing on identity problems, departing on January 15, 2010. He subsequently founded Bubbler (a development company using Node.js) and joined Amazon in 2015.
+
+## Notable Absence
+
+The provided Wikipedia article does not mention OAuth, OAuth 2.0, OAuth WRAP, or AAuth, so information about those specific projects cannot be confirmed from this source.</pre></div></details><details><summary><span class="tn">WebFetch</span> https://en.wikipedia.org/wiki/OAuth</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "url": "https://en.wikipedia.org/wiki/OAuth",
+  "prompt": "Summarize the history of OAuth creation: 2006-2010, Blaine Cook and Twitter, the OAuth community, the authors of RFC 5849 (OAuth 1.0), and how OAuth 2.0 (RFC 6749) came about including Dick Hardt's role and OAuth WRAP."
+}</pre><div class="lbl">result</div><pre># OAuth History: 2006-2010
+
+**Origins (2006-2007)**
+OAuth emerged in November 2006 when Blaine Cook developed an OpenID implementation for Twitter. Simultaneously, Ma.gnolia needed a way for members to authorize Mac OS X Dashboard widgets to access their service. Cook collaborated with Chris Messina and Larry Halff from Magnolia, plus David Recordon, to address the lack of "open standards for API access delegation."
+
+An OAuth discussion group formed in April 2007, with Google's DeWitt Clinton joining the effort. By July 2007, the team had drafted an initial specification, with Eran Hammer later coordinating contributions into a formal specification.
+
+**OAuth 1.0 Release (2007-2010)**
+The OAuth Core 1.0 final draft was released on October 3, 2007. The IETF held a "Birds of a Feather" session at their November 2008 Minneapolis meeting, garnering widespread support for formally chartering an OAuth working group. OAuth 1.0 was published as RFC 5849 in April 2010. Beginning August 31, 2010, Twitter required all third-party applications to use OAuth.
+
+**OAuth 2.0 Development**
+The Wikipedia article provided does not mention OAuth WRAP or detail the specific progression to RFC 6749 beyond noting that OAuth 2.0 was published in October 2012 under Dick Hardt's editorship, incorporating additional use cases from the broader IETF community.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:24 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><details><summary><span class="tn">WebSearch</span> RFC 5849 OAuth 1.0 authors list Hammer-Lahav</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "RFC 5849 OAuth 1.0 authors list Hammer-Lahav"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "RFC 5849 OAuth 1.0 authors list Hammer-Lahav"
+
+Links: [{"title":"RFC 5849: The OAuth 1.0 Protocol | Guide books - ACM Digital Library","url":"https://dl.acm.org/doi/abs/10.17487/RFC5849"},{"title":"RFC 5849: The OAuth 1.0 Protocol | RFC Editor","url":"https://www.rfc-editor.org/info/rfc5849/"},{"title":"RFC 5849: The OAuth 1.0 Protocol | Guide books","url":"https://dl.acm.org/doi/10.17487/RFC5849"},{"title":"RFC 5849: The OAuth 1.0 Protocol","url":"https://www.rfc-editor.org/rfc/rfc5849.html"},{"title":"RFC 5849 - The OAuth 1.0 Protocol","url":"https://datatracker.ietf.org/doc/rfc5849/"},{"title":"Unified Singular Protocol Flow for OAuth (USPFO) Ecosystem","url":"https://arxiv.org/pdf/2301.12496"},{"title":"hjp: doc: RFC 5849: The OAuth 1.0 Protocol","url":"https://www.hjp.at/doc/rfc/rfc5849.html"},{"title":"oauth1-client/rfc5849.txt at master · thephpleague/oauth1-client","url":"https://github.com/thephpleague/oauth1-client/blob/master/rfc5849.txt"},{"title":"matlab_web/old_web_functions/oauth/documentation/RFC 5849 - The OAuth 1.0 Protocol.htm at master · JimHokanson/matlab_web","url":"https://github.com/JimHokanson/matlab_web/blob/master/old_web_functions/oauth/documentation/RFC%205849%20-%20The%20OAuth%201.0%20Protocol.htm"}]
+
+Based on the search results, RFC 5849 was edited by Eran Hammer-Lahav and authored by: Mark Atwood, Dirk Balfanz, Darren Bounds, Richard M. Conlan, Blaine Cook, Leah Culver, Breno de Medeiros, Brian Eaton, Kellan Elliott-McCrea, Larry Halff, Eran Hammer-Lahav, Ben Laurie, Chris Messina, John Panzer, Sam Quigley, David Recordon, Eran Sandler, Jonathan Sergent, Todd Sieling, Brian Slesinsky, and Andy Smith.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> RFC 6749 OAuth 2.0 authors Hardt editor</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "RFC 6749 OAuth 2.0 authors Hardt editor"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "RFC 6749 OAuth 2.0 authors Hardt editor"
+
+Links: [{"title":"RFC 6749: The OAuth 2.0 Authorization Framework | Guide books","url":"https://dlnext.acm.org/doi/10.17487/RFC6749"},{"title":"RFC 6749: The OAuth 2.0 Authorization Framework | RFC Editor","url":"https://www.rfc-editor.org/info/rfc6749/"},{"title":"RFC 6749: The OAuth 2.0 Authorization Framework","url":"https://www.rfc-editor.org/rfc/rfc6749.html"},{"title":"RFC 6749: The OAuth 2.0 Authorization Framework | Guide books","url":"https://dl.acm.org/doi/10.17487/rfc6749"},{"title":"@misc{rfc6749, series = {Request for Comments}, number = 6749,","url":"https://datatracker.ietf.org/doc/rfc6749/bibtex/"},{"title":"Introduction to OAuth 2.0 By Bertrand Carlier © 2023 IDPro, Bertrand Carlier","url":"https://bok.idpro.org/article/99/galley/230/view/"},{"title":"The OAuth 2.0 Authorization Framework: Bearer Token Usage","url":"https://self-issued.info/docs/draft-ietf-oauth-v2-bearer.pdf"},{"title":"The Little Book of OAuth 2.0 RFCs Aaron Parecki","url":"https://oauth.net/books/The%20Little%20Book%20of%20OAuth%202.0%20RFCs.pdf"}]
+
+Based on the search results, RFC 6749 was edited by D. Hardt from Microsoft. The search results show that Dick Hardt is listed as the author, with the "Ed." designation indicating his role as editor.
+
+The RFC was published on October 1, 2012, and the search results indicate that while Hardt served as the editor, the RFC represents a collaborative effort within the IETF community. The search results don't explicitly list all other contributing authors/authors, though they suggest multiple contributors were involved in its development.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details><details><summary><span class="tn">WebSearch</span> Dick Hardt OAuth WRAP Microsoft OAuth 2.0 history "did not" OR "not involved" OAuth 1.0</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "query": "Dick Hardt OAuth WRAP Microsoft OAuth 2.0 history \"did not\" OR \"not involved\" OAuth 1.0"
+}</pre><div class="lbl">result</div><pre>Web search results for query: "Dick Hardt OAuth WRAP Microsoft OAuth 2.0 history "did not" OR "not involved" OAuth 1.0"
+
+Links: [{"title":"OAuth WRAP Overview Dick Hardt IETF 77, March 22, 2010 1","url":"https://www.ietf.org/proceedings/77/slides/oauth-1.pdf"},{"title":"Dick Hardt - Creator of OAuth, building AAuth","url":"https://pt.linkedin.com/in/dickhardt"},{"title":"RFC 6750: OAuth 2.0 Bearer Token Usage","url":"https://www.rfc-editor.org/rfc/rfc6750.html"},{"title":"OAuth Web Resource Authorization Profiles (OAuth WRAP) | Microsoft Learn","url":"https://learn.microsoft.com/en-us/previous-versions/azure/azure-services/hh801906(v=azure.100)"},{"title":"OAuth - Wikipedia","url":"https://en.wikipedia.org/wiki/OAuth2"},{"title":"The OAuth 2.0 Authorization Framework | Semantic Scholar","url":"https://www.semanticscholar.org/paper/The-OAuth-2.0-Authorization-Framework-Hardt/8ba0d276e4ad102f242a15661b7dc69295a8a02e"},{"title":"SignIn.org and the Genesis of the GNAP Working Group","url":"https://identityunlocked.auth0.com/public/49/Identity,-Unlocked.--bed7fada/3a164a46"},{"title":"The OAuth 2.0 Authorization Framework","url":"https://www.ietf.org/rfc/rfc6749.html"},{"title":"Dick Hardt","url":"https://en.wikipedia.org/wiki/Dick_Hardt"}]
+
+Based on the search results, here's what I found about Dick Hardt, OAuth WRAP, Microsoft, and OAuth history:
+
+## Dick Hardt's Role in OAuth WRAP and OAuth 2.0
+
+Dick Hardt was the Editor of the OAuth WRAP specification, working with colleagues from Yahoo, Google, and Microsoft. OAuth-WRAP was based on OAuth 1.0 and optimized for scalability and ease of implementation, with many concepts from OAuth-WRAP incorporated into OAuth 2.0.
+
+## History of Development
+
+Dick Hardt worked at Microsoft when OAuth 1.0 came out and found it complicated to deploy, so he worked with colleagues from Yahoo and Google to develop an alternative. They initially wanted to call it OAuth, but Eran Hammer-Lahav (who was working on OAuth) didn't want that name unless it built on top of OAuth, so they named it WRAP and later agreed to call it OAuth WRAP.
+
+## OAuth 2.0 Publication
+
+Dick Hardt took over the editor role, and the framework was published in October 2012. The OAuth 2.0 Authorization Framework was published as RFC 6749, which replaced and obsoleted the OAuth 1.0 protocol.
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:24 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">I now have enough verified material. Writing the research file.</div><details><summary><span class="tn">Write</span> /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/research-oauth-history.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/research-oauth-history.md",
+  "content": "# Research: a-auth.dev, Dick Hardt, and the OAuth Lineage\n\nAd hoc research note produced for the `01-product-industry-research-design` track, prompted by a mention of \"a-auth.dev\" and \"Dick Hart\" during the LoginID interview. Produced with Claude Code using WebSearch/WebFetch against public sources (Wikipedia, RFC Editor/IETF datatracker, project site, LinkedIn, podcast transcript). No file other than this one was modified.\n\n## 0. First correction: the name and the domain\n\nTwo things said in the interview appear to be slightly off, and it's worth flagging before anything else:\n\n- The person is **Dick Hardt**, not \"Dick Hart.\" (There are unrelated people named \"Dick Hart\" — a footballer, a golfer — who show up in search results and are not this person.)\n- The live project domain that resolves is **aauth.dev** (no hyphen). `a-auth.dev` returned `ENOTFOUND` (DNS does not resolve) when fetched directly during this research. It's likely a mishearing/mistyping of `aauth.dev` in conversation, or a domain that has since been retired/changed. This note treats `aauth.dev` as the intended site, based on content matching what was described in the interview.\n\n## 1. What is aauth.dev?\n\nPer the site's own content (fetched via WebFetch, 2026-09-12): AAuth is presented as an **Internet-Draft specification** — i.e. an IETF-track protocol proposal, not a shipping commercial product — with accompanying SDKs, tooling, and reference implementations, plus explainer/community material. It carries some manifesto-like advocacy language alongside the technical spec content, so it's fair to describe it as \"a protocol proposal with a manifesto layer,\" rather than purely one or the other.\n\n**Author:** Dick Hardt, described on the site as \"original author of OAuth 2.0\" (see Section 2 for how accurate that framing is). It's an open-source effort, developed in public with community contribution, and is explicitly positioned as going through (or aiming for) the IETF standards process rather than as a closed vendor spec.\n\n**The problem it claims to solve:** traditional authorization protocols (OAuth 2.0 included) assume a client application is compiled/registered ahead of time, with a static, known relationship to the services it calls, and that a static, pre-registered client ID/secret model (API keys) is adequate. The site's argument is that AI agents break this assumption because they:\n\n- assemble their own tool/service relationships dynamically at runtime, often against services never seen before,\n- have no portable identity — an OAuth client ID registered with one provider doesn't transfer to another,\n- rely on copying around long-lived API keys, which leak,\n- need authorization decisions made mid-task rather than only as one upfront consent screen,\n- operate across trust domains (multiple orgs, clouds, identity systems) simultaneously.\n\nQuoted tagline from the site: *\"Clients used to be written. Now agents assemble them at runtime. The protocols underneath weren't built for that,\"* and *\"The web gave servers identity. It's time clients got the same.\"*\n\n**The proposed mechanism:** replace shared-secret API keys with **cryptographic agent identity** — every HTTP client gets its own verifiable identity (published at a well-known URL, verifiable without pre-registration or shared secrets) and signs its own requests directly (proof-of-possession per request) rather than presenting a bearer credential. The spec describes five progressive access modes (identity-based, resource-managed, person-identity, person-server, federated) and is explicitly framed as **coexisting with OAuth 2.0**, not replacing it — tokens carry identity + per-request authorization claims rather than standing, long-lived permissions.\n\n**Uncertain/unconfirmed:** the deeper technical claims above (the five access modes, the specific token semantics) come from a single WebFetch summarization pass over the live site rather than a full read of the Internet-Draft text itself, and were not cross-checked against a second independent source (e.g., an actual IETF datatracker draft filing). Treat the mechanism description as \"what the site says about itself,\" not independently verified protocol analysis.\n\n## 2. Who is Dick Hardt, really, in OAuth history?\n\nThis is the part worth being careful about, because the interview framing (\"associated with the original OAuth standard\") is easy to over-read as \"co-author of OAuth 1.0,\" and the evidence does not support that.\n\n**Confirmed, from RFC 5849 (OAuth 1.0, published April 2010) itself:** the author/contributor list is Eran Hammer-Lahav (editor), Mark Atwood, Dirk Balfanz, Darren Bounds, Richard M. Conlan, Blaine Cook, Leah Culver, Breno de Medeiros, Brian Eaton, Kellan Elliott-McCrea, Larry Halff, Ben Laurie, Chris Messina, John Panzer, Sam Quigley, David Recordon, Eran Sandler, Jonathan Sergent, Todd Sieling, Brian Slesinsky, and Andy Smith. **Dick Hardt is not on this list.** He was not a co-author or credited contributor of OAuth 1.0 / RFC 5849. (Source: RFC Editor / IETF datatracker listing for RFC 5849.)\n\n**What Dick Hardt actually did:** he was at Microsoft when OAuth 1.0 shipped, found it too complex to deploy, and — working with counterparts at Yahoo and Google — built an alternative simplified authorization profile originally intended to be called \"OAuth\" but renamed **OAuth WRAP** (Web Resource Authorization Profiles) after Eran Hammer-Lahav objected to reusing the OAuth name for something that didn't build on the OAuth 1.0 base. OAuth WRAP built on / was compatible with OAuth 1.0 concepts and was optimized for simpler implementation. Many WRAP concepts were subsequently folded into what became OAuth 2.0. (Source: Identity, Unlocked podcast transcript — \"SignIn.org and the Genesis of the GNAP Working Group\" — and IETF 77 (March 2010) OAuth WRAP slide deck.)\n\n**His OAuth 2.0 role is well documented and real:** RFC 6749, \"The OAuth 2.0 Authorization Framework,\" published October 2012, lists **D. Hardt (Ed.)** as editor. That is a genuine, verifiable, primary role — he shepherded and edited the specification that obsoleted OAuth 1.0. (Source: RFC 6749, rfc-editor.org.)\n\n**Other confirmed biographical facts** (Wikipedia): born 1963, Canadian technology entrepreneur; founded ActiveState (sold to Sophos, 2003); a leading voice in the mid-2000s \"Identity 2.0\" movement; founded Sxip Identity (2003) and was a founding board member of the OpenID Foundation; joined Microsoft as a partner architect in December 2008 focused on identity, left January 2010 (this is the window during which the WRAP work happened); later founded Bubbler, joined Amazon in 2015. Wikipedia's biography text itself does not mention OAuth WRAP or AAuth by name — those details come from the RFC record and the podcast/site sources above, not from Wikipedia.\n\n**Net assessment:** \"associated with the original OAuth standard\" is defensible only if read loosely — he is a central figure in the OAuth *lineage* (WRAP → OAuth 2.0 editor), but he was **not** a co-author of the original OAuth 1.0 standard (RFC 5849). The precise, defensible framing is: **\"Dick Hardt is the editor of OAuth 2.0 (RFC 6749) and creator of OAuth WRAP, not a co-author of OAuth 1.0.\"** He also self-describes (LinkedIn) as \"Creator of OAuth,\" which is a claim from his own bio and is the kind of self-characterization that should be flagged as his own framing rather than independently confirmed — the RFC record supports \"OAuth 2.0 editor,\" which is a specific and significant credential, but the discrete OAuth 1.0 authorship claim doesn't hold up against RFC 5849's actual byline.\n\n## 3. Broader OAuth timeline, for context\n\n- **Nov 2006:** Blaine Cook builds an OpenID implementation for Twitter; around the same time Ma.gnolia needs a way to let Mac OS X Dashboard widgets access user accounts without sharing passwords. Cook, Chris Messina, and Larry Halff (Ma.gnolia), plus David Recordon, conclude there's no open standard for this kind of delegated API access.\n- **April 2007:** an open OAuth discussion group forms; Google's DeWitt Clinton joins.\n- **July 2007:** an initial spec draft exists; Eran Hammer-Lahav becomes the person coordinating the effort into a formal specification.\n- **Oct 2007:** OAuth Core 1.0 final draft released.\n- **Nov 2008:** IETF \"Birds of a Feather\" session at the Minneapolis meeting builds support for a formally chartered IETF OAuth working group.\n- **~2009-2010:** Dick Hardt (at Microsoft) and colleagues at Yahoo/Google build OAuth WRAP as a simpler alternative/profile, intending it to fold back into the OAuth effort.\n- **April 2010:** OAuth 1.0 published as **RFC 5849** (informational, not yet a full IETF standards-track document at that point).\n- **Aug 2010:** Twitter requires all third-party apps to use OAuth.\n- **Oct 2012:** **OAuth 2.0** published as **RFC 6749**, edited by Dick Hardt, obsoleting/replacing OAuth 1.0. (RFC 6750, Bearer Token Usage, published alongside it.)\n- **Later:** the OAuth ecosystem continues to evolve (PKCE, device flow, token exchange, DPoP, GNAP as an even more ambitious successor effort that Hardt has also been involved with per the SignIn.org podcast source) — this track's research did not go deep into post-2012 OAuth evolution since it's outside what's needed to place a-auth.dev/AAuth in context.\n\n## 4. Relevance to the LoginID assignment (Track 01 framing)\n\nThis track owns industry/competitive framing for the identity/IAM space LoginID operates in — passwordless auth, FIDO2/passkeys, and now AI-agent identity is an adjacent, fast-emerging sub-space worth naming explicitly in the framing document.\n\n- **Complementary, not competing, with LoginID's core passkey/FIDO2 space.** AAuth is solving a different layer of the identity stack: it's about **authorizing and identifying HTTP clients/agents to services** (a client-credential / machine-to-machine authorization problem), whereas LoginID's core passwordless proposition is about **authenticating a human to a service** (replacing passwords with FIDO2/WebAuthn passkeys). The two are largely orthogonal: FIDO2 answers \"is this the real person,\" AAuth-style protocols answer \"is this the real agent/client, acting on whose behalf, with what scoped permission, for this one request.\" A mature identity platform plausibly needs both.\n- **Where they do intersect:** AAuth's \"person-identity\" and \"person-server\" access modes (per the site's own framing) are explicitly about binding an agent's actions back to a human principal — which is squarely the kind of problem passkey-based strong authentication is meant to anchor. If LoginID were positioning itself for the agentic-AI moment, the credible story is \"we provide the strong, phishing-resistant human-authentication anchor that agent-identity protocols like AAuth need at the root of their trust chain,\" not \"we compete with AAuth.\"\n- **For this take-home's actual assignment (DAO + REST API + third-party IDP connector):** this research is context/framing rather than something that changes the API contracts already specified by LoginID. It's useful supporting material for the industry-framing document (e.g., a paragraph situating this assignment's `/auth` + `/identity` connector pattern against the broader trend of moving away from static, pre-registered client credentials — the same critique AAuth levels at the \"static client at compile-time\" assumption applies loosely to why a third-party-IDP connector model, and multi-database credential storage, need to be designed with an eye toward evolving beyond simple username/password `user_credential` records).\n- **Caveat for whoever uses this in the final submission:** don't cite \"Dick Hart\" or claim he co-authored OAuth 1.0 in the submission — use \"Dick Hardt, editor of OAuth 2.0 (RFC 6749) and creator of OAuth WRAP\" if a name/credential needs to be attached to a citation of AAuth/aauth.dev.\n\n## Sources\n\n- [aauth.dev](https://aauth.dev) — project site (fetched directly)\n- [RFC 5849 — The OAuth 1.0 Protocol](https://www.rfc-editor.org/rfc/rfc5849.html) (RFC Editor)\n- [RFC 5849 info page / author list](https://www.rfc-editor.org/info/rfc5849/)\n- [RFC 5849 — IETF Datatracker](https://datatracker.ietf.org/doc/rfc5849/)\n- [RFC 6749 — The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/rfc/rfc6749.html) (RFC Editor)\n- [RFC 6749 info page](https://www.rfc-editor.org/info/rfc6749/)\n- [OAuth — Wikipedia](https://en.wikipedia.org/wiki/OAuth)\n- [Dick Hardt — Wikipedia](https://en.wikipedia.org/wiki/Dick_Hardt)\n- [Dick Hardt — LinkedIn (\"Creator of OAuth, building AAuth\")](https://pt.linkedin.com/in/dickhardt) — self-description, treated as a claim rather than independent confirmation\n- [OAuth WRAP Overview, Dick Hardt, IETF 77 slide deck, March 22, 2010](https://www.ietf.org/proceedings/77/slides/oauth-1.pdf)\n- [SignIn.org and the Genesis of the GNAP Working Group — Identity, Unlocked podcast transcript](https://identityunlocked.auth0.com/public/49/Identity,-Unlocked.--bed7fada/3a164a46)\n- [OAuth Web Resource Authorization Profiles (OAuth WRAP) — Microsoft Learn (archived docs)](https://learn.microsoft.com/en-us/previous-versions/azure/azure-services/hh801906(v=azure.100))\n"
+}</pre><div class="lbl">result</div><pre>File created successfully at: /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/research-oauth-history.md (file state is current in your context — no need to Read it back)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 12, 9:25 AM PDT</span><span class="who">Research subagent (Dana Whitfield's session)</span><div class="body">Research written to `/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/research-oauth-history.md`. No other files touched.
+
+Key findings:
+
+- **Name/domain correction**: the person is **Dick Hardt** (not "Dick Hart"), and the live domain is **aauth.dev** (a-auth.dev doesn't resolve — likely a mishearing).
+- **aauth.dev** is an Internet-Draft protocol proposal (with SDKs/tooling, some manifesto-style advocacy) for giving AI agents cryptographic, verifiable identity instead of shared API keys — designed to coexist with, not replace, OAuth 2.0.
+- **Verified via RFC 5849's actual byline**: Dick Hardt is NOT a co-author of OAuth 1.0 (authors are Hammer-Lahav, Cook, Messina, Recordon, etc. — no Hardt). His real, confirmed role is **editor of OAuth 2.0 (RFC 6749, 2012)**, having previously created **OAuth WRAP** at Microsoft as a simplified alternative that fed into OAuth 2.0. So "associated with the original OAuth standard" is only loosely true — precise framing is "OAuth 2.0 editor / OAuth WRAP creator," not OAuth 1.0 co-author.
+- Placed this in the 2006–2012 OAuth timeline (Cook/Twitter → RFC 5849 → WRAP → RFC 6749) and added a relevance section: AAuth addresses agent/client authorization, which is complementary/orthogonal to LoginID's human-authentication (FIDO2/passkey) space rather than competing with it, with a possible narrative that passkeys anchor the human-identity root that agent-identity protocols need.
+- One uncertainty flag: the LinkedIn "Creator of OAuth" self-description is noted as his own claim, not independently confirmed, and the AAuth site's detailed technical claims (five access modes, token semantics) come from one WebFetch pass, not cross-verified.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

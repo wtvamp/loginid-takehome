@@ -1,0 +1,1259 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 12 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 5:15 AM PDT – Sep 13, 2026 5:17 AM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 5:15 AM PDT</span><span class="who">Lead</span><div class="body">Review PR #33 on the loginid-takehome repo (github.com/wtvamp/loginid-takehome), branch feature/LT-52-healthz-db, for track 03-engineering-delivery. This implements LT-52 criterion 5 (the last open item on that story, per 04-infra-devops/refinement/postgres-in-namespace.md's PO acceptance review section): /healthz in verifier-mode api-service must report DB connectivity as a boolean/enum only ("db":"ok"/"down"), never leaking a DSN, host, port, or raw driver error string, checked via something like a trivial SELECT 1 / PingContext, bounded so it can never hang past a kubelet liveness deadline.
+
+Files changed (diff `git diff origin/main...feature/LT-52-healthz-db` in the repo, or read from the worktree at /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz):
+- internal/app/app.go: adds `DB` field (json:"db,omitempty") to healthResponse; adds `dbPingTimeout = 1*time.Second`; adds `healthHandlerWithDB(service string, pingDB *sql.DB) http.HandlerFunc` — reports "down" if pingDB is nil or PingContext (bounded by dbPingTimeout via context.WithTimeout on r.Context()) errors, "ok" otherwise; always returns HTTP 200 with "status":"ok" regardless of db state.
+- internal/app/verifier_router.go: NewVerifierRouter's signature gains a third param `pingDB *sql.DB`; /healthz now uses healthHandlerWithDB instead of the old healthHandler.
+- cmd/api-service/main.go: adds `sqlDriverNameFor(daoDriver string) string` mapping "postgres"/"cockroachdb"-&gt;"pgx", "sqlite"-&gt;"sqlite" (the actual database/sql driver names those backend packages register under); in ModeVerifier, opens a second `*sql.DB` via `sql.Open(driverName, cfg.DBDSN)` (independent of the `dao.Repository` from `dao.New`), passes it into NewVerifierRouter. sql.Open never dials, so this can't block/slow startup; on error, pingDB stays nil (reported as "down").
+- internal/app/verifier_router_test.go: updated all NewVerifierRouter call sites for the new 3rd arg (nil in every test).
+- internal/app/health_db_test.go (new): tests DB reachable (real sqlite in-memory) -&gt; "ok"; DB unreachable (sqlite DSN pointing at a nonexistent path) -&gt; "down", HTTP 200, and asserts the raw response body never contains the DSN substring or known driver-error substrings ("unable to open database file", "no such file", "sqlite:"); nil pingDB -&gt; "down".
+
+Check specifically:
+1. Does the bounded-timeout claim actually hold — is dbPingTimeout correctly applied via context, and could r.Context() ever already be cancelled/expired in a way that defeats it?
+2. Is there any leak path for DSN or driver error text this reviewer would consider incomplete (e.g., logged server-side is fine, but check nothing echoes into the HTTP response)?
+3. Is the /sql.Open-at-startup, Ping-at-request-time split actually safe — e.g., does opening a *sql.DB against an unreachable/misconfigured DSN ever panic, block, or leak a connection/goroutine over repeated requests instead of failing fast each time?
+4. Nil-safety: pingDB nil is handled, but does anything else assume non-nil?
+5. Is the test suite's use of a real modernc.org/sqlite import in health_db_test.go appropriate (already a project dependency via internal/dao/sqlite) or does it introduce an unwanted new dependency/coupling?
+6. Anything else a careful Go reviewer would flag — error handling, idiom, naming, doc-comment accuracy.
+
+Report your findings in prose as you would to Renata Cole (03 lead) directly — plain text, not a formal review template. If everything looks correct, say so plainly rather than manufacturing findings.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:15 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+69	
+70	## Status
+71	
+72	Planning Phases 0–3 are complete (2026-09-12): five track plans approved, 18 hires live in five lead sessions, every track's Phase 3 debates and hand-offs delivered, and the cross-track consistency pass reported (`decisions/cross-track-consistency.md`: 52 findings, six bounded fixes required before planning is declared done — in progress, owned per finding). Phase 4 is under way: Jira Epics `LT-1`…`LT-5` exist, tracks 01 and 05 are transcribed, 02/03/04 follow the pass fixes. All implementation code was deliberately wiped earlier in the day and none has been written since; **no code until Warren's explicit go-ahead**, which he gives after the PM reports the backlog implementation-ready.
+73	
+74	&lt;!-- profile-gen:start slug=dana-whitfield --&gt;
+75	@profiles/dana-whitfield/dana-whitfield.md
+76	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+77	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:15 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md | head -100
+echo ---PLAN-</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md | head -100\necho ---PLAN---\nsed -n '1,200p' /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md 2&gt;/dev/null\necho ---PROFILE---\ncat /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre># Track: Engineering &amp; Delivery
+
+Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+
+## Mission
+
+Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+
+## Owns
+
+- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+
+## Does not own
+
+- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+
+## Deliverables
+
+- Go source implementing questions 1, 2, and 3.
+- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+- Any test files demonstrating the stated test strategy.
+
+## AI tooling note
+
+Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+
+## Status
+
+Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+
+&lt;!-- profile-gen:start slug=renata-cole --&gt;
+@profiles/renata-cole/renata-cole.md
+&lt;!-- profile-gen:end slug=renata-cole --&gt;
+---PLAN---
+# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+
+## Context
+
+Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+waste, state the dependency order this track already committed to in
+`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+`CLAUDE.md`'s org section. No code is written in this phase.
+
+## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+
+*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+
+| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+|---|---|---|---|---|
+| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+
+## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+
+All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+profile-gen text-first, after "hiring go".
+
+**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+
+*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+
+**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+
+*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+
+**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+
+*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+
+**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+
+*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+
+Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+reviewer, a different function — allowed per variance rule 2).
+
+## 3. Debate plan
+
+- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+  Decision recorded in `decisions/go-layout-debate.md`.
+- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+  S2–S4.
+
+  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+  performed by the actual receiver instead of a proxy.
+- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+
+## 4. Dependencies (and the Service boundaries output for 04)
+
+**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+anything.
+
+**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+
+*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+Service boundaries section is the current, authoritative version — it has since gained
+`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+connector's own audience/client-credential variables (consistency-pass F15). Consult
+`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+
+- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+- **Package layout:**
+  ```
+  cmd/api-service/main.go
+  cmd/idp-connector/main.go
+  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+  internal/model/      # shared structs: UserProfile, UserCredential
+  internal/api/         # REST handlers, router, auth middleware
+  internal/connector/   # /auth, /identity client + handlers
+  internal/config/      # env-var config loading, shared by both binaries
+  ```
+- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+  now, its return type's method set is not).
+- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+
+## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+
+**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+
+## Verification
+
+- `PLAN.md` for this track matches this file verbatim once copied.
+- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+  section replaces its "TBD" with the content in §4 above.
+- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+  two temperament axes spanned; no first name collides with any lead.
+---PROFILE---
+---
+schema_version: 1
+name: "Oren Castellan"
+slug: "oren-castellan"
+image: "profiles/oren-castellan/oren-castellan.png"
+
+nsfw: false
+display:
+  image: true
+  name: true
+  autostart: false
+generation:
+  backend: "comfyui"
+  model: "comfyui-workflow.json"
+  prompt: "Oren Castellan, a meticulous and understated man in his late 30s with short neat hair, wire-rim glasses, wearing a plain navy button-down shirt, calm focused expression, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+  seed: null
+  gif_mode: null
+  created_at: "2026-09-12T00:00:00Z"
+---
+
+# Oren Castellan
+
+![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+
+
+## Personality
+
+Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught.
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:15 AM PDT</span><span class="who">Oren Castellan</span><div class="body">Now let's look at the actual code in the worktree.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz 2&gt;/dev/null &amp;&amp; pwd &amp;&amp; git log --onel</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz 2&gt;/dev/null &amp;&amp; pwd &amp;&amp; git log --oneline -5 &amp;&amp; git diff origin/main...feature/LT-52-healthz-db --stat"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz
+91bf00d LT-52 criterion 5: /healthz reports DB connectivity as a boolean
+b857b40 Merge PR #30: LT-40 JWT verification middleware, JWKS cache with bounded staleness, live router wiring
+be7bc2a handoff-03-auth v6 (JWKS path pinned); LT-51 refinement (timing-oracle criterion); 04 Story 8
+6dc1341 docs: state two assumptions Nolan Reyes named in round-3 review
+aead77e Merge PR #31: hex DB passwords (URL-safe by construction), read-only pod/log RBAC for the deployer, AUTH_JWKS_URL for api-service
+ cmd/api-service/main.go              |  38 ++++++++++-
+ internal/app/app.go                  |  49 ++++++++++++++
+ internal/app/health_db_test.go       | 122 +++++++++++++++++++++++++++++++++++
+ internal/app/verifier_router.go      |  25 ++++---
+ internal/app/verifier_router_test.go |  10 +--
+ 5 files changed, 229 insertions(+), 15 deletions(-)</pre></div></details><details><summary><span class="tn">Bash</span> ls /Users/warrenthompson/Source/LoginID-worktrees/ 2&gt;/dev/null</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "ls /Users/warrenthompson/Source/LoginID-worktrees/ 2&gt;/dev/null"
+}</pre><div class="lbl">result</div><pre>03-docs
+A6-fix
+checksum-fix
+docs-s3-fix
+lint-fix
+LT-32
+LT-32-infra
+LT-36
+LT-37
+LT-38
+LT-39
+LT-40
+LT-45
+LT-47
+LT-51
+LT-52
+LT-52-healthz</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:16 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/app.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/app.go"
+}</pre><div class="lbl">result</div><pre>1	// Package app is the shared bootstrap both cmd/api-service and
+2	// cmd/idp-connector wrap thinly, per decisions/go-layout-debate.md's ruling:
+3	// route registration and config wiring live once here, not duplicated per
+4	// binary. It carries no behavior beyond wiring — service-specific handlers
+5	// belong in internal/api and internal/connector as those stories land.
+6	package app
+7	
+8	import (
+9		"context"
+10		"database/sql"
+11		"encoding/json"
+12		"log"
+13		"net/http"
+14		"time"
+15	)
+16	
+17	// healthResponse is the JSON body every health probe returns. Field set is
+18	// deliberately minimal per 02's ruling (api-auth-design.md) on this
+19	// unauthenticated endpoint: an up/down status, which service answered, and
+20	// an opaque build identifier (commit SHA) — never a version string, build
+21	// timestamp, connection detail, or anything else. Do not add fields here
+22	// without checking that ruling first; see refinement/LT-34.md.
+23	//
+24	// DB is the one addition LT-52 criterion 5 allows: a boolean/enum-only
+25	// DB-connectivity signal ("ok"/"down"), never a DSN, host, port, or raw
+26	// driver error string. omitempty so idp-connector and issuer-mode
+27	// api-service — neither of which has a DB dependency — keep the original
+28	// three-field shape unchanged.
+29	type healthResponse struct {
+30		Status  string `json:"status"`
+31		Service string `json:"service"`
+32		Build   string `json:"build"`
+33		DB      string `json:"db,omitempty"`
+34	}
+35	
+36	// dbPingTimeout bounds the /healthz DB check so a wedged connection pool
+37	// can never make the health probe itself hang past a kubelet liveness
+38	// deadline — a health check has to be faster than what it's checking.
+39	const dbPingTimeout = 1 * time.Second
+40	
+41	// healthHandlerWithDB is /healthz for api-service's verifier Deployment
+42	// only (LT-52 criterion 5) — pingDB is a lightweight *sql.DB opened
+43	// purely for this bounded connectivity probe, separate from the
+44	// dao.Repository used for actual queries (see NewVerifierRouter's own
+45	// doc comment on why it's a second handle rather than reaching through
+46	// the Repository interface, which 05's contract doesn't expose a Ping
+47	// through). pingDB may be nil (DB never configured, or dao.New failed at
+48	// startup) — reported as "down", same as a ping that errors out; the
+49	// distinction between "never configured" and "configured but
+50	// unreachable" is not exposed here, since both mean the same thing to a
+51	// caller of this endpoint (the two DB-backed routes will 503) and
+52	// either detail would be exactly the kind of internal-state leak this
+53	// criterion exists to prevent.
+54	func healthHandlerWithDB(service string, pingDB *sql.DB) http.HandlerFunc {
+55		return func(w http.ResponseWriter, r *http.Request) {
+56			dbStatus := "down"
+57			if pingDB != nil {
+58				ctx, cancel := context.WithTimeout(r.Context(), dbPingTimeout)
+59				defer cancel()
+60				if err := pingDB.PingContext(ctx); err == nil {
+61					dbStatus = "ok"
+62				}
+63			}
+64			w.Header().Set("Content-Type", "application/json")
+65			w.WriteHeader(http.StatusOK)
+66			_ = json.NewEncoder(w).Encode(healthResponse{
+67				Status:  "ok",
+68				Service: service,
+69				Build:   Commit,
+70				DB:      dbStatus,
+71			})
+72		}
+73	}
+74	
+75	// Mode is api-service's run mode (LT-32). A defined type rather than a
+76	// bare string so NewRouter's switch below can have a real default case —
+77	// config.Load already validates APP_MODE to exactly "verifier"/"issuer"
+78	// before it reaches here, but NewRouter must not depend on that: the whole
+79	// point of this story is that a misconfiguration is loud, not silently
+80	// downgraded, and a router that quietly falls back to verifier behavior on
+81	// any unrecognized value (a case-mismatch, a stray space) is the same
+82	// failure class one layer up (Oren Castellan, PR #18 review).
+83	type Mode string
+84	
+85	// ModeVerifier and ModeIssuer are api-service's two run modes, selected by
+86	// config.Config.AppMode and passed to NewRouter by cmd/api-service/main.go.
+87	// idp-connector has no issuer/verifier split — its main.go passes
+88	// ModeVerifier, the only mode that adds no route beyond /healthz, since
+89	// that value is also this package's harmless default.
+90	const (
+91		ModeVerifier Mode = "verifier"
+92		ModeIssuer   Mode = "issuer"
+93	)
+94	
+95	// NewRouter builds the http.Handler shared by both binaries' main.go.
+96	// service identifies which binary is answering ("api-service" or
+97	// "idp-connector") in the health response, per LT-34's acceptance
+98	// criteria. mode is api-service's APP_MODE (LT-32) — the router itself is
+99	// this story's startup-time branch point named in refinement/LT-32.md's
+100	// acceptance criteria ("internal/app branches on it at startup"): in
+101	// ModeIssuer, a placeholder route is registered at the path reserved for
+102	// token issuance so the issuer and verifier Deployments are demonstrably
+103	// different routers, not just different env vars read by code that
+104	// otherwise behaves identically. The actual issuance handler is S7/LT-40's
+105	// scope, not this story's (refinement/LT-32.md's non-goals) — this only
+106	// proves the wiring exists and is reachable on the Deployment that is
+107	// supposed to have it, and absent on the one that isn't.
+108	//
+109	// An unrecognized mode logs loudly and falls back to the verifier route
+110	// set — the safer of the two failure directions (an issuer Deployment
+111	// stuck without its route is externally visible as 404s on /auth/token,
+112	// while a verifier Deployment that accidentally grew the issuer route
+113	// would be the actual security regression this story exists to prevent)
+114	// — rather than panicking a running server over a value config.Load
+115	// should already have rejected before this ever runs.
+116	func NewRouter(service string, mode Mode) http.Handler {
+117		mux := http.NewServeMux()
+118		mux.HandleFunc("/healthz", healthHandler(service))
+119		switch mode {
+120		case ModeIssuer:
+121			mux.HandleFunc("/auth/token", issuerPlaceholderHandler)
+122		case ModeVerifier:
+123			// no additional routes
+124		default:
+125			log.Printf("app: NewRouter called with unrecognized mode %q — serving verifier routes only", mode)
+126		}
+127		return mux
+128	}
+129	
+130	// issuerPlaceholderHandler exists only to make the issuer/verifier router
+131	// split observable and testable before S7/LT-40 implements real token
+132	// issuance. It deliberately does no cryptography and holds no reference to
+133	// config.Config.JWTSigningKeyPath — that wiring belongs to whichever S7
+134	// handler replaces this one.
+135	func issuerPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+136		http.Error(w, "token issuance not yet implemented — reserved for LT-40", http.StatusNotImplemented)
+137	}
+138	
+139	func healthHandler(service string) http.HandlerFunc {
+140		return func(w http.ResponseWriter, r *http.Request) {
+141			w.Header().Set("Content-Type", "application/json")
+142			w.WriteHeader(http.StatusOK)
+143			_ = json.NewEncoder(w).Encode(healthResponse{
+144				Status:  "ok",
+145				Service: service,
+146				Build:   Commit,
+147			})
+148		}
+149	}
+150	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/verifier_router.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/verifier_router.go"
+}</pre><div class="lbl">result</div><pre>1	package app
+2	
+3	import (
+4		"database/sql"
+5		"net/http"
+6		"time"
+7	
+8		"loginid-takehome/internal/api"
+9		"loginid-takehome/internal/config"
+10		"loginid-takehome/internal/dao"
+11	)
+12	
+13	// jwksCacheTTL matches the token TTL per handoff-03-auth.md v4's own
+14	// guidance ("Verifier caches the fetched key set in memory with a short
+15	// TTL (matching token TTL is reasonable)") — using the upper bound of the
+16	// 5-15 minute TTL range so a cache refresh never fires more often than a
+17	// token itself could have already expired and been re-issued.
+18	const jwksCacheTTL = 15 * time.Minute
+19	
+20	// NewVerifierRouter builds api-service's real, authenticated router —
+21	// LT-39's handlers (search/retrieve) wired behind LT-40's JWT
+22	// verification middleware, plus /healthz. This is the ModeVerifier
+23	// Deployment's router; the issuer Deployment (ModeIssuer) still uses the
+24	// plain NewRouter above, since it has no need for any of this — it never
+25	// verifies inbound tokens, only issues them.
+26	//
+27	// repo may be nil — cmd/api-service/main.go passes nil rather than
+28	// crash-looping the whole process when the DAO repository couldn't be
+29	// constructed at startup (no DB_DRIVER/DB_DSN yet, e.g. before the
+30	// database exists in this environment). /healthz must stay reachable
+31	// regardless (LT-34's live-URL story); the two protected routes fail
+32	// closed with 503 instead of panicking on a nil Repository or silently
+33	// pretending to work.
+34	//
+35	// pingDB (LT-52 criterion 5) is a separate, lightweight *sql.DB used
+36	// only for /healthz's bounded connectivity probe — deliberately not the
+37	// dao.Repository above, since 05's Repository contract exposes no Ping
+38	// and this story has no reason to ask for one just for a health check.
+39	// pingDB may be nil (same startup-failure path as repo above); either
+40	// way /healthz keeps reporting "status":"ok" and "db":"down" rather
+41	// than going unreachable — a DB outage is this router's problem to fail
+42	// the two DB-backed routes closed on, not a reason to take the whole
+43	// process's liveness probe down with it.
+44	func NewVerifierRouter(cfg config.Config, repo dao.Repository, pingDB *sql.DB) http.Handler {
+45		mux := http.NewServeMux()
+46		mux.HandleFunc("/healthz", healthHandlerWithDB("api-service", pingDB))
+47	
+48		auditLog := api.StdoutAuditLogger{}
+49		keys := api.NewJWKSCache(cfg.AuthJWKSURL, jwksCacheTTL, nil)
+50		authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.AuthJWTAudience, auditLog)
+51	
+52		// api.NewDeadlineMiddleware outermost: the deadline budget must cover
+53		// JWT verification (including a JWKS cache-miss fetch) as well as
+54		// the handler's own DAO call, per decisions/context-propagation.md's
+55		// ruling — a single deadline, not the middleware's and the handler's
+56		// own disagreeing.
+57		protect := func(h http.Handler) http.Handler {
+58			return api.NewDeadlineMiddleware(authMiddleware(h))
+59		}
+60	
+61		var searchHandler, getHandler http.Handler
+62		if repo == nil {
+63			searchHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.WriteServiceUnavailable(w) })
+64			getHandler = searchHandler
+65		} else {
+66			deps := api.Deps{
+67				Repo:        repo,
+68				RateLimiter: api.NewInProcessRateLimiter(),
+69				TouchCounter: api.NewInProcessTouchCounter(
+70					api.TouchCapPerWindow, api.TouchCapWindow),
+71				AuditLog: auditLog,
+72				Authz: &amp;api.StopgapAuthorizer{
+73					ReadOwnAllow: stopgapReadOwnAllow(cfg),
+74				},
+75			}
+76			searchHandler = api.NewSearchHandler(deps)
+77			getHandler = api.NewGetProfileHandler(deps)
+78		}
+79	
+80		mux.Handle("POST /profiles/search", protect(searchHandler))
+81		mux.Handle("GET /profiles/{id}", protect(getHandler))
+82	
+83		return mux
+84	}
+85	
+86	// stopgapReadOwnAllow builds StopgapAuthorizer's hard-coded (sub -&gt;
+87	// allowed record id) map from cfg — empty (denies everything) unless
+88	// both AuthzQASub and AuthzQAAllowedProfileID are set, which LT-51 does
+89	// once the QA client credential and a matching seeded profile exist.
+90	func stopgapReadOwnAllow(cfg config.Config) map[string]map[string]bool {
+91		if cfg.AuthzQASub == "" || cfg.AuthzQAAllowedProfileID == "" {
+92			return nil
+93		}
+94		return map[string]map[string]bool{
+95			cfg.AuthzQASub: {cfg.AuthzQAAllowedProfileID: true},
+96		}
+97	}
+98	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/cmd/api-service/main.go"
+}</pre><div class="lbl">result</div><pre>1	// Command api-service is the client-facing binary (Q1 DAO + Q2 REST API,
+2	// bearer-token auth). Per decisions/go-layout-debate.md, this file is a
+3	// thin wrapper — route registration and config loading live in
+4	// internal/app and internal/config, not here.
+5	package main
+6	
+7	import (
+8		"database/sql"
+9		"log"
+10		"net/http"
+11	
+12		"loginid-takehome/internal/app"
+13		"loginid-takehome/internal/config"
+14		"loginid-takehome/internal/dao"
+15	
+16		_ "loginid-takehome/internal/dao/postgres" // registers "postgres" and "cockroachdb"
+17		_ "loginid-takehome/internal/dao/sqlite"   // registers "sqlite"
+18	)
+19	
+20	// sqlDriverNameFor maps cfg.DBDriver ("postgres"/"cockroachdb"/"sqlite" —
+21	// dao.Register's driver names, per dao/factory.go) to the underlying
+22	// database/sql driver name each backend package registers itself under
+23	// (internal/dao/postgres/postgres.go: "pgx"; internal/dao/sqlite/sqlite.go:
+24	// "sqlite") — needed only for LT-52's separate /healthz ping handle, since
+25	// dao.Repository itself exposes no Ping and this is a thin sql.Open, not a
+26	// second copy of either backend's connection logic.
+27	func sqlDriverNameFor(daoDriver string) string {
+28		switch daoDriver {
+29		case "postgres", "cockroachdb":
+30			return "pgx"
+31		case "sqlite":
+32			return "sqlite"
+33		default:
+34			return ""
+35		}
+36	}
+37	
+38	func main() {
+39		cfg, err := config.Load()
+40		if err != nil {
+41			log.Fatalf("api-service: loading config: %v", err)
+42		}
+43	
+44		addr := cfg.HTTPAddr
+45		if addr == "" {
+46			addr = ":8080"
+47		}
+48	
+49		log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)
+50	
+51		var handler http.Handler
+52		switch app.Mode(cfg.AppMode) {
+53		case app.ModeVerifier:
+54			// The verifying Deployment is the one that talks to the
+55			// database (LT-39's search/retrieve handlers) — the issuer
+56			// Deployment (below) never needs a Repository at all, since it
+57			// only mints tokens.
+58			//
+59			// A failure here does NOT Fatal: on a cluster where the database
+60			// doesn't exist yet (no DB_DRIVER/DB_DSN configured — e.g. before
+61			// PR #29's Postgres StatefulSet lands), or DB_DRIVER is simply
+62			// misconfigured, this process must still come up and serve
+63			// /healthz rather than crash-loop the whole verifying Deployment
+64			// over a dependency only two of its routes need. repo stays nil;
+65			// NewVerifierRouter fails those two routes closed with 503
+66			// instead of panicking on a nil Repository.
+67			repo, err := dao.New(cfg.DBDriver, cfg.DBDSN)
+68			if err != nil {
+69				log.Printf("api-service: opening DAO repository: %v — /profiles/search and /profiles/{id} will return 503 until this is resolved", err)
+70				repo = nil
+71			}
+72	
+73			// A second, independent *sql.DB purely for /healthz's bounded
+74			// connectivity probe (LT-52 criterion 5) — sql.Open never dials,
+75			// it only validates the driver/DSN, so this never blocks
+76			// startup; PingContext at request time is what actually checks
+77			// connectivity, bounded to dbPingTimeout. Deliberately separate
+78			// from repo above rather than routed through dao.Repository,
+79			// which 05's contract doesn't expose a Ping through.
+80			var pingDB *sql.DB
+81			if driverName := sqlDriverNameFor(cfg.DBDriver); driverName != "" {
+82				pingDB, err = sql.Open(driverName, cfg.DBDSN)
+83				if err != nil {
+84					log.Printf("api-service: opening /healthz DB ping handle: %v — /healthz will report db=down", err)
+85					pingDB = nil
+86				}
+87			}
+88	
+89			handler = app.NewVerifierRouter(cfg, repo, pingDB)
+90		default:
+91			// ModeIssuer (and the unrecognized-mode fallback, which
+92			// NewRouter itself already logs loudly and treats as verifier —
+93			// see app.NewRouter's own doc comment) don't need the full
+94			// verifier stack; NewRouter's existing /auth/token placeholder
+95			// (LT-32) and /healthz cover both.
+96			handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))
+97		}
+98	
+99		if err := http.ListenAndServe(addr, handler); err != nil {
+100			log.Fatalf("api-service: %v", err)
+101		}
+102	}
+103	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/health_db_test.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/health_db_test.go"
+}</pre><div class="lbl">result</div><pre>1	package app
+2	
+3	import (
+4		"database/sql"
+5		"encoding/json"
+6		"io"
+7		"net/http"
+8		"net/http/httptest"
+9		"strings"
+10		"testing"
+11	
+12		_ "modernc.org/sqlite" // registers "sqlite" for these tests only
+13	)
+14	
+15	// TestHealthzWithDB_Reachable_ReportsOK exercises the real path: a live
+16	// *sql.DB that actually answers PingContext.
+17	func TestHealthzWithDB_Reachable_ReportsOK(t *testing.T) {
+18		db, err := sql.Open("sqlite", ":memory:")
+19		if err != nil {
+20			t.Fatalf("opening sqlite: %v", err)
+21		}
+22		defer func() { _ = db.Close() }()
+23	
+24		srv := httptest.NewServer(healthHandlerWithDB("api-service", db))
+25		defer srv.Close()
+26	
+27		resp, err := http.Get(srv.URL)
+28		if err != nil {
+29			t.Fatalf("GET: %v", err)
+30		}
+31		defer func() { _ = resp.Body.Close() }()
+32	
+33		if resp.StatusCode != http.StatusOK {
+34			t.Fatalf("status = %d, want 200 (must stay green regardless of db)", resp.StatusCode)
+35		}
+36	
+37		var body map[string]any
+38		if err := json.NewDecoder(resp.Body).Decode(&amp;body); err != nil {
+39			t.Fatalf("decoding body: %v", err)
+40		}
+41		if body["status"] != "ok" {
+42			t.Errorf("status = %v, want ok", body["status"])
+43		}
+44		if body["db"] != "ok" {
+45			t.Errorf("db = %v, want ok", body["db"])
+46		}
+47	}
+48	
+49	// TestHealthzWithDB_Unreachable_ReportsDownNotError proves the failure
+50	// path — a *sql.DB pointed at a DSN that can never connect — reports
+51	// "down" (not an error status), and that the response body never leaks
+52	// the DSN or the underlying driver error text. This is LT-52 criterion
+53	// 5's own named enforcement site.
+54	func TestHealthzWithDB_Unreachable_ReportsDownNotError(t *testing.T) {
+55		const secretDSN = "file:/definitely/does/not/exist/nowhere.db?_pragma=busy_timeout(1)&amp;mode=ro"
+56		db, err := sql.Open("sqlite", secretDSN)
+57		if err != nil {
+58			t.Fatalf("opening sqlite (should succeed — sql.Open never dials): %v", err)
+59		}
+60		defer func() { _ = db.Close() }()
+61	
+62		srv := httptest.NewServer(healthHandlerWithDB("api-service", db))
+63		defer srv.Close()
+64	
+65		resp, err := http.Get(srv.URL)
+66		if err != nil {
+67			t.Fatalf("GET: %v", err)
+68		}
+69		defer func() { _ = resp.Body.Close() }()
+70	
+71		if resp.StatusCode != http.StatusOK {
+72			t.Fatalf("status = %d, want 200 even when db is unreachable — /healthz must stay green", resp.StatusCode)
+73		}
+74	
+75		rawBytes, err := io.ReadAll(resp.Body)
+76		if err != nil {
+77			t.Fatalf("reading body: %v", err)
+78		}
+79		raw := string(rawBytes)
+80	
+81		var body map[string]any
+82		if err := json.Unmarshal([]byte(raw), &amp;body); err != nil {
+83			t.Fatalf("decoding body: %v", err)
+84		}
+85		if body["status"] != "ok" {
+86			t.Errorf("status = %v, want ok (db down must not fail the process's own liveness)", body["status"])
+87		}
+88		if body["db"] != "down" {
+89			t.Errorf("db = %v, want down", body["db"])
+90		}
+91	
+92		if strings.Contains(raw, "nowhere.db") || strings.Contains(raw, secretDSN) {
+93			t.Errorf("response body leaks the DSN: %s", raw)
+94		}
+95		for _, leak := range []string{"unable to open database file", "no such file", "sqlite:"} {
+96			if strings.Contains(strings.ToLower(raw), strings.ToLower(leak)) {
+97				t.Errorf("response body leaks driver error detail (%q): %s", leak, raw)
+98			}
+99		}
+100	}
+101	
+102	// TestHealthzWithDB_NilDB_ReportsDown covers the startup-time case:
+103	// cmd/api-service/main.go never opened a ping handle at all (no
+104	// DB_DRIVER/DB_DSN configured, or DB_DRIVER unrecognized).
+105	func TestHealthzWithDB_NilDB_ReportsDown(t *testing.T) {
+106		srv := httptest.NewServer(healthHandlerWithDB("api-service", nil))
+107		defer srv.Close()
+108	
+109		resp, err := http.Get(srv.URL)
+110		if err != nil {
+111			t.Fatalf("GET: %v", err)
+112		}
+113		defer func() { _ = resp.Body.Close() }()
+114	
+115		var body map[string]any
+116		if err := json.NewDecoder(resp.Body).Decode(&amp;body); err != nil {
+117			t.Fatalf("decoding body: %v", err)
+118		}
+119		if body["db"] != "down" {
+120			t.Errorf("db = %v, want down (nil ping handle)", body["db"])
+121		}
+122	}
+123	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:16 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz
+echo "---postgres.go---"
+cat interna</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz\necho \"---postgres.go---\"\ncat internal/dao/postgres/postgres.go 2&gt;/dev/null | head -40\necho \"---sqlite.go---\"\ncat internal/dao/sqlite/sqlite.go 2&gt;/dev/null | head -40\necho \"---go.mod---\"\ncat go.mod\necho \"---verifier_router_test.go---\"\ncat internal/app/verifier_router_test.go"
+}</pre><div class="lbl">result</div><pre>---postgres.go---
+// Package postgres implements internal/dao's Repository composite for
+// both PostgreSQL and CockroachDB, per 05-data-ops/multi-db-strategy.md.
+// One package serves both engines; the retry seam in retry.go is what
+// makes that safe (§4, "The write-path retry seam").
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
+
+	"loginid-takehome/internal/dao"
+)
+
+// engine distinguishes the two driver strings that select this package —
+// "postgres" and "cockroachdb" — because withRetry needs to know which one
+// it's talking to (§4: "That field is the entire reason the two driver
+// strings are distinct despite selecting the same package").
+type engine string
+
+const (
+	enginePostgres  engine = "postgres"
+	engineCockroach engine = "cockroachdb"
+)
+
+type repository struct {
+	db     *sql.DB
+	engine engine
+}
+
+// New opens a connection pool against dsn for the given engine ("postgres"
+// or "cockroachdb"). Registered with internal/dao's factory in register.go.
+func New(dsn string, e engine) (dao.Repository, error) {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: opening connection: %w", err)
+	}
+	return &amp;repository{db: db, engine: e}, nil
+---sqlite.go---
+// Package sqlite implements internal/dao's Repository composite for
+// SQLite, per 05-data-ops/multi-db-strategy.md. A separate package from
+// postgres — SQLite diverges enough (no native UUID/BOOLEAN, no trigram
+// index, app-side ID generation) that forcing it through the Postgres
+// implementation would mean littering that code with backend
+// conditionals, which is the exact failure mode a repository-per-backend
+// split is meant to avoid.
+package sqlite
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
+
+	"loginid-takehome/internal/dao"
+)
+
+type repository struct {
+	db *sql.DB
+}
+
+// New opens a connection against dsn (a file path, or ":memory:").
+// Registered with internal/dao's factory in register.go. There is no
+// retry wrapper here at all — not a no-op shim. SQLite has no
+// retryable-serialization error class, so a no-op would be ceremony
+// implying a shared abstraction that does not exist (contract §4).
+func New(dsn string) (dao.Repository, error) {
+	// foreign_keys is per-CONNECTION, not a property of the database file
+	// — a bare `PRAGMA foreign_keys = ON` exec after opening only covers
+	// the one connection that happened to run it, and silently stops
+	// covering anything the moment the pool acquires a second connection
+	// (a raised MaxOpenConns, a reconnect after an error, ...). Requesting
+	// it via the DSN's `_foreign_keys` query param makes modernc.org/sqlite
+	// apply it to every connection it opens, by construction (05's
+	// amendment A3, surfaced during PR #8 review). SetMaxOpenConns(1)
+	// below is kept for its own, separate reason (SQLite's single-writer
+	// model) — it must not be the only thing keeping this guarantee true.
+	dsn = withForeignKeysOn(dsn)
+---go.mod---
+module loginid-takehome
+
+go 1.27.1
+
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.11.0
+	modernc.org/sqlite v1.58.0
+)
+
+require (
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
+	modernc.org/libc v1.75.6 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.12.1 // indirect
+)
+---verifier_router_test.go---
+package app
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+
+	"loginid-takehome/internal/config"
+	"loginid-takehome/internal/dao"
+	"loginid-takehome/internal/model"
+)
+
+// fakeRepo is a minimal dao.Repository — only Profiles().Search is
+// exercised by this file's tests; everything else panics, so a test
+// that reaches an unexpected method fails loudly rather than silently
+// zero-valuing (mirrors internal/api's own hand-written fakes,
+// decisions/test-double-strategy.md).
+type fakeRepo struct{ profiles fakeProfiles }
+
+func (f *fakeRepo) Profiles() dao.ProfileRepository       { return &amp;f.profiles }
+func (f *fakeRepo) Credentials() dao.CredentialRepository { panic("not used") }
+func (f *fakeRepo) Methods() dao.AuthMethodRepository     { panic("not used") }
+func (f *fakeRepo) CreateProfileWithCredential(ctx context.Context, p *model.UserProfile, c *model.UserCredential) (*model.UserProfile, *model.UserCredential, error) {
+	panic("not used")
+}
+func (f *fakeRepo) DeleteExpired(ctx context.Context, class dao.RetentionClass, olderThan time.Time, maxRows int) (dao.SweepResult, error) {
+	panic("not used")
+}
+func (f *fakeRepo) DeleteProfile(ctx context.Context, id string, externalRef *string) error {
+	panic("not used")
+}
+func (f *fakeRepo) Close() error { return nil }
+
+type fakeProfiles struct{}
+
+func (fakeProfiles) Get(ctx context.Context, id string) (*model.UserProfile, error) {
+	return &amp;model.UserProfile{ID: id, Name: "Jane Doe"}, nil
+}
+func (fakeProfiles) Search(ctx context.Context, q dao.ProfileQuery) ([]model.UserProfile, int, error) {
+	return []model.UserProfile{{ID: "p1", Name: "Jane Doe"}}, 1, nil
+}
+func (fakeProfiles) Create(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	panic("not used")
+}
+func (fakeProfiles) Update(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	panic("not used")
+}
+func (fakeProfiles) Upsert(ctx context.Context, p *model.UserProfile) (*model.UserProfile, error) {
+	panic("not used")
+}
+func (fakeProfiles) Delete(ctx context.Context, id string) error { panic("not used") }
+
+const (
+	testIssuer   = "https://auth.loginid-takehome.internal"
+	testAudience = "loginid-api-service"
+)
+
+func startFakeJWKS(t *testing.T, kid string, pub *rsa.PublicKey) *httptest.Server {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"keys": []map[string]string{{
+			"kty": "RSA",
+			"kid": kid,
+			"alg": "RS256",
+			"use": "sig",
+			"n":   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+			"e":   base64.RawURLEncoding.EncodeToString([]byte{1, 0, 1}), // 65537
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshaling fake JWKS: %v", err)
+	}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+}
+
+func signTestToken(t *testing.T, key *rsa.PrivateKey, kid, scope string) string {
+	t.Helper()
+	c := jwt.MapClaims{
+		"iss":   testIssuer,
+		"aud":   testAudience,
+		"sub":   "client-under-test",
+		"scope": scope,
+		"exp":   time.Now().Add(10 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, c)
+	tok.Header["kid"] = kid
+	signed, err := tok.SignedString(key)
+	if err != nil {
+		t.Fatalf("signing test token: %v", err)
+	}
+	return signed
+}
+
+func TestNewVerifierRouter_UnauthenticatedRequest_401(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	jwks := startFakeJWKS(t, "key-1", &amp;key.PublicKey)
+	defer jwks.Close()
+
+	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
+	router := NewVerifierRouter(cfg, &amp;fakeRepo{}, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401 with no bearer token", w.Code)
+	}
+}
+
+// TestNewVerifierRouter_AuthenticatedSearch_ReachesHandler proves the
+// full stack — deadline middleware, JWT verification against a real
+// JWKS-over-HTTP fetch, AuthContext population, and LT-39's handler —
+// is wired together correctly end to end, not just each piece in
+// isolation.
+func TestNewVerifierRouter_AuthenticatedSearch_ReachesHandler(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	jwks := startFakeJWKS(t, "key-1", &amp;key.PublicKey)
+	defer jwks.Close()
+
+	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
+	router := NewVerifierRouter(cfg, &amp;fakeRepo{}, nil)
+	tok := signTestToken(t, key, "key-1", "profile:search")
+
+	req := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"jane"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestNewVerifierRouter_HealthzUnaffectedByAuth(t *testing.T) {
+	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: "http://unused.invalid"}
+	router := NewVerifierRouter(cfg, &amp;fakeRepo{}, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 — /healthz must stay unauthenticated per handoff-03-auth.md", w.Code)
+	}
+}
+
+// TestNewVerifierRouter_ReadOwn_AllowedAndDenied is Marcus Ilori's (02)
+// ruling: the router-level test that was missing entirely for
+// GET /profiles/{id} under read:own — both the allow and deny paths
+// through the real StopgapAuthorizer, wired the way cmd/api-service
+// actually wires it (via cfg.AuthzQASub/AuthzQAAllowedProfileID).
+func TestNewVerifierRouter_ReadOwn_AllowedAndDenied(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	jwks := startFakeJWKS(t, "key-1", &amp;key.PublicKey)
+	defer jwks.Close()
+
+	cfg := config.Config{
+		AuthJWTIssuer:           testIssuer,
+		AuthJWTAudience:         testAudience,
+		AuthJWKSURL:             jwks.URL,
+		AuthzQASub:              "client-under-test", // matches signTestToken's hardcoded sub
+		AuthzQAAllowedProfileID: "allowed-profile",
+	}
+	router := NewVerifierRouter(cfg, &amp;fakeRepo{}, nil)
+	tok := signTestToken(t, key, "key-1", "profile:read:own")
+
+	allowedReq := httptest.NewRequest(http.MethodGet, "/profiles/allowed-profile", nil)
+	allowedReq.Header.Set("Authorization", "Bearer "+tok)
+	wAllowed := httptest.NewRecorder()
+	router.ServeHTTP(wAllowed, allowedReq)
+	if wAllowed.Code != http.StatusOK {
+		t.Errorf("allowed profile: status = %d, want 200, body=%s", wAllowed.Code, wAllowed.Body.String())
+	}
+
+	deniedReq := httptest.NewRequest(http.MethodGet, "/profiles/some-other-profile", nil)
+	deniedReq.Header.Set("Authorization", "Bearer "+tok)
+	wDenied := httptest.NewRecorder()
+	router.ServeHTTP(wDenied, deniedReq)
+	if wDenied.Code != http.StatusForbidden {
+		t.Errorf("unseeded profile: status = %d, want 403 (StopgapAuthorizer's safe-default deny), body=%s", wDenied.Code, wDenied.Body.String())
+	}
+}
+
+// TestNewVerifierRouter_NilRepo_ProtectedRoutesFailClosed503 is the PM's
+// direct question: on a cluster where the database doesn't exist yet (no
+// DB_DRIVER/DB_DSN configured), the verifying Deployment must still come
+// up with /healthz green — cmd/api-service/main.go passes repo=nil
+// rather than crash-looping — and the two protected routes must fail
+// closed (503), not panic on a nil Repository. Auth still runs first: an
+// unauthenticated request still gets 401, proven by the companion
+// TestNewVerifierRouter_UnauthenticatedRequest_401-shaped assertion
+// inline below.
+func TestNewVerifierRouter_NilRepo_ProtectedRoutesFailClosed503(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	jwks := startFakeJWKS(t, "key-1", &amp;key.PublicKey)
+	defer jwks.Close()
+
+	cfg := config.Config{AuthJWTIssuer: testIssuer, AuthJWTAudience: testAudience, AuthJWKSURL: jwks.URL}
+	router := NewVerifierRouter(cfg, nil, nil) // no DAO repository — the no-database-yet case
+	tok := signTestToken(t, key, "key-1", "profile:search")
+
+	// /healthz must still be green.
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	wHealth := httptest.NewRecorder()
+	router.ServeHTTP(wHealth, healthReq)
+	if wHealth.Code != http.StatusOK {
+		t.Errorf("/healthz status = %d, want 200 even with no DAO repository", wHealth.Code)
+	}
+
+	// An authenticated request to a protected route must fail closed
+	// (503), not panic.
+	authedReq := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+	authedReq.Header.Set("Authorization", "Bearer "+tok)
+	wAuthed := httptest.NewRecorder()
+	router.ServeHTTP(wAuthed, authedReq)
+	if wAuthed.Code != http.StatusServiceUnavailable {
+		t.Errorf("authenticated request with no repository: status = %d, want 503", wAuthed.Code)
+	}
+
+	// An UNauthenticated request must still get 401, not 503 — auth
+	// still runs before the repository is ever consulted.
+	unauthedReq := httptest.NewRequest(http.MethodPost, "/profiles/search", strings.NewReader(`{"name":"a"}`))
+	wUnauthed := httptest.NewRecorder()
+	router.ServeHTTP(wUnauthed, unauthedReq)
+	if wUnauthed.Code != http.StatusUnauthorized {
+		t.Errorf("unauthenticated request with no repository: status = %d, want 401 (auth must still run first)", wUnauthed.Code)
+	}
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:16 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz
+go build ./... 2&gt;&amp;1 | tail -50
+echo </summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz\ngo build ./... 2&gt;&amp;1 | tail -50\necho \"---vet---\"\ngo vet ./... 2&gt;&amp;1 | tail -50\necho \"---test---\"\ngo test ./internal/app/... 2&gt;&amp;1 | tail -80"
+}</pre><div class="lbl">result</div><pre>---vet---
+---test---
+ok  	loginid-takehome/internal/app	(cached)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:16 AM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> grep -n -i "criterion 5\|healthz" -A5 -B2 /Users/warrenthompson/Source/LoginID/04-infra-devops/refin</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "grep -n -i \"criterion 5\\|healthz\" -A5 -B2 /Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/postgres-in-namespace.md 2&gt;/dev/null | head -80"
+}</pre><div class="lbl">result</div><pre>26-- [ ] The migration `Job` runs to completion **before** `api-service`'s rollout — enforcement site: deploy pipeline ordering (readiness gate or explicit sequencing in the merge-to-main workflow), not an assumption that Kubernetes scheduling happens to land in the right order.
+27-- [ ] `DB_DSN_FILE` (already a config surface `internal/config` supports per `PLANNING.md`'s Service boundaries) is wired to point at the runtime service credential's mounted file, **and its precedence over `DB_DSN` is exercised in the actual running pod**, not only in `internal/config`'s existing unit test — `api-service` connects successfully on startup using the file-mounted DSN. Enforcement site: `api-service`'s Deployment manifest sets `DB_DSN_FILE` (not `DB_DSN`) pointing at the mounted runtime credential; confirmed live, not just asserted by the existing unit test.
+28:- [ ] **The health endpoint reflects real DB connectivity, without leaking the DSN or any driver `DETAIL` text.** `/healthz`'s existing `{"status","service","build"}` shape (per 02's ruling on LT-34) gains a DB-connectivity signal consistent with that ruling's own allowance for a per-dependency boolean (e.g. `"db":"ok"`/`"db":"down"`) — never a connection string, host, port, or raw driver error. Enforcement site: the health handler's DB check queries the connection (e.g. a trivial `SELECT 1`) and reports only a boolean/enum, with a test asserting the response never contains the DSN substring or any driver error text.
+29-- [ ] `deploy/manifests.yaml`'s header comment (which currently states "no migration Job, no DB_DSN secret — those wire up config the current code doesn't use yet") is updated to reflect that this is no longer true, so a future reader isn't misled by a stale comment.
+30-- [ ] **`ResourceQuota` headroom confirmed for the new StatefulSet pod before merge** — added per Theo's own flag, given the earlier `api-service-issuer` `FailedCreate` incident from under-sized quota. Enforcement site: the quota math is shown in the PR description (current `limits.cpu`/`limits.memory` vs. the new total including Postgres's request/limit), and the `ResourceQuota` object is adjusted in the same PR if needed — not discovered as a second `FailedCreate` after merge.
+31-
+32-## Non-goals
+33-
+--
+95-## PO acceptance review — live deployment (all criteria but #5)
+96-
+97:**Reviewer:** Naomi Voss (PO). **Date:** 2026-09-13. Prepared now, ahead of criterion 5 landing, per team-lead's request, so acceptance is a single pass once it does.
+98-
+99:**Directly, independently confirmed by me against the live URL** (`curl --resolve loginid-takehome.uplifttech.org:443:«IP» https://loginid-takehome.uplifttech.org/healthz`): HTTP 200, `{"status":"ok","service":"api-service","build":"aead77e3d0e3d1fe439dd4109ef10878377e1ab3"}` — the service is up and serving a real, current commit SHA.
+100-
+101-**Reported by Theo/team-lead, not independently re-run by me against the live cluster (I have no cluster access) — recorded as attributed evidence, consistent with this review's own discipline of not overclaiming what I actually checked:**
+102-- Migrations applied (versions 2 + 1, matching the two-directory split); the `runtime` role's DDL denial confirmed live (`CREATE TABLE` → permission denied; `SELECT` works) — this is the live-cluster instance of the same permission model I verified locally in a scratch container during the PR #29 review, now confirmed against the real deployed database.
+103-- The second deploy's migration `Job` re-run reported "no migrations to run" for both directories — satisfies the idempotency criterion.
+104-- All Deployments Ready.
+--
+106-**Criteria status:**
+107-- [x] StatefulSet/PVC, NetworkPolicy scoping, out-of-band Secret provisioning, migrator/runtime split, goose ordering, idempotency, pre-rollout sequencing, quota headroom, header-comment accuracy — all confirmed via PR #29's code review (above) plus this live-deployment evidence.
+108:- [ ] **Criterion 5 (health reflects DB connectivity, boolean-only, no DSN/DETAIL leak) — still open.** Renata's tiny PR (after #30) ships this. Will review that PR directly (read the handler code, confirm no connection string/host/port/driver-error text appears even when DB is down) the moment it's up — that closes LT-52 in full.
+109-
+110:**LT-52 verdict: accepted pending criterion 5 only.** Everything else is done and confirmed; nothing else needs re-checking once that PR lands.</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 5:17 AM PDT</span><span class="who">Oren Castellan</span><div class="body">This matches the criterion exactly. My review is complete — findings below.
+
+Ran it myself first: `go build ./...`, `go vet ./...`, `go test ./internal/app/...` all clean/pass in the worktree.
+
+Renata — this one holds up. Went through all six checks, nothing to block on.
+
+1. Bounded timeout: correct. `context.WithTimeout(r.Context(), dbPingTimeout)` derives from the request context, so the ping is bounded by the *shorter* of `dbPingTimeout` and whatever's left on `r.Context()`. If `r.Context()` were already near-expired or cancelled (client disconnect, upstream proxy timeout), `PingContext` just returns immediately with an error — that's `"down"`, not a hang, so it doesn't defeat the bound, it tightens it. `defer cancel()` is present so no context leak. Fine.
+
+2. No leak path in the response. `healthResponse.DB` is only ever set to the literal strings `"ok"`/`"down"` — never the error itself, never the DSN. I checked every write site; nothing else touches `w` in that handler. The test file backs this with an explicit substring-negative assertion against both the DSN and known driver-error text, which is the right enforcement site per the refinement doc's own wording. Logging the DAO-open and ping-open errors server-side in `main.go` (lines with `%v`) is correct and matches "logged server-side is fine."
+
+3. `sql.Open`/`PingContext` split is safe. `sql.Open` is documented to never dial — confirmed by the test asserting it succeeds even against a DSN that can't possibly resolve. `sqlDriverNameFor` returns `""` for anything unrecognized, and that's guarded (`if driverName != ""`) before calling `sql.Open`, so there's no risk of `sql.Open("", dsn)` panicking. Repeated pings against a permanently-down DB don't leak: `database/sql`'s pool closes failed idle connections itself, and both registered drivers (`pgx`, `modernc.org/sqlite`) respect context cancellation/timeout on connect attempts, so a `1s`-bounded `PingContext` fails fast every time rather than accumulating blocked goroutines. One design note, not a defect: this opens a second independent connection pool to the same database as `dao.New`'s repo — for a POC that's an acceptable simplicity trade-off given 05's `Repository` contract doesn't expose `Ping`, but worth naming in the README if it isn't already, since a reviewer coming in cold might assume there's one pool.
+
+4. Nil-safety is complete. `pingDB` nil is the only nil-sensitive input in the new code path, and it's checked before dereferencing. `repo` nil (a separate, pre-existing concern) is handled independently in `NewVerifierRouter` and untouched by this diff.
+
+5. The `modernc.org/sqlite` import in `health_db_test.go` is fine — it's already a direct entry in `go.mod` (not just indirect), already imported for the same driver registration purpose by `internal/dao/sqlite`. This test file is a second import site of an existing dependency, not a new one. No objection.
+
+6. Nothing else to flag. `_ = json.NewEncoder(w).Encode(...)` swallowing the encode error is pre-existing style in this file (the original `healthHandler` does the same), so it's not something this PR introduced — I'd have raised it as new if it were. Doc comments accurately describe behavior; the "never configured" vs. "configured but unreachable" collapsing to the same `"down"` is a deliberate, correctly-reasoned choice given the criterion's own leak concern. Naming (`dbPingTimeout`, `healthHandlerWithDB`, `sqlDriverNameFor`) is clear and consistent with the file's existing conventions.
+
+One line worth Renata's attention before merge, not a blocker: the second connection pool point in #3 above — confirm the README's "what's stubbed and why" section says so, since 04's postgres-in-namespace doc and this PR both silently accept it as correct but neither states it as a chosen trade-off in writing yet.
+
+Files reviewed: `/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/app.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/verifier_router.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/cmd/api-service/main.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/health_db_test.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-52-healthz/internal/app/verifier_router_test.go`, cross-checked against `/Users/warrenthompson/Source/LoginID/04-infra-devops/refinement/postgres-in-namespace.md` criterion 5 and Naomi Voss's PO acceptance note.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>

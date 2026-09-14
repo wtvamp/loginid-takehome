@@ -1,4 +1,898 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
-<title>LoginID take-home</title>
-<p>Publishing. The retrospective lands here shortly. Repository: <a href="https://github.com/wtvamp/loginid-takehome">github.com/wtvamp/loginid-takehome</a></p>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How one human and twenty-four AI agents designed, built, deployed and reviewed a real identity API in thirty hours. Live demo, screen recordings, and every agent transcript.">
+<meta property="og:title" content="LoginID Flight Recorder">
+<meta property="og:description" content="One human, twenty-four agents, thirty hours, one running API. Drive the live demo, watch the agents work, read every transcript.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230A0F1E%22/%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2218%22 fill=%22%233DD6C8%22/%3E%3C/svg%3E">
+<style>html{color-scheme:dark}body{margin:0;background:#0A0F1E}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>LoginID Flight Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+</head>
+<body>
+<style>
+:root{
+  --bg:#0A0F1E; --bg2:#0F1629; --panel:#131C33; --panel2:#182342; --ink:#EAF0FA; --ink2:#AEBBD3; --ink3:#6F7E9C; --rule:#263352; --grid:#1E2A47;
+  --agent:#3DD6C8; --human:#FF7A59; --deploy:#FFC857; --done:#5BE49B; --inc:#FF5C6C; --sec:#9D8CFF; --lead:#2BB3A8; --hire:#6F86B8;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif; --body:"Manrope",ui-sans-serif,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;padding-block:0 120px;padding-inline:clamp(16px,4vw,48px);
+  background-image:radial-gradient(1200px 600px at 80% -10%,rgba(61,214,200,.10),transparent 60%),radial-gradient(900px 500px at 0% 20%,rgba(157,140,255,.10),transparent 60%)}
+a{color:inherit}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(44px,7vw,104px);font-weight:800;line-height:.94}
+h2{font-size:clamp(30px,3.6vw,46px);font-weight:700;line-height:1.05}
+h3{font-size:18px;font-weight:600}
+p{max-width:66ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);font-weight:500}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.lede{font-size:clamp(18px,1.9vw,22px);line-height:1.45;color:var(--ink2);max-width:58ch}
+section{padding-block:80px 0}
+.sec-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:20px 48px;align-items:end;margin-bottom:28px}
+.sec-head p{margin:8px 0 0;color:var(--ink2)}
+@media (max-width:760px){.sec-head{grid-template-columns:1fr}}
+.panel{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--rule);border-radius:12px;padding:20px 22px 18px;min-width:0;position:relative;overflow:hidden}
+.panel h3{margin-bottom:4px}
+.panel .sub{font-size:13.5px;color:var(--ink3);margin:0 0 14px}
+.panel .note{font-size:12.5px;color:var(--ink3);margin:12px 0 0;line-height:1.45}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:var(--mono);fill:var(--ink2)}
+canvas{display:block;width:100%}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:22px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:22px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-left:8px;vertical-align:middle;background:rgba(255,255,255,.06)}
+.tag.h{color:var(--human)}.tag.d{color:var(--deploy)}.tag.i{color:var(--inc)}.tag.ok{color:var(--done)}.tag.s{color:var(--sec)}.tag.a{color:var(--agent)}
+
+/* HERO */
+header{position:relative;padding-block:64px 40px}
+.hero-canvas{position:absolute;inset:0;z-index:0;opacity:.9;border-radius:0 0 24px 24px;overflow:hidden}
+.hero-canvas canvas{height:100%}
+.hero{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:32px 56px;align-items:end}
+@media (max-width:900px){.hero{grid-template-columns:1fr}}
+.masthead{position:relative;z-index:1;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:36px}
+.masthead a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.hero h1 span{display:block}
+.hero h1 .hl{color:var(--agent)}
+.hero h1 .hu{color:var(--human)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.kpi{background:rgba(19,28,51,.75);backdrop-filter:blur(6px);border:1px solid var(--rule);border-radius:12px;padding:14px 16px}
+.kpi .k{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.kpi .v{font-family:var(--display);font-size:clamp(26px,3vw,36px);font-weight:700;line-height:1.05;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.kpi.kpi-money .v{color:var(--deploy)}
+.live{display:inline-flex;align-items:center;gap:10px;margin-top:22px;padding:10px 14px;border:1px solid var(--rule);border-radius:999px;font-family:var(--mono);font-size:12.5px;text-decoration:none;background:rgba(10,15,30,.6)}
+.live .dot{width:9px;height:9px;border-radius:50%;background:var(--done);box-shadow:0 0 0 4px rgba(91,228,155,.25)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin-top:16px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+
+/* PLAYBAR */
+.playbar{position:sticky;top:12px;z-index:20;margin-top:34px;background:rgba(15,22,41,.88);backdrop-filter:blur(10px);border:1px solid var(--rule);border-radius:14px;padding:12px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px 18px;align-items:center;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+@media (max-width:760px){.playbar{grid-template-columns:auto minmax(0,1fr)} .playbar .stats{grid-column:1/-1}}
+.playbar button{font-family:var(--mono);font-size:12.5px;padding:9px 14px;border:1px solid var(--agent);border-radius:999px;background:var(--agent);color:#062a27;cursor:pointer;font-weight:600;white-space:nowrap}
+.playbar button:hover{filter:brightness(1.08)}
+.scrub{display:grid;gap:6px}
+.scrub input[type=range]{width:100%;accent-color:var(--agent)}
+.scrub .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--ink3)}.scrub .ticks span{white-space:nowrap}
+.stats{display:flex;gap:18px;font-family:var(--mono);font-size:12.5px;color:var(--ink2);white-space:nowrap;flex-wrap:wrap}
+.stats b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.stats .sp b{color:var(--deploy)}
+
+/* CONTROL ROOM */
+.room{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px;margin-top:22px}
+@media (max-width:980px){.room{grid-template-columns:1fr}}
+.org-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+@media (max-width:1100px){.org-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:560px){.org-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.agent{position:relative;border:1px solid var(--rule);border-radius:10px;padding:9px 9px 8px;background:var(--bg2);min-width:0;transition:border-color .3s,box-shadow .3s,transform .3s}
+.agent .nm{font-family:var(--display);font-weight:600;font-size:12.5px;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:2.3em}
+.agent .rl{font-family:var(--mono);font-size:9.5px;color:var(--ink3);margin-top:2px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent .bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:7px;overflow:hidden}
+.agent .bar i{display:block;height:100%;width:0;background:var(--agent);transition:width .35s ease}
+.agent.pm{grid-column:span 2;background:linear-gradient(180deg,rgba(61,214,200,.14),var(--bg2));border-color:rgba(61,214,200,.45)}
+.agent.human{grid-column:span 2;border-color:rgba(255,122,89,.5);background:linear-gradient(180deg,rgba(255,122,89,.14),var(--bg2))}
+.agent.op{grid-column:span 2;border-color:rgba(157,140,255,.45)}
+.agent.lead{background:linear-gradient(180deg,rgba(43,179,168,.10),var(--bg2))}
+.agent.lit{box-shadow:0 0 0 1px var(--agent),0 0 24px rgba(61,214,200,.35);transform:translateY(-1px)}
+.agent.human.lit{box-shadow:0 0 0 1px var(--human),0 0 24px rgba(255,122,89,.4)}
+.agent.op.lit{box-shadow:0 0 0 1px var(--sec),0 0 24px rgba(157,140,255,.4)}
+.ticker{display:grid;gap:8px;max-height:420px;overflow:hidden;position:relative}
+.ticker::after{content:"";position:absolute;left:0;right:0;bottom:0;height:70px;background:linear-gradient(transparent,var(--bg2))}
+.ev{display:grid;grid-template-columns:52px 10px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--rule);opacity:.35;transition:opacity .4s}
+.ev.on{opacity:1}.ev.now{opacity:1}
+.ev .t{font-family:var(--mono);font-size:11px;color:var(--ink3);padding-top:3px}
+.ev .dot{width:10px;height:10px;border-radius:50%;margin-top:5px;background:var(--agent)}
+.ev.human .dot{background:var(--human)}.ev.deploy .dot{background:var(--deploy);border-radius:2px;transform:rotate(45deg)}.ev.incident .dot{background:var(--inc)}.ev.done .dot{background:var(--done)}.ev.sec .dot{background:var(--sec)}
+.ev b{font-family:var(--display);font-weight:600;font-size:14px;line-height:1.25}
+.ev.now b{font-size:16px;color:var(--ink)}
+.ev p{margin:2px 0 0;font-size:12.5px;color:var(--ink2);display:none}
+.ev.now p{display:block}
+
+/* HEATMAP */
+.heat{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 10px;align-items:center;font-family:var(--mono);font-size:11px}
+.heat .row{display:grid;grid-template-columns:repeat(31,minmax(0,1fr));gap:2px}
+.heat .cell{aspect-ratio:1/1.2;border-radius:2px;background:rgba(255,255,255,.04);transition:background .3s}
+.heat .lbl{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.heat .lbl.h{color:var(--ink3)}
+.heat .axis{grid-column:2;display:grid;grid-template-columns:repeat(31,minmax(0,1fr));gap:2px;color:var(--ink3);font-size:9.5px}
+.heat .axis span{text-align:center;overflow:hidden}
+
+/* SANKEY */
+.sankey path.rib{fill:none;stroke-linecap:butt;opacity:.55;mix-blend-mode:screen}
+.sankey rect.nd{rx:3}
+.sankey text.nl{font-size:11.5px;fill:var(--ink)}
+.sankey text.nv{font-size:10.5px;fill:var(--ink3)}
+@media (prefers-reduced-motion:no-preference){.sankey path.flowdash{stroke-dasharray:6 14;animation:dash 2.4s linear infinite}@keyframes dash{to{stroke-dashoffset:-40}}}
+
+/* COST */
+.money{font-family:var(--display);font-weight:800;font-size:clamp(56px,8vw,116px);line-height:.95;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--deploy);text-shadow:0 0 40px rgba(255,200,87,.25)}
+.money small{font-size:.3em;font-weight:600;color:var(--ink3);letter-spacing:0;margin-left:10px;text-shadow:none}
+.unit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:22px}
+.unit{border-top:2px solid var(--rule);padding-top:10px}
+.unit .n{font-family:var(--display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.unit .l{font-size:12.5px;color:var(--ink2);line-height:1.35}
+.donut-wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:center}
+@media (max-width:520px){.donut-wrap{grid-template-columns:1fr}}
+.donut-wrap ul{list-style:none;margin:0;padding:0;font-size:13.5px}
+.donut-wrap li{display:flex;align-items:baseline;gap:10px;padding:6px 0;border-bottom:1px dashed var(--rule)}
+.donut-wrap li b{font-family:var(--mono);font-weight:500;margin-left:auto;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:no-preference){.donut circle.seg{transition:stroke-dasharray 1s cubic-bezier(.2,.7,.2,1),stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1)}}
+.prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.price{border:1px solid var(--rule);border-radius:10px;padding:12px 14px;background:var(--bg2)}
+.price b{display:block;font-family:var(--display);font-size:14.5px;margin-bottom:6px}
+.price label{display:grid;grid-template-columns:1fr 84px;align-items:center;gap:8px;font-size:12px;color:var(--ink2);padding:3px 0}
+.price input{font-family:var(--mono);font-size:12.5px;padding:4px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink);width:100%}
+.price .assume{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--deploy);margin-top:6px}.price .assume.pub{color:var(--done)}
+
+.shots{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.45fr);gap:18px;align-items:start}
+@media (max-width:900px){.shots{grid-template-columns:1fr}}
+.shots figure{margin:0;background:var(--bg2);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.shots img{display:block;width:100%;height:auto}
+.shots figcaption{font-size:13px;color:var(--ink2);padding:10px 12px 12px;line-height:1.45}
+.shots .phone img{max-height:640px;object-fit:cover;object-position:top}
+
+
+/* NAV */
+.navlinks{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 0;position:relative;z-index:2}
+.navlinks a{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;letter-spacing:.02em;text-decoration:none;padding:9px 14px;border-radius:999px;border:1px solid var(--rule);background:rgba(15,22,41,.7);transition:border-color .2s,background .2s,transform .2s}
+.navlinks a:hover{border-color:var(--agent);background:rgba(61,214,200,.10);transform:translateY(-1px)}
+.navlinks a.primary{border-color:var(--done);background:rgba(91,228,155,.12);color:var(--done)}
+.navlinks a i{font-style:normal}
+/* STEPS */
+.steps{counter-reset:st;display:grid;gap:14px}
+.step{display:grid;grid-template-columns:38px minmax(0,1fr);gap:16px;align-items:start;padding:16px 18px;border:1px solid var(--rule);border-radius:12px;background:var(--bg2)}
+.step::before{counter-increment:st;content:counter(st);font-family:var(--mono);font-size:13px;font-weight:600;color:#062a27;background:var(--agent);width:28px;height:28px;border-radius:50%;display:grid;place-items:center}
+.step h4{margin:0 0 4px;font-family:var(--display);font-size:16.5px;font-weight:600}
+.step p{margin:0;font-size:14px;color:var(--ink2);max-width:76ch}
+.step p+p{margin-top:6px}
+pre.cmd{font-family:var(--mono);font-size:12px;line-height:1.6;background:#070C18;border:1px solid var(--rule);border-radius:8px;padding:12px 14px;overflow-x:auto;margin:10px 0 0;color:#CFE3FF}
+pre.cmd b{color:var(--deploy);font-weight:500}
+pre.cmd .c{color:var(--ink3)}
+kbd{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.07);border:1px solid var(--rule);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--ink)}
+.val{font-family:var(--mono);font-size:12.5px;color:var(--done);background:rgba(91,228,155,.10);border:1px solid rgba(91,228,155,.25);border-radius:5px;padding:1px 7px;white-space:nowrap}
+.warnbox{border:1px solid rgba(255,200,87,.35);background:rgba(255,200,87,.07);border-radius:12px;padding:16px 18px;margin-top:18px}
+.warnbox b{font-family:var(--display);font-size:15.5px;display:block;margin-bottom:4px;color:var(--deploy)}
+.warnbox p{margin:0;font-size:14px;color:var(--ink2)}
+/* VIDEO */
+.vids{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px}
+.vid{background:var(--bg2);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.vid video{display:block;width:100%;height:auto;background:#070C18}
+.vid .cap{padding:12px 14px 14px}
+.vid .cap b{font-family:var(--display);font-size:15px;display:block;margin-bottom:3px}
+.vid .cap p{margin:0;font-size:13px;color:var(--ink2)}
+/* PEOPLE / transcripts */
+.people{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px}
+.person{border:1px solid var(--rule);border-radius:11px;padding:13px 15px;background:var(--bg2);display:grid;gap:3px;text-decoration:none;transition:border-color .2s,transform .2s,background .2s}
+a.person:hover{border-color:var(--agent);transform:translateY(-2px);background:var(--panel)}
+.person .nm{font-family:var(--display);font-weight:600;font-size:15.5px}
+.person .rl{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.05em;text-transform:uppercase}
+.person .ds{font-size:13px;color:var(--ink2);line-height:1.4;margin-top:3px}
+.person .mt{font-family:var(--mono);font-size:11px;color:var(--agent);margin-top:5px}
+.person.pmx{border-color:rgba(61,214,200,.45);background:linear-gradient(180deg,rgba(61,214,200,.10),var(--bg2))}
+.person.opx{border-color:rgba(157,140,255,.45)}
+.groupttl{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:26px 0 10px}
+.groupttl:first-child{margin-top:0}
+/* AI ARCH */
+.stack{display:grid;gap:12px}
+.layer{display:grid;grid-template-columns:170px minmax(0,1fr);gap:18px;align-items:start;padding:15px 17px;border-radius:11px;border:1px solid var(--rule);background:var(--bg2);border-left:3px solid var(--agent)}
+@media (max-width:700px){.layer{grid-template-columns:1fr;gap:6px}}
+.layer:nth-child(2){border-left-color:var(--sec)}.layer:nth-child(3){border-left-color:var(--deploy)}.layer:nth-child(4){border-left-color:var(--done)}.layer:nth-child(5){border-left-color:var(--human)}
+.layer .lt{font-family:var(--display);font-weight:600;font-size:15.5px}
+.layer .ls{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:2px}
+.layer p{margin:0;font-size:14px;color:var(--ink2);max-width:78ch}
+.claim{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px;margin-top:20px}
+.claim div{padding:16px 18px;border-radius:11px;border:1px solid var(--rule);background:var(--bg2)}
+.claim .hd{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:7px}
+.claim .a .hd{color:var(--done)}.claim .b .hd{color:var(--deploy)}.claim .c .hd{color:var(--inc)}
+.claim p{margin:0;font-size:13.5px;color:var(--ink2)}
+.claim ul{margin:6px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink2)}
+.claim li{margin:4px 0}
+
+/* HUMAN */
+.hil{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:22px}
+@media (max-width:860px){.hil{grid-template-columns:1fr}}
+.bigsplit{margin:10px 0 18px}
+.bigsplit .track{height:46px;border-radius:10px;overflow:hidden;display:flex;background:rgba(255,255,255,.05)}
+.bigsplit .track div{height:100%}
+.bigsplit .cap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--ink2);margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--rule);font-weight:500}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink2)}
+td:first-child{color:var(--ink)}
+td.num{font-family:var(--mono);text-align:right;padding-right:0;color:var(--ink)}
+th.num{text-align:right;padding-right:0}
+.tblwrap{overflow-x:auto}
+
+/* ARCH */
+.arch-wrap{position:relative}
+.arch-wrap canvas{border-radius:10px;background:var(--bg2);border:1px solid var(--rule)}
+.arch-key{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin-top:12px}
+.arch-key span{display:inline-flex;align-items:center;gap:7px}
+
+/* TIMELINE */
+.tl{position:relative;margin-top:8px}
+.tl-day{position:sticky;top:84px;background:var(--bg);z-index:2;padding:10px 0 8px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:baseline}
+.tl-day h3{font-size:15px}
+.tl-row{display:grid;grid-template-columns:64px 28px minmax(0,1fr);gap:0 14px;position:relative}
+.tl-row .t{font-family:var(--mono);font-size:11.5px;color:var(--ink3);padding-top:16px;text-align:right}
+.tl-row .spine{position:relative}
+.tl-row .spine::before{content:"";position:absolute;left:13px;top:0;bottom:0;width:2px;background:var(--rule)}
+.tl-row .node{position:absolute;left:7px;top:18px;width:14px;height:14px;border-radius:50%;background:var(--agent);border:3px solid var(--bg);box-shadow:0 0 14px currentColor;color:var(--agent)}
+.tl-row.human .node{background:var(--human);color:var(--human)}.tl-row.deploy .node{background:var(--deploy);color:var(--deploy);border-radius:2px;transform:rotate(45deg)}.tl-row.incident .node{background:var(--inc);color:var(--inc)}.tl-row.done .node{background:var(--done);color:var(--done)}.tl-row.sec .node{background:var(--sec);color:var(--sec)}
+.tl-row .body{padding:12px 0 18px;border-bottom:1px dashed var(--rule)}
+.tl-row .body b{font-family:var(--display);font-weight:600;font-size:16.5px}
+.tl-row .body p{margin:4px 0 0;color:var(--ink2);font-size:14.5px;max-width:72ch}
+.tl-gap{display:grid;grid-template-columns:64px 28px 1fr;gap:0 14px}
+.tl-gap .spine{position:relative}.tl-gap .spine::before{content:"";position:absolute;left:13px;top:0;bottom:0;width:2px;background:repeating-linear-gradient(to bottom,var(--rule) 0 4px,transparent 4px 9px)}
+.tl-gap .body{padding:14px 0;font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+@media (prefers-reduced-motion:no-preference){.tl-row .body{transition:transform .5s ease,opacity .5s ease}.tl-row.pre .body{opacity:.45;transform:translateX(12px)}}
+.lessons{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:22px}
+.lessons div{padding:18px 18px 16px;border-radius:12px;border:1px solid var(--rule);background:var(--bg2);border-top:3px solid var(--agent)}
+.lessons div:nth-child(2n){border-top-color:var(--sec)}.lessons div:nth-child(3n){border-top-color:var(--deploy)}
+.lessons b{display:block;font-family:var(--display);font-size:17px;margin-bottom:6px}
+.lessons p{font-size:14px;color:var(--ink2);margin:0}
+footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--ink3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){.live .dot{animation:pulse 2.4s ease-in-out infinite}@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(91,228,155,.25)}50%{box-shadow:0 0 0 9px rgba(91,228,155,.08)}}}
+.tip{position:fixed;pointer-events:none;z-index:50;background:#0b1224;border:1px solid var(--rule);color:var(--ink);font-family:var(--mono);font-size:11.5px;padding:6px 9px;border-radius:6px;display:none;max-width:260px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="hero-canvas"><canvas id="heroCanvas" aria-hidden="true"></canvas></div>
+  <div class="masthead eyebrow"><span>LoginID take-home · uplift-kub · 12 → 13 Sep 2026</span><span>Go · Kubernetes · Claude Code</span></div>
+  <div class="hero">
+    <div>
+      <h1><span>Thirty hours.</span><span class="hu">One human.</span><span class="hl">Twenty-four agents.</span></h1>
+      <p class="lede">A Go data-access layer, a secured REST API, and an identity-provider connector: designed, argued over, built, deployed to a real Kubernetes cluster, and reviewed live. It is still running. You can drive it yourself in the next four minutes, then read every word the agents said while building it.</p>
+      <a class="live" href="https://loginid-takehome.uplifttech.org/healthz"><span class="dot"></span>loginid-takehome.uplifttech.org · live · db: ok</a>
+      <nav class="navlinks">
+        <a class="primary" href="https://loginid-takehome.uplifttech.org/demo"><i>▸</i>Open the live demo</a>
+        <a href="#usedemo"><i>?</i>How to use it</a>
+        <a href="https://github.com/wtvamp/loginid-takehome"><i>&lt;/&gt;</i>Source on GitHub</a>
+        <a href="https://wtvamp.github.io/loginid-takehome/board.html"><i>▦</i>The backlog, all 53 issues</a>
+        <a href="#agents"><i>◉</i>Watch the agents work</a>
+        <a href="transcripts/index.html"><i>⌗</i>Read every agent transcript</a>
+      </nav>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--agent)"></i>agent</span><span><i class="sw" style="background:var(--human)"></i>human decision</span><span><i class="sw" style="background:var(--deploy)"></i>deployment</span><span><i class="sw" style="background:var(--done)"></i>story Done</span><span><i class="sw" style="background:var(--inc)"></i>incident</span><span><i class="sw" style="background:var(--sec)"></i>security ruling</span>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">Stories Done</div><div class="v"><span data-count="43">0</span> / 43</div><div class="s">18 planning, 25 implementation</div></div>
+      <div class="kpi kpi-money"><div class="k">Estimated spend</div><div class="v" id="heroCost">$0</div><div class="s">at list price, prices editable below</div></div>
+      <div class="kpi"><div class="k">Tokens generated</div><div class="v" data-count="6532377" data-fmt="tok">0</div><div class="s">9,402 turns · 9,967 tool calls</div></div>
+      <div class="kpi"><div class="k">Tokens read</div><div class="v" data-count="4151239000" data-fmt="tokb">0</div><div class="s">99.1% from the prompt cache</div></div>
+      <div class="kpi"><div class="k">Human decisions</div><div class="v" data-count="27">0</div><div class="s">no lines of code</div></div>
+      <div class="kpi"><div class="k">Live-review failures</div><div class="v" data-count="19">0</div><div class="s">before the 25 passes</div></div>
+    </div>
+  </div>
+  <div class="playbar" id="playbar">
+    <button type="button" id="play">▶ Play the 30 hours</button>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="31" step="0.05" value="31" aria-label="Scrub the timeline"><div class="ticks"><span>Fri 09</span><span>Fri 15</span><span>Fri 21</span><span>Sat 03</span><span>Sat 09</span><span>Sat 15</span></div></div>
+    <div class="stats"><span>clock <b id="pClock">Sat 15:00</b></span><span class="sp">spent <b id="pCost">$0</b></span><span>Done <b id="pDone">42</b></span><span>commits <b id="pCommits">289</b></span></div>
+  </div>
+</header>
+
+<!-- ===== THE THING ITSELF ===== -->
+<section id="usedemo" style="padding-top:44px">
+  <div class="sec-head"><div><span class="eyebrow">Start here</span><h2>Drive the real API yourself</h2></div><p>The assignment asked for three things: a multi-database DAO, a secured REST service to search and retrieve profiles, and a connector to a third-party identity provider. All three are running right now on a Kubernetes cluster. <a href="https://loginid-takehome.uplifttech.org/demo">The demo console</a> is a single page served by the API binary itself, on the same origin, so it holds no secret and needs no CORS. It makes real calls with a real token and prints the request as a curl line beside the raw response.</p></div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3>What you can try with no credentials at all</h3>
+      <p class="sub">Open these in any browser, right now.</p>
+      <div class="steps">
+        <div class="step"><div><h4>The health endpoint</h4><p>Reports the build SHA running in the cluster and whether the database connection is live. The SHA always matches the tip of <span class="mono">main</span>, because deployment is the only way code reaches the cluster.</p><pre class="cmd">curl -s <b>https://loginid-takehome.uplifttech.org/healthz</b>
+<span class="c">{"status":"ok","service":"api-service","build":"…","db":"ok"}</span></pre></div></div>
+        <div class="step"><div><h4>The refusal to answer without a token</h4><p>Panel 3 on the demo page needs nothing from you. An unauthenticated read returns <span class="val">401</span> with no hint about whether the record exists.</p><pre class="cmd">curl -i <b>https://loginid-takehome.uplifttech.org/profiles/00000000-0000-4000-8000-000000000001</b>
+<span class="c">HTTP/2 401</span></pre></div></div>
+      </div>
+      <p class="note">Everything else needs a token, because the API has no anonymous read path. That is the design, not a gate on the demo.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Getting a credential</h3>
+      <p class="sub">Three QA client credentials exist, each granted exactly one scope.</p>
+      <div class="tblwrap"><table><thead><tr><th>Credential</th><th>Scope it carries</th><th>What it can do</th></tr></thead><tbody>
+        <tr><td>QA search client</td><td><span class="mono">profile:search</span></td><td>Search by name. Phone and region come back masked.</td></tr>
+        <tr><td>QA read-own client</td><td><span class="mono">profile:read:own</span></td><td>Read only records this client owns. Used to produce the two identical 403s.</td></tr>
+        <tr><td>QA read-any client</td><td><span class="mono">profile:read:any</span></td><td>Full unmasked read, but only with a valid <span class="mono">reason_code</span>.</td></tr>
+      </tbody></table></div>
+      <div class="warnbox"><b>The secrets are not on this page, deliberately</b><p>A client secret is the password half of an OAuth2 client credential. Publishing one on a public page would contradict every control this submission argues for. The three id and secret pairs are sent separately, in the email that carries this link. Each is single-scope, low value, and revocable in one SQL statement.</p></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:22px">
+    <h3>Running the console, step by step</h3>
+    <p class="sub">About four minutes. Nothing you type is stored: the credential lives in the browser tab and dies with it.</p>
+    <div class="steps">
+      <div class="step"><div><h4>Open the console</h4><p>Go to <a href="https://loginid-takehome.uplifttech.org/demo">loginid-takehome.uplifttech.org/demo</a>. You will see one credential box at the top and five numbered panels below it, each with its own Run button.</p></div></div>
+
+      <div class="step"><div><h4>Mint your first token</h4><p>Paste the <b>QA search client</b> id into <span class="val">QA client id</span> and its secret into <span class="val">QA client secret</span>, then press <kbd>Mint token</kbd>. A green chip appears reading <span class="mono">profile:search ✓ live</span>. The page shows you the exact request it just made.</p><pre class="cmd">POST <b>/auth/token</b>
+Authorization: Basic &lt;client-id&gt;:&lt;client-secret&gt;
+Content-Type: application/x-www-form-urlencoded
+
+<b>grant_type=client_credentials</b></pre><p>There is no <span class="mono">scope</span> parameter to send. The scope is a property of the credential, stored server-side, so a caller cannot ask for more than it was granted. Tokens last ten minutes; if one expires mid-review the page tells you to mint another rather than showing you a bare 401.</p></div></div>
+
+      <div class="step"><div><h4>Repeat for the other two credentials</h4><p>Paste the read-own pair, mint; paste the read-any pair, mint. You now hold three live tokens, one per scope, and three green chips. Clearing the fields does not clear the tokens.</p></div></div>
+
+      <div class="step"><div><h4>Panel 1 — masked search beside full read</h4><p>Leave the search box at its default, <span class="val">Review Demo</span>, and press Run. Three fictional records come back: Review Demo One, Two and Three. In the left-hand response, phone and region are masked and highlighted as such. The page then re-reads the same record with the read-any token, and the right-hand response shows those fields in full.</p><p>The point is that authorisation is graduated, not a switch. The same row, the same handler, two different callers, two different shapes of truth.</p><pre class="cmd">POST <b>/profiles/search</b>   Authorization: Bearer &lt;profile:search token&gt;
+{"name": <b>"Review Demo"</b>}
+
+GET <b>/profiles/{id}</b>      Authorization: Bearer &lt;profile:read:any token&gt;</pre></div></div>
+
+      <div class="step"><div><h4>Panel 2 — the two identical 403s</h4><p>Press Run. The page requests two record ids the read-own credential was never granted: one that exists and one that almost certainly does not. Both come back <span class="val">403</span> with the same 65-byte body, and the page compares them byte for byte in front of you and prints <span class="mono">PASS</span>.</p><p>If "you may not see this" and "this does not exist" looked different, an attacker could enumerate which customers are real by reading error messages. They do not look different.</p></div></div>
+
+      <div class="step"><div><h4>Panel 3 — no token at all</h4><p>Press Run with nothing minted. <span class="val">401</span>. There is no anonymous back door, including on the search path.</p></div></div>
+
+      <div class="step"><div><h4>Panel 4 — the reason-code enum</h4><p>Press Run. A full read is attempted twice with the read-any token: once carrying <span class="val">reason_code=support_ticket</span>, which is on the server's closed list and is accepted, and once carrying <span class="val">reason_code=made_up_reason</span>, which is rejected.</p><p>An unmasked read of someone's home address should require a stated, checkable purpose that gets written to the audit log. A free-text field would let the caller write anything; a closed enum will not.</p></div></div>
+
+      <div class="step"><div><h4>Panel 5 — tripping the rate limiter, for real</h4><p>Run this one last. The page fires real requests one at a time until the API answers <span class="val">429</span>, then stops. The limiter is shared across everyone using that QA credential, so if a colleague is on the page at the same moment you will both feel it. That is stated on the page rather than hidden behind a per-visitor sandbox.</p></div></div>
+    </div>
+    <p class="note">Prefer a terminal? Every request above is printed on the page as a copyable curl line, so the console doubles as documentation for the API.</p>
+  </div>
+
+  <div class="sec-head" style="margin-top:64px"><div><span class="eyebrow">The same thing, in pictures</span><h3 style="font-size:clamp(22px,2.4vw,30px)">What the product owner saw when she signed it off</h3></div><p>The console was the forty-third and last story, pulled after the backlog had already closed because a reviewer should be able to see the thing work, not read that it works. The human added one requirement: make sure it looks good.</p></div>
+  <div class="shots">
+    <figure><img src="assets/demo-desktop.jpg" alt="Demo console: three tokens minted, then the same profile returned masked under profile:search and unmasked under profile:read:any" loading="lazy"><figcaption>Three single-scope tokens live, then one profile read two ways. Masked fields are tagged in the response itself.</figcaption></figure>
+    <figure><img src="assets/demo-desktop-2.jpg" alt="Demo console: two 403 responses compared byte for byte, the 401, and the reason_code enum accepted then rejected" loading="lazy"><figcaption>The two 403s compared byte for byte on the page. Below them the 401, and the reason code accepted then refused.</figcaption></figure>
+    <figure class="phone"><img src="assets/demo-phone.jpg" alt="The demo console at 390 pixels wide, panels stacked" loading="lazy"><figcaption>At 390px the panels stack and nothing scrolls sideways.</figcaption></figure>
+  </div>
+  <p class="note" style="max-width:74ch">One honest limitation went into the record: the page sets every autofill hint the platform offers, and a browser-extension password manager still offered to save the QA credential, because extensions use their own heuristics and ignore those hints. The control that actually holds is that the credential is single-scope, low value, and revocable by runbook.</p>
+</section>
+
+<!-- CONTROL ROOM -->
+<section id="room" style="padding-top:36px">
+  <div class="sec-head"><div><span class="eyebrow">Control room</span><h2>Who was working, what it cost, what happened</h2></div><p>Everything here follows the playhead. Agent tiles glow with the tokens they generated in the current hour; the bars are dollars per hour by role, the green line is stories Done, coral ticks are human decisions; the feed shows the moment on the tape.</p></div>
+  <div class="room">
+    <div class="panel">
+      <h3>The org, live</h3><p class="sub">Brightness = output tokens this hour. Bar = share of that persona's total so far.</p>
+      <div class="org-grid" id="org"></div>
+    </div>
+    <div class="panel">
+      <h3>On the tape</h3><p class="sub" id="tapeSub">Sixty-eight log entries compressed to the moments that changed something.</p>
+      <div class="ticker" id="ticker"></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:22px">
+    <h3>Dollars per hour, stories Done, human decisions</h3><p class="sub">Bars stacked by role (PM, leads, hires, research). Right axis: cumulative stories. Coral ticks: the 27 human decisions. Grey band: usage pause.</p>
+    <div id="costHour"></div>
+  </div>
+</section>
+
+<!-- HEAT -->
+<section id="heat">
+  <div class="sec-head"><div><span class="eyebrow">Heat map</span><h2>Thirty-one hours × twelve seats</h2></div><p>Output tokens per hour per seat, drawn from the transcripts. Leads run hot all day; hires flare during refinement and review; the PM is a steady line, which is what orchestration looks like from above.</p></div>
+  <div class="panel"><div class="heat" id="heatmap"></div><p class="note">Color scale is per row (each seat relative to its own busiest hour), so a hire's flare and a lead's marathon both read.</p></div>
+</section>
+
+<!-- SANKEY -->
+<section id="flow">
+  <div class="sec-head"><div><span class="eyebrow">Where the tokens went</span><h2>Tokens → models → roles → dollars</h2></div><p>Ribbon width is dollars at the prices set below. Cache reads make up most of the input and most of the cost; the orchestrator's model is the priciest per token but read the least.</p></div>
+  <div class="panel"><div id="sankey"></div></div>
+</section>
+
+<!-- COST -->
+<section id="cost">
+  <div class="sec-head"><div><span class="eyebrow">Tokens → dollars</span><h2>What thirty hours cost</h2></div><p>Every transcript records per-turn usage split into fresh input, cache reads, cache writes, and output. Multiplied by list price per model, that is the bill. Haiku's prices are published; Sonnet 5, Opus 5, and Fable 5.1 are assumptions, marked, and editable.</p></div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="eyebrow">Estimated total</div>
+      <div class="money" id="bigCost">$0<small>USD</small></div>
+      <div class="unit-grid">
+        <div class="unit"><div class="n" id="uStory">$—</div><div class="l">per implementation story (25)</div></div>
+        <div class="unit"><div class="n" id="uPR">$—</div><div class="l">per merged pull request (73)</div></div>
+        <div class="unit"><div class="n" id="uLoc">$—</div><div class="l">per line of Go (19,444)</div></div>
+        <div class="unit"><div class="n" id="uHour">$—</div><div class="l">per wall-clock hour (30)</div></div>
+        <div class="unit"><div class="n" id="uHuman">$—</div><div class="l">agent spend per human decision (27)</div></div>
+        <div class="unit"><div class="n" id="uCache">—</div><div class="l">saved by the prompt cache</div></div>
+      </div>
+    </div>
+    <div class="panel"><h3>Spend by role</h3><p class="sub">Leads carried the context; the PM's model costs the most per token.</p>
+      <div class="donut-wrap"><svg viewBox="0 0 220 220" id="donut" class="donut" role="img" aria-label="Spend by role"></svg><ul id="donutLegend"></ul></div></div>
+    <div class="panel"><h3>Spend by model</h3><p class="sub">Segments: cache read · cache write · output · fresh input.</p><div id="costModel"></div></div>
+    <div class="panel"><h3>Spend by seat</h3><p class="sub">Leads and PM individually; each track's hires aggregated.</p><div id="costPersona"></div></div>
+  </div>
+  <div class="panel" style="margin-top:22px"><h3>Prices, USD per million tokens</h3><p class="sub">Edit any field; every figure on the page recomputes.</p><div class="prices" id="prices"></div></div>
+</section>
+
+<!-- HUMAN -->
+<section id="loop">
+  <div class="sec-head"><div><span class="eyebrow">Human in the loop</span><h2>Where the human actually sat</h2></div><p>Twenty-seven recorded decisions and no code. The split below is counted from LOG.md, Jira, and the session record.</p></div>
+  <div class="hil">
+    <div class="panel"><h3>Actions by origin</h3><p class="sub">Each row is a kind of action; coral is the human's share.</p><div id="hilBars"></div>
+      <p class="note">Merge commits carry Warren's GitHub identity because the PM merged through his authenticated session; they are agent actions and counted as such.</p></div>
+    <div class="panel"><h3>The twenty-seven decisions</h3><p class="sub">What only the human could decide.</p>
+      <div class="tblwrap"><table><thead><tr><th>Kind</th><th class="num">#</th><th>Examples</th></tr></thead><tbody>
+        <tr><td>Direction</td><td class="num">6</td><td>code go as an agile loop; the real cluster; attribution rule; org topology; teardown timing; "ask Amber what the cluster already has"</td></tr>
+        <tr><td>Rulings</td><td class="num">4</td><td>Vault instead of etcd encryption; audit-log RBAC as accepted residual; Filebeat drop-filter fix; LT-20 disposition (pending)</td></tr>
+        <tr><td>Permission grants</td><td class="num">9</td><td>Amber into Vault; two deployer Role updates; deleting six Secrets; classifier approvals for cluster mutations</td></tr>
+        <tr><td>Routing</td><td class="num">3</td><td>DNS and GitHub credentials to Amber; Vault access via Amber; "she is logged in and can drive"</td></tr>
+        <tr><td>Cadence</td><td class="num">5</td><td>"usage has reset, keep going" ×5</td></tr>
+      </tbody></table></div></div>
+  </div>
+</section>
+
+<!-- ARCH -->
+<section id="arch">
+  <div class="sec-head"><div><span class="eyebrow">Software architecture</span><h2>What runs in the namespace</h2></div><p>Two Go binaries in three images. Watch the requests: a client mints a token at the issuer, calls the verifier, which checks the JWKS in-cluster and reads Postgres; the verifier alone may reach the connector; Vault feeds every pod its secrets at start. Hover a node for what it does.</p></div>
+  <div class="panel arch-wrap"><canvas id="archCanvas" height="520"></canvas>
+    <div class="arch-key"><span><i class="sw" style="background:var(--agent)"></i>client request</span><span><i class="sw" style="background:var(--sec)"></i>JWKS / Vault</span><span><i class="sw" style="background:var(--deploy)"></i>database</span><span><i class="sw" style="background:var(--inc)"></i>denied by NetworkPolicy</span></div></div>
+  <div class="grid3" style="margin-top:22px">
+    <div class="panel"><h3>Q1 · Data access</h3><p class="sub">DAO for user_profile and user_credential</p><p style="font-size:14px;color:var(--ink2);margin:0">One Repository interface, three backends. A conformance suite runs identical assertions against real Postgres, CockroachDB, and SQLite containers in CI, including CockroachDB's serialization retry. Errors by SQLSTATE, never by message text.</p></div>
+    <div class="panel"><h3>Q2 · REST + auth</h3><p class="sub">Search and retrieve, secured</p><p style="font-size:14px;color:var(--ink2);margin:0">OAuth2 client credentials mint RS256 tokens with per-client audiences; the verifier checks issuer, audience, and JWKS with bounded staleness. Masked search; full reads need read:own or read:any with a closed reason code; scope and policy denials are byte-identical 403s.</p></div>
+    <div class="panel"><h3>Q3 · IDP connector</h3><p class="sub">/auth and /identity to a vendor</p><p style="font-size:14px;color:var(--ink2);margin:0">Vendor tokens fetched, used once, discarded. Uniform-timing failures, per-identity and overflow backoff; the failure-ratio limiter fired live in review. Reachable only from api-service.</p></div>
+  </div>
+</section>
+
+<!-- ORG -->
+<section id="orgsec">
+  <div class="sec-head"><div><span class="eyebrow">AI architecture</span><h2>How the work was actually organised</h2></div><p>LoginID asked which AI tools were used and how. The honest answer is longer than a tool name, so this section gives the whole design: the layers, the model chosen for each seat and why, the rules that kept the agents from simply agreeing with each other, and a plain statement of which parts are Anthropic's documented patterns and which parts this project invented.</p></div>
+
+  <div class="stack">
+    <div class="layer"><div><div class="lt">The tool</div><div class="ls">Claude Code</div></div><p>Anthropic's agentic command-line tool, chosen because the deliverable is itself an argument about AI-architecture judgement. Using the tool that is the subject of the question makes the workflow inspectable: every session was recorded, and those recordings are published further down this page.</p></div>
+    <div class="layer"><div><div class="lt">The briefs</div><div class="ls">one root file, five track files</div></div><p>A root brief carries the assignment, the track boundaries and the working rules. Each of the five track directories carries its own brief, written to be self-sufficient: a fresh agent with no history can pick up that track from those two files alone. Context is retrieved when it is needed rather than all loaded at once, which is how a thirty-hour project stays inside a context window.</p></div>
+    <div class="layer"><div><div class="lt">The sessions</div><div class="ls">six top-level processes, not one</div></div><p>The project manager ran as one process. Each of the five track leads ran as its own separate process in its own terminal window, loading only its own brief and its own persona. They spoke to each other by message, but handed work over as files. A message signals that something is ready; it never carries the content.</p></div>
+    <div class="layer"><div><div class="lt">The hires</div><div class="ls">eighteen specialists, spawned by their lead</div></div><p>Each lead hired three or four specialists as sub-processes of its own session. Hires returned prose to their lead; leads wrote the files. Hires never spawned further agents, so the tree is exactly three deep and no work was ever orphaned under an agent nobody was watching.</p></div>
+    <div class="layer"><div><div class="lt">The operator</div><div class="ls">an agent on another machine, holding the credentials</div></div><p>Cluster and DNS credentials were never in this project's reach. A separate long-running agent on a different machine held them, took written requests, verified each one against the live cluster before acting, and refused anything the human had not authorised.</p></div>
+  </div>
+
+  <div class="grid2" style="margin-top:26px">
+    <div class="panel">
+      <h3>Which model sat in which seat, and why</h3>
+      <p class="sub">One expensive seat where a wrong call propagates; capable, cheaper models everywhere the work is bounded.</p>
+      <div class="tblwrap"><table><thead><tr><th>Seat</th><th>Model</th><th>Reasoning</th></tr></thead><tbody>
+        <tr><td>Orchestrator (PM)</td><td class="mono">Fable&nbsp;5.1</td><td>Holds the only cross-track state. A boundary misjudged here costs five agents their day, not one.</td></tr>
+        <tr><td>Data-ops lead</td><td class="mono">Opus&nbsp;5</td><td>Owns the schema and the database interface every other track builds against. The most expensive decision to reverse late.</td></tr>
+        <tr><td>Four other leads</td><td class="mono">Sonnet&nbsp;5</td><td>Design and delivery against a brief that is already concrete. Capable is enough; the ceiling is not the bottleneck.</td></tr>
+        <tr><td>Eighteen hires</td><td class="mono">Sonnet&nbsp;5</td><td>Bounded, single-purpose seats: one attack tree, one cold read, one objection.</td></tr>
+        <tr><td>Research fan-out</td><td class="mono">Haiku&nbsp;4.5</td><td>Narrow, verifiable, throwaway lookups run in parallel. Exploration noise never re-enters the coordinator's context, only the condensed answer does.</td></tr>
+      </tbody></table></div>
+      <p class="note">The security lead wrote that reasoning up before any of it ran, then recorded where the harness refused to cooperate: there is no per-agent effort setting, so the planned middle tier collapsed upward. The plan says so rather than pretending the design survived contact intact.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Why the agents were given different personalities</h3>
+      <p class="sub">Not decoration. A countermeasure against a specific failure.</p>
+      <p style="font-size:14px;color:var(--ink2)">Five leads and a manager, all started from the same base model, land in the same temperament by default: serious, careful, thorough. Agreement between agents who think alike is not evidence that a decision is good. It is evidence that nobody in the room was built to disagree.</p>
+      <p style="font-size:14px;color:var(--ink2);margin-top:10px">So variance was engineered. Thirteen archetypes, each with a stated blind spot. No archetype more than twice across the whole organisation and never twice inside one team. Every team had to contain its own lead's temperament opposite. At least three hires had to be playful and bold, because not one lead was. Each hire's brief states plainly what it pushes back on and where its own judgement fails.</p>
+      <p style="font-size:14px;color:var(--ink2);margin-top:10px">The effect is visible in the record: the adversary keeps finding attacks, the minimalist keeps deleting scope, and the newcomer keeps asking the question everyone else had stopped asking.</p>
+    </div>
+  </div>
+
+  <div class="sec-head" style="margin-top:56px"><div><span class="eyebrow">Six protocols</span><h3 style="font-size:clamp(22px,2.4vw,30px)">The patterns the teams actually ran</h3></div><p>Each is a small protocol with named seats and a required artefact. Every run ends in a dated decision file recording the positions, the rebuttals, the ruling, and which model each seat ran on. Chat is never the record.</p></div>
+  <div class="grid3" id="patterns"></div>
+
+  <div class="sec-head" style="margin-top:56px"><div><span class="eyebrow">Honesty about the claim</span><h3 style="font-size:clamp(22px,2.4vw,30px)">Did any of this actually help?</h3></div><p>The security track put that question to its own debate protocol rather than asserting an answer, and the ruling went against the broad claim. What follows is what the record supports, what it does not, and the failure most worth stealing.</p></div>
+  <div class="claim">
+    <div class="a"><div class="hd">What the evidence supports</div>
+      <ul>
+        <li>A seat whose brief is structurally different produces findings the previous seat could not. The alternatives seat deleted two attack paths outright by removing a cache, where every prior seat had proposed hardening it.</li>
+        <li>A reader with no stake in the text catches what its author cannot. Cold reads of finished hand-offs returned real gaps every time they ran.</li>
+        <li>Independent review caught a rate-limit control that was a silent no-op for the broadest scope. Neither the author of the fix nor the objector it answered had seen it, because both were reasoning inside the question as posed.</li>
+      </ul></div>
+    <div class="b"><div class="hd">What it does not support</div>
+      <p>That multi-agent debate beats one strong session in general. Nobody ran that comparison. The defensible claim is a mechanism, not a statistic: self-review interrogates the answer it already committed to, rather than the frame that produced the question. The losing side of that debate is preserved in the repository beside the winning one.</p>
+      <p style="margin-top:10px">Null results are counted in the same tallies as the hits, at the skeptic's insistence.</p></div>
+    <div class="c"><div class="hd">The failure worth stealing</div>
+      <p>Independence decayed silently. A reviewer assigned at planning time had, by the time the review ran, authored the very content she was set to check, through two intervening debates. Nothing flagged it; the roster still said she was independent.</p>
+      <p style="margin-top:10px">The lesson generalises well past AI: independence is a property to verify at the moment a review runs, not a role assigned once and trusted to hold. It was caught before that review ran, and the reviewers were reassigned.</p></div>
+  </div>
+
+  <div class="panel" style="margin-top:26px">
+    <h3>The three rules that made it auditable</h3>
+    <div class="grid3" style="margin-top:6px">
+      <div><b style="font-family:var(--display)">Everything names its author</b><p style="font-size:13.5px;color:var(--ink2);margin:4px 0 0">Every commit, pull request and ticket transition names the persona who did the work and the seat they sat in. Not "the team", not "Claude". Any line of code traces to the agent that wrote it and the reviewer that passed it.</p></div>
+      <div><b style="font-family:var(--display)">Hand-offs are files</b><p style="font-size:13.5px;color:var(--ink2);margin:4px 0 0">A hand-off has to let the receiver act without re-deriving the sender's reasoning. That gets tested by giving it to an agent who was not in the conversation and asking what they cannot do with it.</p></div>
+      <div><b style="font-family:var(--display)">Done means deployed and reviewed</b><p style="font-size:13.5px;color:var(--ink2);margin:4px 0 0">No story closed on a passing test. It closed when the product owner exercised it at the public URL. Nineteen stories failed that review before they passed it.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- WATCH -->
+<section id="agents">
+  <div class="sec-head"><div><span class="eyebrow">The receipts</span><h2>Watch the agents work, then read every word</h2></div><p>Unedited screen recordings of the terminal while the organisation ran, screenshots of the operator agent working on the live cluster, and a complete archive of every session: each message, each tool call, each result, with credentials redacted. None of it is a reconstruction.</p></div>
+
+  <div class="vids">
+    <div class="vid"><video src="media/demo-video-1.mp4" poster="assets/poster-video-1.jpg" controls preload="none" playsinline muted></video><div class="cap"><b>A security lead briefing four specialists at once</b><p>The adversary, the architect, the tinkerer and the skeptic each report in their own voice, then hold, waiting to be called into a seat. Twenty-two seconds.</p></div></div>
+    <div class="vid"><video src="media/demo-video-2.mp4" poster="assets/poster-video-2.jpg" controls preload="none" playsinline muted></video><div class="cap"><b>An infrastructure team arguing about scope</b><p>The scope guard cuts a row from the secrets inventory as two hypotheticals deep for a take-home; the enthusiast makes the opposite case on the developer loop. The lead rules. Thirty-six seconds.</p></div></div>
+    <div class="vid"><video src="media/demo-video-3.mp4" poster="assets/poster-video-3.jpg" controls preload="none" playsinline muted></video><div class="cap"><b>The manager running five tracks at once</b><p>Reports arriving from the engineering and infrastructure leads, a consistency pass flagging five stale restatements across tracks, and the operator agent being contacted on another machine. Two minutes.</p></div></div>
+    <div class="vid"><video src="media/demo-video-4.mp4" poster="assets/poster-video-4.jpg" controls preload="none" playsinline muted></video><div class="cap"><b>Hitting the usage limit, and what the agents did about it</b><p>The organisation runs out of budget mid-debate. The agents record exactly where they stopped, restate the rule that nobody interrupts the human directly, and hold. One minute.</p></div></div>
+  </div>
+
+  <div class="sec-head" style="margin-top:56px"><div><span class="eyebrow">The operator</span><h3 style="font-size:clamp(22px,2.4vw,30px)">An agent that would not take the project's word for it</h3></div><p>Cluster and DNS credentials sat with a separate agent on a different machine. It is worth reading what that agent did with a request it had no prior record of.</p></div>
+  <div class="shots" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))">
+    <figure><img src="assets/amber-discord-cname.jpg" alt="Chat log: the operator agent verifies a DNS request three ways, states that it cannot verify the human authorised it, and proceeds only because the change is reversible" loading="lazy"><figcaption>Asked for a DNS record, the operator verified the zone, the target and the namespace, then said plainly that the one thing it could not verify was the human authorising it. It proceeded only because the change was reversible and granted nothing, and offered to undo it. The human replied: approved.</figcaption></figure>
+    <figure><img src="assets/amber-vault-3.jpg" alt="Operator log: refusing to bind three roles to one shared identity because it would let one workload assume another's" loading="lazy"><figcaption>Provisioning the secret store, it refused the shortcut: binding three roles to one shared identity would have let the connector assume the database role. It created five separate identities instead.</figcaption></figure>
+    <figure><img src="assets/amber-vault-4.jpg" alt="Operator log: authenticating as each identity in turn and testing both what is allowed and what must be denied" loading="lazy"><figcaption>Then it proved the isolation rather than asserting it, authenticating as each identity in turn and testing what must be denied as carefully as what must be allowed.</figcaption></figure>
+    <figure><img src="assets/pm-lt46-brief.jpg" alt="The manager briefing the human with two options, the cost of each, and a recommendation" loading="lazy"><figcaption>The manager's side of a human decision: what is true today, two options, what each costs, a recommendation, and exactly which parts only the human could authorise.</figcaption></figure>
+    <figure><img src="assets/jira-lt34-workby.jpg" alt="A Jira comment naming every agent that contributed to the story and what each one did" loading="lazy"><figcaption>The attribution rule in practice. Every ticket names the implementer, the design seats, the objection seat, the reviewers, and who merged.</figcaption></figure>
+    <figure><img src="assets/amber-vault-smoketest.jpg" alt="A throwaway pod applied to the cluster to prove the secret injection path works end to end" loading="lazy"><figcaption>Before handing back, it ran an end-to-end test through the real injector with a throwaway pod, then deleted it.</figcaption></figure>
+  </div>
+
+  <div class="panel" style="margin-top:34px">
+    <h3>Every session, in full</h3>
+    <p class="sub">Each link opens one agent's own record: what it was asked, what it answered, every command it ran and what came back. Secrets are replaced with visible markers. The models' private reasoning is not retained in these logs, so it is not shown.</p>
+    <div id="transcripts"><p class="note">Opening the archive index…</p></div>
+    <p class="note">Published from the raw session logs by a redaction pass that strips tokens, password-bearing connection strings, password hashes, private keys and long base64 blobs.</p>
+  </div>
+</section>
+
+<!-- TIMELINE -->
+<section id="timeline">
+  <div class="sec-head"><div><span class="eyebrow">Timeline</span><h2>The full tape</h2></div><p>Times are Pacific. Dashed gaps are usage pauses.</p></div>
+  <div class="tl" id="tl"></div>
+</section>
+
+<!-- LESSONS -->
+<section id="lessons">
+  <div class="sec-head"><div><span class="eyebrow">What the record shows</span><h2>Six patterns the day kept repeating</h2></div><p>Each caught by a review step, each closed with a check that fails in CI or at startup instead of in production.</p></div>
+  <div class="lessons">
+    <div><b>Config named, never set</b><p>Three times a binary read an environment variable no manifest set. Now every mode declares its required variables, refuses to start without them, and CI diffs manifests against that list.</p></div>
+    <div><b>A pattern not carried forward</b><p>Five times a control on one component was missing on an identical new one: NetworkPolicy allow-lists, Forbid on a CronJob, a ServiceAccount per workload. Each got a test tying the new component to the rule.</p></div>
+    <div><b>Verification that skips</b><p>CI was green for hours while every Postgres and CockroachDB test silently skipped. Fixtures now fail under CI and the containers are always present.</p></div>
+    <div><b>The detector can fail too</b><p>"Diff against origin before declaring done" returned a false clean for untracked files. Five artifacts stranded; a <span class="mono">??</span> line is now unshipped work.</p></div>
+    <div><b>Arithmetic outlives its assumption</b><p>An alert at window-plus-one-interval fired on every healthy cycle; a rolling-day skip rate was meaningless at a daily schedule. Both became functions of one interval constant.</p></div>
+    <div><b>Fail loud, always</b><p>Vault Agent has two retry loops; one exits, the other retried forever and hung a pod in Init for seven minutes. The forced-failure test found it; the pod now crash-loops in thirty-six seconds.</p></div>
+  </div>
+</section>
+
+<footer><span>Built with Claude Code: one Fable 5.1 orchestrator, four Sonnet 5 leads, one Opus 5 lead, eighteen Sonnet specialists, and one operator agent on another machine. Every commit, pull request and ticket names who did the work.</span><span class="mono"><a href="https://loginid-takehome.uplifttech.org/demo">live demo</a> &middot; <a href="https://github.com/wtvamp/loginid-takehome">source</a> &middot; <a href="https://wtvamp.github.io/loginid-takehome/board.html">backlog</a> &middot; <a href="https://wtvamp.github.io/loginid-takehome/transcripts/index.html">transcripts</a></span></footer>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+// ================= DATA =================
+const TOK={"byModel":{"sonnet-5":{"in":15713,"cr":3435114617,"cw":28780624,"out":4799352,"turns":7858,"tools":7976},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":42,"tools":0},"opus-5":{"in":860,"cr":171112682,"cw":5957352,"out":515558,"turns":430,"tools":379},"fable-5.1":{"in":18734,"cr":508127601,"cw":5687182,"out":1221374,"turns":1052,"tools":1585},"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34}},"byRole":{"hire:01":{"sonnet-5":{"in":534,"cr":36774834,"cw":2766012,"out":171530,"turns":267,"tools":258},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"lead:01":{"sonnet-5":{"in":2272,"cr":526616052,"cw":3997797,"out":592532,"turns":1137,"tools":1088},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"fable-5.1":{"in":668,"cr":4403486,"cw":136152,"out":55157,"turns":29,"tools":49}},"hire:02":{"sonnet-5":{"in":318,"cr":12723819,"cw":1286300,"out":129128,"turns":159,"tools":124}},"lead:02":{"sonnet-5":{"in":1094,"cr":252720337,"cw":4539799,"out":409069,"turns":547,"tools":516},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":924,"cr":5418899,"cw":242822,"out":78481,"turns":35,"tools":81}},"hire:03":{"sonnet-5":{"in":992,"cr":25131824,"cw":3158035,"out":325144,"turns":496,"tools":666}},"lead:03":{"sonnet-5":{"in":6116,"cr":1557224812,"cw":6153008,"out":1893083,"turns":3058,"tools":3023},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0}},"lead:04":{"sonnet-5":{"in":3635,"cr":964294851,"cw":4049500,"out":922536,"turns":1818,"tools":1684},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"hire:04":{"sonnet-5":{"in":82,"cr":1084521,"cw":364308,"out":17291,"turns":41,"tools":46},"fable-5.1":{"in":114,"cr":85829,"cw":41486,"out":1548,"turns":9,"tools":3}},"hire:05":{"opus-5":{"in":102,"cr":1238421,"cw":607469,"out":43994,"turns":51,"tools":40},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0},"sonnet-5":{"in":18,"cr":375583,"cw":116580,"out":5884,"turns":9,"tools":19}},"lead:05":{"opus-5":{"in":744,"cr":169697924,"cw":5307055,"out":466347,"turns":372,"tools":323},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"sonnet-5":{"in":100,"cr":3697332,"cw":92540,"out":25732,"turns":50,"tools":50}},"pm":{"fable-5.1":{"in":16898,"cr":498096830,"cw":5217749,"out":1074975,"turns":974,"tools":1440},"sonnet-5":{"in":450,"cr":52137974,"cw":1953620,"out":247376,"turns":225,"tools":409},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":16,"tools":0}},"research":{"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34},"sonnet-5":{"in":102,"cr":2332678,"cw":303125,"out":60047,"turns":51,"tools":93},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"fable-5.1":{"in":130,"cr":122557,"cw":48973,"out":11213,"turns":5,"tools":12}}},"byHour":{"12-09":{"sonnet-5":{"in":566,"cr":29409516,"cw":828730,"out":213822,"turns":284,"tools":317}},"12-10":{"sonnet-5":{"in":260,"cr":16162415,"cw":215548,"out":57572,"turns":130,"tools":115},"fable-5.1":{"in":996,"cr":10953047,"cw":601609,"out":98007,"turns":50,"tools":78},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"haiku-4.5":{"in":92,"cr":301481,"cw":99569,"out":5697,"turns":11,"tools":15}},"12-11":{"sonnet-5":{"in":918,"cr":42429290,"cw":1505262,"out":266875,"turns":459,"tools":492},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":10,"tools":0},"opus-5":{"in":96,"cr":3868423,"cw":253007,"out":49879,"turns":48,"tools":62},"fable-5.1":{"in":2322,"cr":35305316,"cw":490085,"out":227274,"turns":106,"tools":236},"haiku-4.5":{"in":124,"cr":568996,"cw":47338,"out":4396,"turns":15,"tools":19}},"12-14":{"sonnet-5":{"in":450,"cr":33658843,"cw":1675607,"out":212254,"turns":225,"tools":249},"opus-5":{"in":166,"cr":17626222,"cw":465202,"out":141838,"turns":83,"tools":63},"fable-5.1":{"in":790,"cr":21705935,"cw":1114687,"out":93557,"turns":42,"tools":112}},"12-15":{"sonnet-5":{"in":592,"cr":91379485,"cw":774387,"out":263158,"turns":296,"tools":427},"opus-5":{"in":86,"cr":15998338,"cw":76398,"out":47916,"turns":43,"tools":36},"fable-5.1":{"in":1120,"cr":49888405,"cw":279255,"out":107227,"turns":68,"tools":96}},"12-16":{"sonnet-5":{"in":636,"cr":105916378,"cw":1449806,"out":221729,"turns":318,"tools":329},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0},"opus-5":{"in":44,"cr":8127167,"cw":455089,"out":23994,"turns":22,"tools":16},"fable-5.1":{"in":484,"cr":30736422,"cw":72466,"out":48943,"turns":33,"tools":63}},"12-17":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"12-19":{"sonnet-5":{"in":782,"cr":196000515,"cw":2992938,"out":247700,"turns":391,"tools":402},"opus-5":{"in":82,"cr":18654134,"cw":463506,"out":44015,"turns":41,"tools":33},"fable-5.1":{"in":1254,"cr":11240942,"cw":451869,"out":51682,"turns":73,"tools":111},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"12-20":{"sonnet-5":{"in":1124,"cr":284116511,"cw":1647302,"out":257456,"turns":562,"tools":526},"opus-5":{"in":42,"cr":9314022,"cw":87910,"out":29109,"turns":21,"tools":18},"fable-5.1":{"in":1772,"cr":34674091,"cw":174415,"out":68370,"turns":114,"tools":127}},"12-21":{"sonnet-5":{"in":1153,"cr":214840855,"cw":1652970,"out":361337,"turns":577,"tools":564},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":8,"tools":0},"opus-5":{"in":62,"cr":12264700,"cw":747767,"out":28178,"turns":31,"tools":25},"fable-5.1":{"in":1240,"cr":35206582,"cw":118643,"out":46858,"turns":79,"tools":81}},"12-22":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-04":{"sonnet-5":{"in":1284,"cr":370646006,"cw":3699452,"out":440696,"turns":642,"tools":629},"opus-5":{"in":50,"cr":13826794,"cw":558792,"out":22478,"turns":25,"tools":21},"fable-5.1":{"in":1040,"cr":37261622,"cw":615900,"out":46876,"turns":65,"tools":81}},"13-05":{"sonnet-5":{"in":1150,"cr":277768067,"cw":980512,"out":351580,"turns":575,"tools":571},"opus-5":{"in":84,"cr":26406014,"cw":66281,"out":50458,"turns":42,"tools":33},"fable-5.1":{"in":1764,"cr":73346468,"cw":166306,"out":70509,"turns":100,"tools":111}},"13-06":{"sonnet-5":{"in":1184,"cr":310600134,"cw":1267394,"out":348582,"turns":592,"tools":623},"opus-5":{"in":16,"cr":5295513,"cw":8760,"out":5402,"turns":8,"tools":7},"fable-5.1":{"in":1248,"cr":56578725,"cw":122904,"out":55250,"turns":65,"tools":80}},"13-07":{"sonnet-5":{"in":672,"cr":181638880,"cw":878732,"out":173332,"turns":336,"tools":337},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":642,"cr":8507805,"cw":147954,"out":33203,"turns":32,"tools":62}},"13-08":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-09":{"sonnet-5":{"in":1180,"cr":276967520,"cw":3617503,"out":361068,"turns":590,"tools":563},"opus-5":{"in":12,"cr":3389572,"cw":645898,"out":7337,"turns":6,"tools":5},"fable-5.1":{"in":868,"cr":11890037,"cw":268786,"out":52350,"turns":51,"tools":88}},"13-10":{"sonnet-5":{"in":1188,"cr":250458245,"cw":1162298,"out":373141,"turns":594,"tools":587},"opus-5":{"in":26,"cr":8321635,"cw":669097,"out":16458,"turns":13,"tools":11},"fable-5.1":{"in":890,"cr":17690296,"cw":115658,"out":48683,"turns":50,"tools":62}},"13-11":{"sonnet-5":{"in":1108,"cr":297277662,"cw":1492213,"out":281733,"turns":554,"tools":541},"opus-5":{"in":10,"cr":2858771,"cw":680039,"out":10101,"turns":5,"tools":4},"fable-5.1":{"in":652,"cr":17493565,"cw":121626,"out":54977,"turns":37,"tools":71}},"13-12":{"sonnet-5":{"in":1058,"cr":349589181,"cw":675084,"out":295963,"turns":529,"tools":514},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"opus-5":{"in":18,"cr":6462914,"cw":13679,"out":11797,"turns":9,"tools":7},"fable-5.1":{"in":510,"cr":19642795,"cw":75816,"out":31373,"turns":34,"tools":49}},"13-13":{"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"13-14":{"sonnet-5":{"in":266,"cr":74118010,"cw":2220452,"out":49348,"turns":133,"tools":125},"opus-5":{"in":48,"cr":17017742,"cw":720476,"out":20436,"turns":24,"tools":21},"fable-5.1":{"in":316,"cr":12288223,"cw":636052,"out":23831,"turns":20,"tools":34}},"13-15":{"sonnet-5":{"in":142,"cr":32137104,"cw":44434,"out":22006,"turns":71,"tools":65},"opus-5":{"in":4,"cr":1504384,"cw":2623,"out":945,"turns":2,"tools":1},"fable-5.1":{"in":824,"cr":22937598,"cw":112464,"out":58382,"turns":32,"tools":42}},"13-16":{"fable-5.1":{"in":2,"cr":779727,"cw":687,"out":4022,"turns":1,"tools":1}}},"byPersona":{"hires:01":{"sonnet-5":{"in":534,"cr":36774834,"cw":2766012,"out":171530,"turns":267,"tools":258},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":1,"tools":0}},"naomi-voss":{"sonnet-5":{"in":2272,"cr":526616052,"cw":3997797,"out":592532,"turns":1137,"tools":1088},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":6,"tools":0},"fable-5.1":{"in":668,"cr":4403486,"cw":136152,"out":55157,"turns":29,"tools":49}},"hires:02":{"sonnet-5":{"in":318,"cr":12723819,"cw":1286300,"out":129128,"turns":159,"tools":124}},"marcus-ilori":{"sonnet-5":{"in":1094,"cr":252720337,"cw":4539799,"out":409069,"turns":547,"tools":516},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"fable-5.1":{"in":924,"cr":5418899,"cw":242822,"out":78481,"turns":35,"tools":81}},"hires:03":{"sonnet-5":{"in":992,"cr":25131824,"cw":3158035,"out":325144,"turns":496,"tools":666}},"renata-cole":{"sonnet-5":{"in":6116,"cr":1557224812,"cw":6153008,"out":1893083,"turns":3058,"tools":3023},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":7,"tools":0}},"theo-bergman":{"sonnet-5":{"in":3635,"cr":964294851,"cw":4049500,"out":922536,"turns":1818,"tools":1684},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0}},"hires:04":{"sonnet-5":{"in":82,"cr":1084521,"cw":364308,"out":17291,"turns":41,"tools":46},"fable-5.1":{"in":114,"cr":85829,"cw":41486,"out":1548,"turns":9,"tools":3}},"hires:05":{"opus-5":{"in":102,"cr":1238421,"cw":607469,"out":43994,"turns":51,"tools":40},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":2,"tools":0},"sonnet-5":{"in":18,"cr":375583,"cw":116580,"out":5884,"turns":9,"tools":19}},"priya-nandakumar":{"opus-5":{"in":744,"cr":169697924,"cw":5307055,"out":466347,"turns":372,"tools":323},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":4,"tools":0},"sonnet-5":{"in":100,"cr":3697332,"cw":92540,"out":25732,"turns":50,"tools":50}},"dana-whitfield":{"fable-5.1":{"in":16898,"cr":498096830,"cw":5217749,"out":1074975,"turns":974,"tools":1440},"sonnet-5":{"in":450,"cr":52137974,"cw":1953620,"out":247376,"turns":225,"tools":409},"synthetic":{"in":0,"cr":0,"cw":0,"out":0,"turns":16,"tools":0}},"research":{"haiku-4.5":{"in":216,"cr":870477,"cw":146907,"out":10093,"turns":26,"tools":34},"sonnet-5":{"in":102,"cr":2332678,"cw":303125,"out":60047,"turns":51,"tools":93},"opus-5":{"in":14,"cr":176337,"cw":42828,"out":5217,"turns":7,"tools":16},"fable-5.1":{"in":130,"cr":122557,"cw":48973,"out":11213,"turns":5,"tools":12}}}}
+;
+const PH={"hours":["12-09","12-10","12-11","12-12","12-13","12-14","12-15","12-16","12-17","12-18","12-19","12-20","12-21","12-22","12-23","13-00","13-01","13-02","13-03","13-04","13-05","13-06","13-07","13-08","13-09","13-10","13-11","13-12","13-13","13-14","13-15"],"series":{"imogen-hale":[0,0,5083,0,0,20,0,0,0,0,0,0,176,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"tobias-lindqvist":[0,0,4672,0,0,21,0,7180,0,0,2752,5425,2107,0,0,0,0,0,0,2689,3709,0,3162,0,12484,0,0,0,0,0,0],"naomi-voss":[14093,2711,96830,0,0,6808,19966,49864,0,0,13136,33166,37853,0,0,0,0,0,0,52482,27473,8964,36008,0,91932,34822,59317,43114,0,14588,4562],"desmond-okafor":[0,0,8873,0,0,13,0,24153,0,0,2819,6552,6247,0,0,0,0,0,0,5304,9027,0,7444,0,21162,0,0,0,0,0,0],"helena-marsh":[0,0,10275,0,0,5816,0,0,0,0,0,0,6301,0,0,0,0,0,0,0,7798,6024,0,0,0,11647,0,0,0,0,0],"tomasz-wrede":[0,0,7832,0,0,4248,0,0,0,0,0,0,128,0,0,0,0,0,0,18245,0,17030,7350,0,0,0,0,0,0,0,0],"felix-adebayo":[0,0,3542,0,0,963,0,0,0,0,0,0,133,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"marcus-ilori":[19089,31688,108139,0,0,48941,60368,12537,0,0,129,11040,26743,0,0,0,0,0,0,22862,14808,12171,3039,0,62552,28970,4826,12251,0,6253,1144],"ingrid-solano":[0,0,5831,0,0,4211,0,0,0,0,0,0,11754,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"marisol-ferran":[0,0,2182,0,0,1567,0,0,0,0,0,0,176,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"renata-cole":[20117,3171,72086,0,0,45456,51315,80230,0,0,152604,153297,172158,0,0,0,0,0,0,191715,193068,203473,66657,0,121079,136477,75523,135227,0,12841,6589],"ines-dabrowski":[0,0,2281,0,0,4377,0,0,0,0,0,0,191,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"nolan-reyes":[0,0,1882,0,0,1989,0,0,0,0,5238,0,427,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"oren-castellan":[0,0,2155,0,0,6484,3647,24355,0,0,20752,0,1059,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"theo-bergman":[1751,2955,41510,0,0,41067,29423,13823,0,0,47641,47976,37265,0,0,0,0,0,0,93243,74113,34196,33621,0,46490,141104,124235,86746,0,15666,9711],"callum-ferreira":[0,0,1616,0,0,2574,0,0,0,0,0,0,258,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"wesley-okonkwo":[0,0,6453,0,0,1013,0,0,0,0,0,0,228,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"bree-sandoval":[0,0,2104,0,0,2836,0,0,0,0,0,0,226,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"yusuf-karadag":[0,0,2181,0,0,3871,0,0,0,0,0,3991,609,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"anders-vogel":[0,0,2296,0,0,6897,0,1855,0,0,0,0,294,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"beatriz-achterberg":[0,0,2125,0,0,10745,0,0,0,0,0,0,621,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"saoirse-byrne":[0,0,2094,0,0,5913,0,0,0,0,0,0,502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"priya-nandakumar":[15368,10213,41334,0,0,114412,47916,22139,0,0,44015,25118,26152,0,0,0,0,0,0,22478,50458,5402,0,0,7337,16458,10101,11797,0,20436,945],"dana-whitfield":[83357,93628,110232,0,0,121943,205666,58530,0,0,54311,68370,46858,0,0,0,0,0,0,46876,70509,55250,33203,0,52350,48683,54977,31373,0,23831,58382],"hires-01":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,11413,11634,7409,0,0,0],"hires-03":[0,0,0,0,0,0,0,0,0,0,0,0,57907,0,0,0,0,0,0,54156,21584,66724,16051,0,5369,7177,6198,11216,0,0,0],"hires-04":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1531,0,0,0,0,0],"hires-05":[0,0,420,0,0,5464,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"research":[60047,22127,4396,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}}
+;
+const HOURS=PH.hours; // "12-09".."13-15"
+const hIdx=Object.fromEntries(HOURS.map((h,i)=>[h,i]));
+const PRICES={"sonnet-5":{name:"Claude Sonnet 5",in:3,cr:0.30,cw:3.75,out:15,pub:false},"opus-5":{name:"Claude Opus 5",in:5,cr:0.50,cw:6.25,out:25,pub:false},"fable-5.1":{name:"Claude Fable 5.1",in:15,cr:1.50,cw:18.75,out:75,pub:false},"haiku-4.5":{name:"Claude Haiku 4.5",in:1,cr:0.10,cw:1.25,out:5,pub:true}};
+const commitsPerHour={"12-11":3,"12-14":2,"12-15":3,"12-16":10,"12-19":25,"12-20":26,"12-21":26,"13-04":20,"13-05":23,"13-06":20,"13-07":15,"13-09":22,"13-10":24,"13-11":30,"13-12":19,"13-14":18,"13-15":3};
+const doneTimes=[14.92,14.92,14.92,14.95,14.95,14.97,14.97,14.97,14.97,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.18,15.28,15.38,20.92,21.5,29.38,31.1,31.1,31.42,33.42,33.55,33.55,33.55,33.55,33.55,33.55,33.63,33.7,34.3,34.4,35.72,35.73,36.67,38.47,39.0]; // decimal hours from Fri 00:00
+const humanTimes=[10.75,12.5,13.0,13.2,17.5,17.6,19.0,21.9,21.95,22.0,28.5,29.0,29.5,33.9,34.1,34.4,34.6,35.3,35.7,36.3,36.35,36.4,36.45,38.0,38.2,38.3,38.35];
+const events=[
+ ["12","09:17",9.28,"agent","Repository scaffolded; six research subagents fan out","Market framing, IAM and passwordless landscape, IDP aggregation, one topic each."],
+ ["12","09:50",9.83,"incident","Code written prematurely is wiped","A lead started implementing before the design settled. Rule: no code until the go-ahead."],
+ ["12","10:45",10.75,"human","Org plan approved","Five leads as top-level sessions, eighteen hires, a casting registry with thirteen archetypes."],
+ ["12","~12:30",12.5,"human","Deployment target: the real shared cluster","Not a throwaway lab. This decision created most of the security work and all of its real findings."],
+ ["12","~13:00",13.0,"human","Attribution rule","Every commit, PR, and Jira transition names the persona who did the work."],
+ ["12","14:55",14.92,"done","Planning closes: 18 stories Done","Three cross-track consistency passes, 52 findings, all addressed before code."],
+ ["12","~17:30",17.5,"human","Implementation go, as an agile loop","Pull, refine, hand to engineering, QA, deploy, PO review. Show the URL on every deploy."],
+ ["12","20:45",20.75,"deploy","First deployment to the public URL","Walking skeleton: two binaries, health endpoint, ARC runner, TLS Ingress. DNS by Amber."],
+ ["12","20:55",20.92,"done","LT-34 Done: first story closed end to end",""],
+ ["12","21:30",21.5,"done","LT-32 Done: issuer split into its own Deployment","Only the issuer mounts the signing key."],
+ ["12","21:55",21.9,"human","Teardown on Warren's word, next week, unscheduled",""],
+ ["gap","22:00 → 04:15",22.0,"","Usage pause",""],
+ ["13","04:50",28.83,"deploy","A database behind the API","In-namespace Postgres; migration Job gates the api-service apply. A base64 slash broke the DSN; hex fixed it."],
+ ["13","05:23",29.38,"done","LT-52 Done; LT-40 live and failing closed",""],
+ ["13","06:30",30.5,"sec","First real token minted at the URL, and what verifying it found","Issuer and audience were never set in any manifest. Two more config gaps followed within the hour."],
+ ["13","07:06",31.1,"done","Joint live review: LT-40 and LT-51 Done","Masked search, full reads with reason codes, byte-identical 403s, at the URL."],
+ ["13","07:10",31.17,"incident","CI had been skipping every Postgres and CockroachDB test","Green meant SQLite only. Fixtures now fail under CI; real containers added."],
+ ["13","07:30",31.5,"done","LT-39 Done: the rate limit now limits","Two replicas split a burst across independent counters. Replicas 1 plus Recreate."],
+ ["13","07:55",31.92,"sec","Connector's inbound auth was never wired","Third enforcement-site gap; startup guards and a manifest-vs-config test."],
+ ["13","08:00",32.0,"done","LT-41 Done: Q3 delivered","In-cluster review; the failure-ratio limiter fired live."],
+ ["13","09:40",33.67,"done","Close-out wave: fourteen Done, two honest reversals","LT-42 passed then withdrawn in fourteen minutes; LT-46's etcd criterion found unmet."],
+ ["13","09:55",33.92,"human","Ruling: Vault, not etcd encryption","The cluster already ran HA Vault with the injector."],
+ ["13","10:25",34.42,"sec","Amber provisions Vault; three workloads shared the default identity","Six roles, dedicated ServiceAccounts, denial matrix proven, a template trap caught."],
+ ["13","10:44",34.73,"incident","LT-46 deploy takes the database down for sixteen minutes","Injector CPU requests versus the quota; a wrong CA path. Diagnosed three ways; fixed forward."],
+ ["13","11:15",35.25,"sec","Forced-failure test: a denied pod hung in Init forever","Auth loop retried indefinitely. Exit-on-error plus bounded backoff."],
+ ["13","11:42",35.7,"human","Warren approves deleting the six Kubernetes Secrets",""],
+ ["13","11:44",35.73,"done","LT-46 Done: no application secret in etcd",""],
+ ["13","12:00",36.0,"agent","Amber inventories the observability stack, read-only","kube-prometheus-stack with self-service rules; Filebeat already shipping stdout; a filter dropping any line containing \"health\"."],
+ ["13","12:18",36.3,"human","Warren approves the shared Filebeat fix; Amber applies it",""],
+ ["13","12:40",36.67,"done","LT-48 Done on the third live run","No issuer in the dev loop, then a SQLite path under the Postgres profile."],
+ ["13","14:28",38.47,"done","LT-20 Done: a 90-day floor, not a ceiling","Audit retention is a minimum driven by incident review."],
+ ["13","14:52",38.87,"deploy","Last hotfix: a Service with no labels had no scrape target","ServiceMonitors select Services by label."],
+ ["13","15:00",39.0,"done","Backlog closed: 42 of 42","LT-49 passes: scrape target up, four rules loaded, a real alert in Alertmanager."]
+];
+const SEATS=[["dana-whitfield","Dana Whitfield","PM · Fable 5.1","pm"],["naomi-voss","Naomi Voss","01 lead · Sonnet 5","lead"],["marcus-ilori","Marcus Ilori","02 lead · Sonnet 5","lead"],["renata-cole","Renata Cole","03 lead · Sonnet 5","lead"],["theo-bergman","Theo Bergman","04 lead · Sonnet 5","lead"],["priya-nandakumar","Priya Nandakumar","05 lead · Opus 5","lead"],
+ ["imogen-hale","Imogen Hale","01 · Storyteller","hire"],["desmond-okafor","Desmond Okafor","01 · Spreadsheet","hire"],["tobias-lindqvist","Tobias Lindqvist","01 · Skeptic","hire"],["tomasz-wrede","Tomasz Wrede","02 · Adversary","hire"],["helena-marsh","Helena Marsh","02 · Architect","hire"],["felix-adebayo","Felix Adebayo","02 · Tinkerer","hire"],["ingrid-solano","Ingrid Solano","02 · Skeptic","hire"],["oren-castellan","Oren Castellan","03 · Detail Hawk","hire"],["nolan-reyes","Nolan Reyes","03 · Veteran","hire"],["marisol-ferran","Marisol Ferran","03 · Enthusiast","hire"],["ines-dabrowski","Ines Dabrowski","03 · Cartographer","hire"],["wesley-okonkwo","Wesley Okonkwo","04 · Newcomer","hire"],["bree-sandoval","Bree Sandoval","04 · Enthusiast","hire"],["callum-ferreira","Callum Ferreira","04 · Minimalist","hire"],["anders-vogel","Anders Vogel","05 · Cartographer","hire"],["beatriz-achterberg","Beatriz Achterberg","05 · Spreadsheet","hire"],["yusuf-karadag","Yusuf Karadag","05 · Detail Hawk","hire"],["saoirse-byrne","Saoirse Byrne","05 · Storyteller","hire"]];
+// fold lead-spawned hire runs (hires-0x) into that track's named hires proportionally is not possible; show them as their own row in the heat map.
+const $=s=>document.querySelector(s);const NS="http://www.w3.org/2000/svg";
+function el(n,a={},t){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(t!=null)e.textContent=t;return e}
+function svg(w,h){return el("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%",role:"img"})}
+const usd=n=>n>=1000?"$"+Math.round(n).toLocaleString():n>=100?"$"+n.toFixed(0):n>=10?"$"+n.toFixed(1):"$"+n.toFixed(2);
+const fmt=n=>n>=1e9?(n/1e9).toFixed(2)+" B":n>=1e6?(n/1e6).toFixed(2)+" M":n>=1e3?Math.round(n/1e3)+" k":String(n);
+const REDUCE=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const cost=rec=>{let t=0;for(const m in rec){const p=PRICES[m];if(!p)continue;const r=rec[m];t+=(r.in*p.in+r.cr*p.cr+r.cw*p.cw+r.out*p.out)/1e6}return t};
+const costOf=(r,m)=>{const p=PRICES[m];return p?(r.in*p.in+r.cr*p.cr+r.cw*p.cw+r.out*p.out)/1e6:0};
+const roleGroup=k=>k==="pm"?"PM":k.startsWith("lead")?"Leads":k.startsWith("hire")?"Hires":"Research";
+const roleCol={PM:"#3DD6C8",Leads:"#2BB3A8",Hires:"#6F86B8",Research:"#9D8CFF"};
+const hourDec=h=>{const [d,hh]=h.split("-").map(Number);return (d-12)*24+hh};
+const decToLabel=t=>{const d=Math.floor(t/24),h=Math.floor(t%24);return (d===0?"Fri ":"Sat ")+String(h).padStart(2,"0")+":00"};
+// role share per hour from PH output
+const seatRole=k=>k==="dana-whitfield"?"PM":["naomi-voss","marcus-ilori","renata-cole","theo-bergman","priya-nandakumar"].includes(k)?"Leads":k==="research"?"Research":"Hires";
+const roleShareByHour=HOURS.map((h,i)=>{const g={PM:0,Leads:0,Hires:0,Research:0};for(const k in PH.series)if(k!=="other")g[seatRole(k)]+=PH.series[k][i];const t=g.PM+g.Leads+g.Hires+g.Research||1;for(const r in g)g[r]/=t;return g});
+let hourCost=[];
+function recomputeHourCost(){hourCost=HOURS.map(h=>cost(TOK.byHour[h]||{}))}
+
+// ================= PLAYHEAD =================
+let T=31, playing=false, lastTs=0; const SPEED=31/12; // hours per second (12s run)
+const cum=(arr,t)=>arr.filter(v=>v<=t).length;
+function setT(t){T=Math.max(0,Math.min(31,t));$("#scrub").value=T.toFixed(2);render()}
+function render(){
+  const dec=9+Math.min(T,30.999); // decimal hour from Fri 00:00
+  const idx=Math.min(HOURS.length-1,Math.floor(T));const frac=T-Math.floor(T);
+  let spent=0;for(let i=0;i<HOURS.length;i++){if(i<idx)spent+=hourCost[i];else if(i===idx)spent+=hourCost[i]*frac}if(T>=30.99)spent=cost(TOK.byModel);
+  $("#pClock").textContent=decToLabel(Math.min(dec,39));$("#pCost").textContent=usd(spent);$("#pDone").textContent=cum(doneTimes,dec);
+  let cm=0;HOURS.forEach((h,i)=>{if(i<idx)cm+=commitsPerHour[h]||0;else if(i===idx)cm+=Math.round((commitsPerHour[h]||0)*frac)});$("#pCommits").textContent=T>=30.99?289:cm;
+  renderOrg(idx,frac);renderTicker(dec);renderCostHour(T);renderHeat(idx,frac);
+}
+function tick(ts){if(!playing)return;if(lastTs)T+=SPEED*(ts-lastTs)/1000;lastTs=ts;if(T>=31){T=31;playing=false;$("#play").textContent="↺ Replay";setT(T);return}setT(T);requestAnimationFrame(tick)}
+$("#play").addEventListener("click",()=>{if(playing){playing=false;$("#play").textContent="▶ Resume";return}if(T>=31)T=0;playing=true;lastTs=0;$("#play").textContent="❚❚ Pause";requestAnimationFrame(tick)});
+$("#scrub").addEventListener("input",e=>{playing=false;$("#play").textContent="▶ Resume";setT(parseFloat(e.target.value))});
+
+// ================= ORG =================
+const orgEls={};
+(function(){const g=$("#org");
+  const mk=(cls,name,role,key,span)=>{const d=document.createElement("div");d.className="agent "+cls;d.dataset.key=key||"";d.innerHTML=`<div class="nm">${name}</div><div class="rl">${role}</div><div class="bar"><i></i></div>`;g.appendChild(d);if(key)orgEls[key]=d;return d};
+  mk("human","Warren Thompson","human · 27 decisions","warren");mk("op","Amber","OpenClaw · Opus 4.7 · Vault, DNS, Filebeat","amber");mk("pm","Dana Whitfield","PM · Fable 5.1","dana-whitfield");
+  SEATS.slice(1).forEach(s=>mk(s[3],s[1],s[2],s[0]));
+})();
+const seatTotals=Object.fromEntries(Object.entries(PH.series).map(([k,v])=>[k,v.reduce((a,b)=>a+b,0)]));
+const seatMax=Object.fromEntries(Object.entries(PH.series).map(([k,v])=>[k,Math.max(...v,1)]));
+function renderOrg(idx,frac){
+  for(const key in orgEls){const d=orgEls[key];const s=PH.series[key];if(!s){ // warren / amber: light on human decision hours / amber hours
+      const dec=9+T;let lit=false;if(key==="warren")lit=humanTimes.some(t=>Math.abs(t-dec)<0.5);if(key==="amber")lit=(dec>=20.5&&dec<=21)||(dec>=34.1&&dec<=34.5)||(dec>=36&&dec<=36.4)||(dec>=10.4&&dec<=10.6);d.classList.toggle("lit",lit);continue}
+    const now=s[idx]*(idx===Math.floor(T)?1:1);const inten=Math.min(1,now/seatMax[key]);d.style.borderColor=inten>0.05?`rgba(61,214,200,${0.25+0.75*inten})`:"";d.style.background=inten>0.05?`linear-gradient(180deg,rgba(61,214,200,${0.06+0.28*inten}),var(--bg2))`:"";d.classList.toggle("lit",inten>0.55);
+    let sofar=0;for(let i=0;i<=idx;i++)sofar+=s[i]*(i===idx?frac:1);d.querySelector(".bar i").style.width=(100*sofar/(seatTotals[key]||1))+"%";}
+}
+
+// ================= TICKER =================
+(function(){const t=$("#ticker");events.forEach((e,i)=>{if(e[0]==="gap")return;const d=document.createElement("div");d.className="ev "+e[3];d.dataset.t=e[2];d.innerHTML=`<div class="t">${e[0]==="12"?"Fri":"Sat"} ${e[1]}</div><div class="dot"></div><div><b>${e[4]}</b><p>${e[5]||""}</p></div>`;t.appendChild(d)})})();
+function renderTicker(dec){const evs=[...document.querySelectorAll("#ticker .ev")];let last=null;evs.forEach(e=>{const on=+e.dataset.t<=dec;e.classList.toggle("on",on);e.classList.remove("now");if(on)last=e});if(last){last.classList.add("now");const box=$("#ticker");const off=last.offsetTop-box.offsetTop;box.scrollTo?box.scrollTo({top:Math.max(0,off-40),behavior:REDUCE?"auto":"smooth"}):null}}
+
+// ================= COST/HOUR CHART =================
+function renderCostHour(Tcur){
+  const box=$("#costHour");box.innerHTML="";const W=1000,H=340,L=50,R=50,Tt=16,B=44;const s=svg(W,H);const pw=W-L-R,ph=H-Tt-B;const n=HOURS.length;const bw=pw/n;
+  const max=Math.max(...hourCost);const step=max>150?50:25;const ymax=Math.ceil(max/step)*step||step;
+  // pause band
+  const pauseStart=hIdx["12-22"],pauseEnd=hIdx["13-04"];s.appendChild(el("rect",{x:L+pauseStart*bw,y:Tt,width:(pauseEnd-pauseStart)*bw,height:ph,fill:"rgba(255,255,255,.035)"}));s.appendChild(el("text",{x:L+(pauseStart+(pauseEnd-pauseStart)/2)*bw,y:Tt+ph/2,"text-anchor":"middle","font-size":11,fill:"var(--ink3)"},"usage pause"));
+  for(let y=0;y<=ymax;y+=step){const yy=Tt+ph-(y/ymax)*ph;s.appendChild(el("line",{x1:L,x2:W-R,y1:yy,y2:yy,stroke:"var(--grid)"}));s.appendChild(el("text",{x:L-8,y:yy+4,"text-anchor":"end","font-size":11},"$"+y))}
+  for(let y=0;y<=42;y+=14){const yy=Tt+ph-(y/42)*ph;s.appendChild(el("text",{x:W-R+10,y:yy+4,"font-size":11,fill:"var(--done)"},y))}
+  const order=["PM","Leads","Hires","Research"];
+  HOURS.forEach((h,i)=>{const vis=i<Math.floor(Tcur)?1:i===Math.floor(Tcur)?Tcur-Math.floor(Tcur):0;if(!vis||!hourCost[i])return;let acc=0;const x=L+i*bw+2;const share=roleShareByHour[i];
+    order.forEach(g=>{const v=hourCost[i]*share[g]*vis;if(v<=0)return;const hh=(v/ymax)*ph;const y=Tt+ph-((acc+v)/ymax)*ph;s.appendChild(el("rect",{x,y,width:Math.max(bw-4,2),height:hh,fill:roleCol[g],rx:1.5}));acc+=v})});
+  HOURS.forEach((h,i)=>{if(i%3===0||i===n-1){const [d,hh]=h.split("-");s.appendChild(el("text",{x:L+i*bw+bw/2,y:H-B+18,"text-anchor":"middle","font-size":10.5},(d==="12"?"Fri ":"Sat ")+hh))}});
+  // human ticks
+  humanTimes.forEach(t=>{if(t>9+Tcur)return;const x=L+(t-9)*bw;s.appendChild(el("line",{x1:x,x2:x,y1:Tt+ph+2,y2:Tt+ph+10,stroke:"var(--human)","stroke-width":2}))});
+  // burn-up
+  const xs=v=>L+(v-9)*bw, ys=v=>Tt+ph-(v/42)*ph;let d=`M${xs(9)} ${ys(0)}`;let c=0;const lim=9+Tcur;doneTimes.forEach(t=>{if(t<=lim){d+=` H${xs(t)} V${ys(++c)}`}});d+=` H${xs(lim)}`;
+  s.appendChild(el("path",{d,fill:"none",stroke:"var(--done)","stroke-width":2.5,"stroke-linejoin":"round"}));
+  const cx=L+Tcur*bw;s.appendChild(el("line",{x1:cx,x2:cx,y1:Tt,y2:Tt+ph,stroke:"var(--ink)","stroke-width":1,"stroke-dasharray":"3 4",opacity:.7}));
+  s.appendChild(el("circle",{cx:xs(Math.min(lim,40)),cy:ys(c),r:4.5,fill:"var(--done)"}));
+  box.appendChild(s);
+}
+
+// ================= HEAT =================
+const HEAT_ROWS=[["dana-whitfield","Dana · PM"],["naomi-voss","Naomi · 01"],["marcus-ilori","Marcus · 02"],["renata-cole","Renata · 03"],["theo-bergman","Theo · 04"],["priya-nandakumar","Priya · 05"],["hires-01","01 hires"],["hires-02","02 hires"],["hires-03","03 hires"],["hires-04","04 hires"],["hires-05","05 hires"],["research","research"]];
+const heatCells={};
+(function(){const g=$("#heatmap");
+  // hires-02: named-hire top sessions only; synthesize from named hires of track 02 if group missing
+  const named={"01":["imogen-hale","desmond-okafor","tobias-lindqvist"],"02":["tomasz-wrede","helena-marsh","felix-adebayo","ingrid-solano"],"03":["oren-castellan","nolan-reyes","marisol-ferran","ines-dabrowski"],"04":["wesley-okonkwo","bree-sandoval","callum-ferreira"],"05":["anders-vogel","beatriz-achterberg","yusuf-karadag","saoirse-byrne"]};
+  for(const tr in named){const key="hires-"+tr;const base=(PH.series[key]||HOURS.map(()=>0)).slice();named[tr].forEach(n=>{(PH.series[n]||[]).forEach((v,i)=>base[i]+=v)});PH.series[key]=base}
+  HEAT_ROWS.forEach(([k,label])=>{const l=document.createElement("div");l.className="lbl"+(k.startsWith("hires")||k==="research"?" h":"");l.textContent=label;g.appendChild(l);const row=document.createElement("div");row.className="row";heatCells[k]=[];HOURS.forEach((h,i)=>{const c=document.createElement("div");c.className="cell";c.title=`${label} · ${(h.split("-")[0]==="12"?"Fri ":"Sat ")+h.split("-")[1]}:00 · ${fmt(PH.series[k]?PH.series[k][i]:0)} tokens`;row.appendChild(c);heatCells[k].push(c)});g.appendChild(row)});
+  const ax=document.createElement("div");ax.className="axis";HOURS.forEach((h,i)=>{const sp=document.createElement("span");sp.textContent=(i%3===0)?h.split("-")[1]:"";ax.appendChild(sp)});g.appendChild(ax);
+})();
+function renderHeat(idx,frac){HEAT_ROWS.forEach(([k])=>{const s=PH.series[k]||[];const mx=Math.max(...s,1);heatCells[k].forEach((c,i)=>{const vis=i<idx?1:i===idx?frac:0;const v=(s[i]||0)/mx*vis;const col=k==="dana-whitfield"?"61,214,200":k.startsWith("hires")?"111,134,184":k==="research"?"157,140,255":"43,179,168";c.style.background=v>0?`rgba(${col},${0.12+0.88*Math.pow(v,0.6)})`:"rgba(255,255,255,.04)"})})}
+
+// ================= SANKEY =================
+function renderSankey(){
+  const box=$("#sankey");box.innerHTML="";const W=1000,H=420;const s=svg(W,H);s.setAttribute("class","sankey");
+  const models=Object.keys(TOK.byModel).filter(m=>PRICES[m]);
+  // column 1: token type totals (cost), col2: models, col3: roles
+  const types=[["cr","Cache reads","#2BB3A8"],["cw","Cache writes","#3DD6C8"],["out","Output","#FFC857"],["in","Fresh input","#6F86B8"]];
+  const typeCost={},modelCost={},roleCost={},link12={},link23={};
+  models.forEach(m=>{const r=TOK.byModel[m],p=PRICES[m];modelCost[m]=costOf(r,m);types.forEach(([k])=>{const v=r[k]*p[k]/1e6;typeCost[k]=(typeCost[k]||0)+v;link12[k+"|"+m]=v})});
+  for(const rk in TOK.byRole){const g=roleGroup(rk);for(const m in TOK.byRole[rk]){if(!PRICES[m])continue;const v=costOf(TOK.byRole[rk][m],m);roleCost[g]=(roleCost[g]||0)+v;link23[m+"|"+g]=(link23[m+"|"+g]||0)+v}}
+  const total=Object.values(modelCost).reduce((a,b)=>a+b,0);const scale=(H-110)/total;const X=[190,500,830],NW=16;
+  function layout(entries){let y=30;const pos={};entries.forEach(([k,v])=>{pos[k]={y,h:Math.max(v*scale,1.5)};y+=Math.max(v*scale,1.5)+22});return pos}
+  const tOrder=types.map(t=>[t[0],typeCost[t[0]]||0]);const mOrder=models.map(m=>[m,modelCost[m]]).sort((a,b)=>b[1]-a[1]);const rOrder=["Leads","PM","Hires","Research"].map(r=>[r,roleCost[r]||0]);
+  const P1=layout(tOrder),P2=layout(mOrder),P3=layout(rOrder);
+  const off1={},off2a={},off2b={},off3={};
+  function ribbon(x1,y1,h1,x2,y2,h2,color,cls){const c=(x1+x2)/2;const d=`M${x1} ${y1} C${c} ${y1},${c} ${y2},${x2} ${y2} L${x2} ${y2+h2} C${c} ${y2+h2},${c} ${y1+h1},${x1} ${y1+h1} Z`;const p=el("path",{d,fill:color,opacity:.28,class:"rib"});p.style.fill=color;return p}
+  const typeColor=Object.fromEntries(types.map(t=>[t[0],t[2]]));
+  tOrder.forEach(([k])=>{mOrder.forEach(([m])=>{const v=link12[k+"|"+m]||0;if(v<=0)return;const h=v*scale;const y1=P1[k].y+(off1[k]||0),y2=P2[m].y+(off2a[m]||0);off1[k]=(off1[k]||0)+h;off2a[m]=(off2a[m]||0)+h;s.appendChild(ribbon(X[0]+NW,y1,h,X[1],y2,h,typeColor[k]))})});
+  mOrder.forEach(([m])=>{rOrder.forEach(([r])=>{const v=link23[m+"|"+r]||0;if(v<=0)return;const h=v*scale;const y1=P2[m].y+(off2b[m]||0),y2=P3[r].y+(off3[r]||0);off2b[m]=(off2b[m]||0)+h;off3[r]=(off3[r]||0)+h;s.appendChild(ribbon(X[1]+NW,y1,h,X[2],y2,h,roleCol[r]))})});
+  // flow dashes along ribbons (decorative centerlines)
+  if(!REDUCE){tOrder.forEach(([k])=>{mOrder.forEach(([m])=>{const v=link12[k+"|"+m]||0;if(v<total*0.02)return;const h=v*scale;const y1=P1[k].y+(off1[k]||0);})})}
+  // nodes
+  const node=(x,pos,label,val,color,anchor)=>{s.appendChild(el("rect",{x,y:pos.y,width:NW,height:pos.h,fill:color,class:"nd"}));const tx=anchor==="end"?x-8:x+NW+8;const ty=pos.y+Math.max(pos.h/2,6)+4;s.appendChild(el("text",{x:tx,y:ty,"text-anchor":anchor,class:"nl"},label+"  "));const t2=el("text",{x:tx+(anchor==="end"?0:0),y:ty,"text-anchor":anchor,class:"nv"},"");s.appendChild(el("text",{x:tx,y:ty+14,"text-anchor":anchor,class:"nv"},usd(val)))};
+  tOrder.forEach(([k,v])=>node(X[0],P1[k],types.find(t=>t[0]===k)[1],v,typeColor[k],"end"));
+  mOrder.forEach(([m,v])=>node(X[1],P2[m],PRICES[m].name.replace("Claude ",""),v,"#AEBBD3","start"));
+  rOrder.forEach(([r,v])=>node(X[2],P3[r],r,v,roleCol[r],"start"));
+  // animated particles along a few ribbons via <circle> with animateMotion
+  if(!REDUCE){let count=0;tOrder.forEach(([k])=>{mOrder.forEach(([m])=>{const v=link12[k+"|"+m]||0;if(v<total*0.04||count>6)return;count++;const h=v*scale;const y1=P1[k].y+ (P1[k].h/2),y2=P2[m].y+P2[m].h/2;const c=(X[0]+NW+X[1])/2;const path=`M${X[0]+NW} ${y1} C${c} ${y1},${c} ${y2},${X[1]} ${y2}`;for(let i=0;i<3;i++){const dot=el("circle",{r:2.6,fill:typeColor[k],opacity:.9});const am=el("animateMotion",{dur:(2.2+Math.random()*1.2)+"s",repeatCount:"indefinite",path,begin:(i*0.9)+"s"});dot.appendChild(am);s.appendChild(dot)}})})}
+  box.appendChild(s);
+}
+
+// ================= COST PANELS =================
+function hbars(target,data,color,labelFn,leftW){target.innerHTML="";const W=560,L=leftW||190,R=96,rowH=32,H=data.length*rowH+12;const s=svg(W,H);const pw=W-L-R;const max=Math.max(...data.map(d=>d[1]));
+  data.forEach((d,i)=>{const y=6+i*rowH;const w=Math.max((d[1]/max)*pw,2);s.appendChild(el("text",{x:L-10,y:y+15,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},d[0]));s.appendChild(el("rect",{x:L,y,width:w,height:20,fill:typeof color==="function"?color(d,i):color,rx:3}));s.appendChild(el("text",{x:L+w+8,y:y+15,"font-size":11.5},labelFn?labelFn(d):fmt(d[1])))});target.appendChild(s)}
+function recompute(){
+  recomputeHourCost();
+  const total=cost(TOK.byModel);const fullInput=Object.entries(TOK.byModel).reduce((a,[m,r])=>{const p=PRICES[m];return p?a+((r.in+r.cr+r.cw)*p.in+r.out*p.out)/1e6:a},0);
+  $("#bigCost").innerHTML=usd(total)+"<small>USD</small>";$("#heroCost").textContent=usd(total);
+  $("#uStory").textContent=usd(total/25);$("#uPR").textContent=usd(total/73);$("#uLoc").textContent=usd(total/19444);$("#uHour").textContent=usd(total/30);$("#uHuman").textContent=usd(total/27);$("#uCache").textContent=usd(fullInput-total)+" · "+Math.round((1-total/fullInput)*100)+"%";
+  const groups={};for(const k in TOK.byRole){const g=roleGroup(k);groups[g]=(groups[g]||0)+cost(TOK.byRole[k])}
+  const order=["Leads","PM","Hires","Research"];const dn=$("#donut");dn.innerHTML="";const C=2*Math.PI*78;let off=0;
+  order.forEach(g=>{const v=groups[g]||0;const len=C*v/total;dn.appendChild(el("circle",{cx:110,cy:110,r:78,fill:"none",stroke:roleCol[g],"stroke-width":30,"stroke-dasharray":`${len} ${C-len}`,"stroke-dashoffset":-off,transform:"rotate(-90 110 110)",class:"seg"}));off+=len});
+  dn.appendChild(el("text",{x:110,y:106,"text-anchor":"middle","font-size":24,fill:"var(--ink)",style:"font-family:var(--display);font-weight:700"},usd(total)));dn.appendChild(el("text",{x:110,y:126,"text-anchor":"middle","font-size":10.5},"at list price"));
+  $("#donutLegend").innerHTML=order.map(g=>`<li><i class="sw" style="background:${roleCol[g]}"></i>${g}<b>${usd(groups[g]||0)} · ${Math.round(100*(groups[g]||0)/total)}%</b></li>`).join("");
+  const bm=$("#costModel");bm.innerHTML="";
+  const models=Object.keys(TOK.byModel).filter(m=>PRICES[m]).map(m=>{const r=TOK.byModel[m];const p=PRICES[m];return [PRICES[m].name.replace("Claude ",""),costOf(r,m),{cr:r.cr*p.cr/1e6,cw:r.cw*p.cw/1e6,out:r.out*p.out/1e6,in:r.in*p.in/1e6}]}).sort((a,b)=>b[1]-a[1]);
+  (function(){const W=560,L=120,R=90,rowH=40,H=models.length*rowH+12;const sv=svg(W,H);const pw=W-L-R;const max=models[0][1];models.forEach((d,i)=>{const y=6+i*rowH;let x=L;[["cr","#2BB3A8"],["cw","#3DD6C8"],["out","#FFC857"],["in","#6F86B8"]].forEach(([k,c])=>{const w=(d[2][k]/max)*pw;if(w>0){sv.appendChild(el("rect",{x,y,width:Math.max(w,.5),height:22,fill:c}));x+=w}});sv.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},d[0]));sv.appendChild(el("text",{x:x+8,y:y+16,"font-size":11.5},usd(d[1])))});bm.appendChild(sv)})();
+  const names={"renata-cole":"Renata · 03 lead","dana-whitfield":"Dana · PM","theo-bergman":"Theo · 04 lead","naomi-voss":"Naomi · 01 lead","priya-nandakumar":"Priya · 05 lead","marcus-ilori":"Marcus · 02 lead","hires:01":"01 hires","hires:02":"02 hires","hires:03":"03 hires","hires:04":"04 hires","hires:05":"05 hires","research":"research subagents"};
+  const pers=Object.keys(TOK.byPersona).filter(k=>names[k]).map(k=>[names[k],cost(TOK.byPersona[k]),k]).sort((a,b)=>b[1]-a[1]);
+  hbars($("#costPersona"),pers,d=>d[2].startsWith("hires")||d[2]==="research"?"#6F86B8":"#3DD6C8",d=>usd(d[1]),150);
+  renderSankey();render();
+}
+(function(){const box=$("#prices");Object.entries(PRICES).forEach(([m,p])=>{const d=document.createElement("div");d.className="price";d.innerHTML=`<b>${p.name}</b>`+[["in","fresh input"],["cr","cache read"],["cw","cache write"],["out","output"]].map(([k,l])=>`<label for="price-${m}-${k}">${l}<input id="price-${m}-${k}" type="number" step="0.01" min="0" value="${p[k]}" data-m="${m}" data-k="${k}"></label>`).join("")+`<div class="assume ${p.pub?"pub":""}">${p.pub?"published list price":"assumed · edit to your rate"}</div>`;box.appendChild(d)});box.addEventListener("input",e=>{const t=e.target;if(t.dataset.m){PRICES[t.dataset.m][t.dataset.k]=parseFloat(t.value)||0;recompute()}})})();
+
+// ================= HUMAN BARS =================
+(function(){const rows=[["Commits",289,0],["PR merges",73,0],["Jira transitions",126,0],["LOG entries",68,0],["Refinement records",19,0],["Decision documents",22,0],["CI runs",186,0],["Human decisions",0,27]];const W=560,H=rows.length*34+12,L=150,R=60;const s=svg(W,H);const pw=W-L-R;const max=289;
+  rows.forEach((r,i)=>{const y=6+i*34;const a=(r[1]/max)*pw,h=(r[2]/max)*pw;s.appendChild(el("text",{x:L-10,y:y+16,"text-anchor":"end","font-size":11.5,fill:"var(--ink)"},r[0]));if(r[1])s.appendChild(el("rect",{x:L,y,width:Math.max(a,2),height:22,fill:"#3DD6C8",rx:3}));if(r[2])s.appendChild(el("rect",{x:L+a+(r[1]?2:0),y,width:Math.max(h,2),height:22,fill:"#FF7A59",rx:3}));s.appendChild(el("text",{x:L+a+h+8,y:y+16,"font-size":11.5},r[1]||r[2]))});$("#hilBars").appendChild(s)})();
+
+// ================= PATTERNS =================
+(function(){const P=[["Adversarial pair","Proposer drafts, skeptic numbers objections, lead rules. Search authorization scoping; the Search() query shape."],["Red team / blue team","Adversary writes an attack tree, architect answers each leaf. The connector token lifecycle; three live rounds."],["Three hats","Optimist, pessimist, pragmatist write in parallel; lead synthesizes. Multi-database abstraction; Go layout."],["Newcomer's question","A hire reads a finished hand-off cold and lists what it cannot act on. Highest return of any pattern; it failed the README once."],["Rotating objection seat","Every refinement carried a standing objection. It caught Recreate, Forbid, fail-loud on Vault, and an alert that could never fire."],["Live PO review","Nothing was Done until the product owner exercised it at the URL or inside the cluster. Nineteen stories failed first."]];const g=$("#patterns");P.forEach(([b,t],i)=>{const d=document.createElement("div");d.className="panel";d.innerHTML=`<h3>${b}</h3><p style="font-size:14px;color:var(--ink2);margin:6px 0 0">${t}</p>`;g.appendChild(d)})})();
+
+// ================= TIMELINE =================
+(function(){const root=$("#tl");let day=null;const tags={human:['h','human'],deploy:['d','deploy'],incident:['i','incident'],done:['ok','Done'],sec:['s','security'],agent:['a','agent']};
+  events.forEach(ev=>{const [d,t,dec,k,title,detail]=ev;if(d==="gap"){const g=document.createElement("div");g.className="tl-gap";g.innerHTML=`<div></div><div class="spine"></div><div class="body">${t} · ${title}</div>`;root.appendChild(g);return}
+    if(d!==day){day=d;const h=document.createElement("div");h.className="tl-day";h.innerHTML=`<h3>${d==="12"?"Friday 12 September":"Saturday 13 September"}</h3><span class="eyebrow">PDT</span>`;root.appendChild(h)}
+    const r=document.createElement("div");r.className="tl-row "+(k==="agent"?"":k);r.innerHTML=`<div class="t">${t}</div><div class="spine"><div class="node"></div></div><div class="body"><b>${title}</b><span class="tag ${tags[k][0]}">${tags[k][1]}</span>${detail?`<p>${detail}</p>`:""}</div>`;root.appendChild(r)});
+  if(!REDUCE){const rows=document.querySelectorAll(".tl-row");rows.forEach(r=>r.classList.add("pre"));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.remove("pre");io.unobserve(e.target)}}),{rootMargin:"0px 0px -8% 0px"});rows.forEach(r=>io.observe(r))}
+})();
+
+// ================= HERO CANVAS =================
+(function(){const cv=$("#heroCanvas");const ctx=cv.getContext("2d");let W,H,pts=[],parts=[];
+  function size(){const r=cv.parentElement.getBoundingClientRect();W=cv.width=Math.floor(r.width*devicePixelRatio);H=cv.height=Math.floor(r.height*devicePixelRatio);ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    pts=[];const cw=r.width,ch=r.height;for(let i=0;i<24;i++){pts.push({x:cw*(0.52+0.46*Math.random()),y:ch*(0.08+0.84*Math.random()),r:i<6?4.5:2.6,c:i===0?"#3DD6C8":i<6?"#2BB3A8":"#6F86B8"})}
+    pts.push({x:cw*0.55,y:ch*0.85,r:5,c:"#FF7A59",human:true});parts=[];}
+  size();addEventListener("resize",size);
+  const target=()=>({x:cv.parentElement.getBoundingClientRect().width*0.40,y:cv.parentElement.getBoundingClientRect().height*0.5});
+  function frame(){const r=cv.parentElement.getBoundingClientRect();ctx.clearRect(0,0,r.width,r.height);const tg=target();
+    // links
+    ctx.lineWidth=1;pts.forEach(p=>{ctx.strokeStyle=p.human?"rgba(255,122,89,.18)":"rgba(61,214,200,.10)";ctx.beginPath();ctx.moveTo(p.x,p.y);const cx=(p.x+tg.x)/2,cy=(p.y+tg.y)/2-40;ctx.quadraticCurveTo(cx,cy,tg.x,tg.y);ctx.stroke()});
+    pts.forEach(p=>{ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.fillStyle=p.human?"rgba(255,122,89,.15)":"rgba(61,214,200,.12)";ctx.beginPath();ctx.arc(p.x,p.y,p.r*3,0,Math.PI*2);ctx.fill()});
+    if(!REDUCE){if(parts.length<90&&Math.random()<0.6){const p=pts[Math.floor(Math.random()*pts.length)];if(!p.human||Math.random()<0.08)parts.push({p,t:0,sp:0.004+Math.random()*0.006})}
+      parts.forEach(q=>{q.t+=q.sp;const p=q.p;const cx=(p.x+tg.x)/2,cy=(p.y+tg.y)/2-40;const t=q.t,mt=1-t;const x=mt*mt*p.x+2*mt*t*cx+t*t*tg.x,y=mt*mt*p.y+2*mt*t*cy+t*t*tg.y;ctx.fillStyle=p.human?"#FF7A59":"#3DD6C8";ctx.globalAlpha=0.9*(1-t*0.6);ctx.beginPath();ctx.arc(x,y,p.human?2.6:1.8,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1});parts=parts.filter(q=>q.t<1)}
+    ctx.fillStyle="rgba(61,214,200,.22)";ctx.beginPath();ctx.arc(tg.x,tg.y,14,0,Math.PI*2);ctx.fill();ctx.fillStyle="#3DD6C8";ctx.beginPath();ctx.arc(tg.x,tg.y,5,0,Math.PI*2);ctx.fill();
+    if(!REDUCE)requestAnimationFrame(frame)}
+  frame();
+})();
+
+// ================= ARCH CANVAS =================
+(function(){const cv=$("#archCanvas");const ctx=cv.getContext("2d");const tip=$("#tip");
+  const N={client:{x:.08,y:.18,w:.14,h:.12,l:"Client",s:"curl / QA clients",c:"#3DD6C8"},ing:{x:.08,y:.50,w:.14,h:.12,l:"nginx Ingress",s:"TLS · cert-manager",c:"#3DD6C8"},
+    iss:{x:.36,y:.12,w:.20,h:.14,l:"api-service-issuer",s:"/auth/token · JWKS · RS256",c:"#9D8CFF"},ver:{x:.36,y:.42,w:.20,h:.16,l:"api-service (verifier)",s:"/profiles · limiters · :9101 metrics",c:"#3DD6C8"},con:{x:.36,y:.76,w:.20,h:.14,l:"idp-connector",s:"/auth · /identity · no cache",c:"#6F86B8"},
+    pg:{x:.66,y:.42,w:.16,h:.16,l:"postgres-0",s:"app db · issuer db · TLS",c:"#FFC857"},mig:{x:.66,y:.12,w:.16,h:.12,l:"db-migrate Job",s:"goose ×3 · gates deploy",c:"#FFC857"},cron:{x:.66,y:.76,w:.16,h:.12,l:"retention-sweep",s:"daily 03:17 · Forbid",c:"#FFC857"},
+    vault:{x:.88,y:.12,w:.10,h:.76,l:"Vault",s:"6 roles · injector · CA TLS",c:"#9D8CFF"}};
+  const routes=[{path:["client","ing","iss"],c:"#9D8CFF",lbl:"mint token"},{path:["client","ing","ver"],c:"#3DD6C8",lbl:"search"},{path:["ver","iss"],c:"#9D8CFF",lbl:"JWKS"},{path:["ver","pg"],c:"#FFC857",lbl:"query"},{path:["ver","con"],c:"#6F86B8",lbl:"identity lookup"},{path:["mig","pg"],c:"#FFC857",lbl:"migrate"},{path:["cron","pg"],c:"#FFC857",lbl:"sweep"},{path:["vault","iss"],c:"#9D8CFF",lbl:"secret"},{path:["vault","ver"],c:"#9D8CFF",lbl:"secret"},{path:["vault","pg"],c:"#9D8CFF",lbl:"secret"},{path:["vault","cron"],c:"#9D8CFF",lbl:"secret"}];
+  const denied=[{from:"ing",to:"con"}];
+  let W,H,dots=[];function size(){const r=cv.getBoundingClientRect();W=r.width;H=Math.max(380,Math.min(560,r.width*0.5));cv.height=H*devicePixelRatio;cv.width=W*devicePixelRatio;cv.style.height=H+"px";ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+  size();addEventListener("resize",size);
+  const C=k=>{const n=N[k];return {x:(n.x+n.w/2)*W,y:(n.y+n.h/2)*H}};
+  function box(k){const n=N[k];const x=n.x*W,y=n.y*H,w=n.w*W,h=n.h*H;ctx.fillStyle="#131C33";ctx.strokeStyle=n.c;ctx.lineWidth=1.4;ctx.beginPath();ctx.roundRect(x,y,w,h,8);ctx.fill();ctx.stroke();ctx.fillStyle="#EAF0FA";ctx.font="600 13px Bricolage Grotesque, sans-serif";ctx.textAlign="center";ctx.fillText(n.l,x+w/2,y+h/2-4);ctx.fillStyle="#8FA0BE";ctx.font="10.5px JetBrains Mono, monospace";ctx.fillText(n.s,x+w/2,y+h/2+12)}
+  function edge(a,b,color,dash){const p=C(a),q=C(b);ctx.strokeStyle=color;ctx.globalAlpha=.55;ctx.lineWidth=1.2;ctx.setLineDash(dash||[]);ctx.beginPath();ctx.moveTo(p.x,p.y);const mx=(p.x+q.x)/2;ctx.bezierCurveTo(mx,p.y,mx,q.y,q.x,q.y);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1}
+  function pointOn(a,b,t){const p=C(a),q=C(b);const mx=(p.x+q.x)/2;const mt=1-t;const x=mt**3*p.x+3*mt*mt*t*mx+3*mt*t*t*mx+t**3*q.x,y=mt**3*p.y+3*mt*mt*t*p.y+3*mt*t*t*q.y+t**3*q.y;return {x,y}}
+  function frame(){ctx.clearRect(0,0,W,H);
+    // namespace frame
+    ctx.strokeStyle="#263352";ctx.setLineDash([6,5]);ctx.strokeRect(.30*W,.05*H,.56*W,.90*H);ctx.setLineDash([]);ctx.fillStyle="#6F7E9C";ctx.font="10.5px JetBrains Mono, monospace";ctx.textAlign="left";ctx.fillText("NAMESPACE loginid-takehome · default-deny NetworkPolicies · quota",.31*W,.05*H-6);
+    routes.forEach(r=>{for(let i=0;i<r.path.length-1;i++)edge(r.path[i],r.path[i+1],r.c)});denied.forEach(d=>edge(d.from,d.to,"#FF5C6C",[4,5]));
+    Object.keys(N).forEach(box);
+    if(!REDUCE){if(dots.length<26&&Math.random()<0.25){const r=routes[Math.floor(Math.random()*routes.length)];dots.push({r,seg:0,t:0,sp:0.008+Math.random()*0.006})}
+      dots.forEach(d=>{d.t+=d.sp;if(d.t>=1){d.t=0;d.seg++}if(d.seg>=d.r.path.length-1){d.dead=true;return}const p=pointOn(d.r.path[d.seg],d.r.path[d.seg+1],d.t);ctx.fillStyle=d.r.c;ctx.shadowColor=d.r.c;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0});dots=dots.filter(d=>!d.dead);requestAnimationFrame(frame)}}
+  frame();
+  cv.addEventListener("mousemove",e=>{const r=cv.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;let hit=null;for(const k in N){const n=N[k];if(x>=n.x*W&&x<=(n.x+n.w)*W&&y>=n.y*H&&y<=(n.y+n.h)*H)hit=k}
+    const T={client:"OAuth2 client-credentials caller. QA clients are single-scope, seeded by runbook into Vault-backed config.",ing:"Public entry. Routes /auth/token to the issuer and /profiles to the verifier. The connector is deliberately not routed.",iss:"APP_MODE=issuer. Mints RS256 JWTs with per-client audiences; Argon2id PHC secrets; serves JWKS in-cluster only. One replica, Recreate, own ServiceAccount.",ver:"APP_MODE=verifier. Masked search, full read with read:own / read:any and a closed reason-code enum. In-process rate, touch, and grant limiters (one replica, Recreate). /metrics on :9101 for Prometheus only.",con:"/auth and /identity against a stub vendor. Vendor tokens fetched, used once, discarded. Uniform-timing failures. Ingress only from api-service.",pg:"StatefulSet with TLS. Separate app and issuer databases, migrator and runtime roles. Ingress from four named consumers.",mig:"Runs goose for postgres, shared, and issuer migrations; waits for Postgres DNS; a failure blocks the api-service apply.",cron:"Daily at 03:17 UTC, concurrencyPolicy Forbid, one-hour deadline. Persists retention_sweep_run for the metrics endpoint.",vault:"HA Vault with the Agent Injector. One read-only role per ServiceAccount; init-only agents that exit on auth error; CA-verified TLS. No application secret in etcd."}[hit];
+    if(hit){tip.style.display="block";tip.textContent=T;tip.style.left=(e.clientX+14)+"px";tip.style.top=(e.clientY+14)+"px";cv.style.cursor="help"}else{tip.style.display="none";cv.style.cursor="default"}});
+  cv.addEventListener("mouseleave",()=>tip.style.display="none");
+})();
+
+// ================= COUNT-UP =================
+(function(){document.querySelectorAll("[data-count]").forEach(n=>{const target=+n.dataset.count;const f=n.dataset.fmt==="tok"?(v=>(v/1e6).toFixed(2)+" M"):n.dataset.fmt==="tokb"?(v=>(v/1e9).toFixed(2)+" B"):(v=>Math.round(v).toLocaleString());if(REDUCE){n.textContent=f(target);return}const t0=performance.now(),dur=1400;const tick=t=>{const k=Math.min(1,(t-t0)/dur);const e=1-Math.pow(1-k,3);n.textContent=f(target*e);if(k<1)requestAnimationFrame(tick)};requestAnimationFrame(tick)})})();
+
+
+// ================= TRANSCRIPT INDEX =================
+const TBASE="https://wtvamp.github.io/loginid-takehome/transcripts/";
+const PERSON_DESC={
+ "dana-whitfield":"Ran the board, merged every pull request, wrote every Jira transition, and carried the questions only the human could answer.",
+ "naomi-voss":"Product owner. Pulled each story, refined it, and refused to call anything Done until she had exercised it live.",
+ "marcus-ilori":"Security and AI architecture. Threat model, authorisation design, and the ruling on what this workflow may and may not claim.",
+ "renata-cole":"Engineering. The Go code for all three questions, and the standard that clarity beats cleverness.",
+ "theo-bergman":"Infrastructure. Containers, pipelines, manifests, the cluster, and a standing instinct to delete anything unnecessary.",
+ "priya-nandakumar":"Data. The schema, the multi-database strategy, migrations, and the retention rules for personal data.",
+ "tomasz-wrede":"Adversary. Writes attack trees and enjoys it.",
+ "helena-marsh":"Principled architect. Will not accept a control without naming the attack it stops.",
+ "felix-adebayo":"Tinkerer. Sketches three odd alternatives before defending one; deleted two attack paths by removing a cache.",
+ "ingrid-solano":"Designated skeptic. Numbered objections, politely, against the room.",
+ "imogen-hale":"Storyteller. Argues the framing in user journeys.",
+ "desmond-okafor":"Spreadsheet. Audits every quantitative claim for evidence.",
+ "tobias-lindqvist":"Designated skeptic. Wrote the rebuttal in the framing debate.",
+ "oren-castellan":"Detail hawk. Error semantics, nullability, off-by-one, on every pull request.",
+ "nolan-reyes":"Veteran. Pattern-matches production failure modes onto new designs.",
+ "marisol-ferran":"Enthusiast. Makes the case for the promising bet nobody else would risk.",
+ "ines-dabrowski":"Systems cartographer. Drew the module layout and the service topology.",
+ "wesley-okonkwo":"Newcomer. Reads finished hand-offs cold and lists what he cannot act on.",
+ "bree-sandoval":"Enthusiast. The counterweight to a deadpan minimalist lead.",
+ "callum-ferreira":"Minimalist. An independent second pass asking what could be cut.",
+ "anders-vogel":"Systems cartographer. The shape of the interface-to-implementation boundary.",
+ "beatriz-achterberg":"Spreadsheet. Retention windows with real durations and a named enforcement site.",
+ "yusuf-karadag":"Detail hawk. Field-by-field review of the schema before any code existed.",
+ "saoirse-byrne":"Storyteller. Read the database contract as its consumer would.",
+ "research":"Short-lived research subagents, fanned out in parallel and discarded after reporting."
+};
+const GROUP_TITLE={pm:"The manager",lead:"The five track leads",hire:"The eighteen specialists",planning:"The planning phase, before any code",other:"Research subagents"};
+(function(){
+  const box=$("#transcripts");if(!box)return;
+  fetch(TBASE+"manifest.json").then(r=>{if(!r.ok)throw 0;return r.json()}).then(M=>{
+    const rows=Array.isArray(M)?M:(M.personas||M.people||[]);
+    if(!rows.length)throw 0;
+    const bucket={pm:[],lead:[],hire:[],planning:[],other:[]};
+    rows.forEach(r=>{
+      const role=(r.role||"").toLowerCase();
+      let k=r.group&&bucket[r.group]?r.group:(/project manager|\bpm\b/.test(role)?"pm":/lead/.test(role)?"lead":/hire|specialist/.test(role)?"hire":"other");
+      bucket[k].push(r);
+    });
+    let html="";
+    ["pm","lead","hire","planning","other"].forEach(k=>{
+      if(!bucket[k].length)return;
+      html+=`<div class="groupttl">${GROUP_TITLE[k]}</div><div class="people">`;
+      bucket[k].sort((a,b)=>(b.turns||0)-(a.turns||0)).forEach(r=>{
+        const s=(r.sessions&&r.sessions[0]&&r.sessions[0].pages&&r.sessions[0].pages[0])||null;
+        const href=TBASE+(s?s.replace(/^\.?\//,""):"index.html");
+        const turns=r.turns||(r.sessions||[]).reduce((a,x)=>a+(x.turns||0),0);
+        const tools=r.tool_calls||(r.sessions||[]).reduce((a,x)=>a+(x.tool_calls||0),0);
+        const nsess=(r.sessions||[]).length;
+        const mdl=(r.model||"").replace("claude-","").replace("fable-5-1","Fable 5.1").replace("opus-5","Opus 5").replace("sonnet-5","Sonnet 5").replace("haiku-4-5-20251001","Haiku 4.5");
+        html+=`<a class="person ${k==="pm"?"pmx":""}" href="${href}"><span class="nm">${r.persona||r.name||r.slug}</span><span class="rl">${r.role||""}${mdl?" · "+mdl:""}</span><span class="ds">${PERSON_DESC[r.slug]||""}</span><span class="mt">${turns.toLocaleString()} turns · ${tools.toLocaleString()} tool calls${nsess>1?" · "+nsess+" sessions":""} →</span></a>`;
+      });
+      html+=`</div>`;
+    });
+    html+=`<p class="note" style="margin-top:18px"><a href="${TBASE}index.html" style="color:var(--agent)">Open the full archive index →</a></p>`;
+    box.innerHTML=html;
+  }).catch(()=>{
+    box.innerHTML=`<p class="note">The archive is published at <a href="${TBASE}index.html" style="color:var(--agent)">${TBASE.replace("https://","")}</a>. Twenty-five personas, every message and every tool call, with credentials redacted.</p>`;
+  });
+})();
+
+// ================= BOOT =================
+recompute();
+if(!REDUCE){setTimeout(()=>{T=0;playing=true;lastTs=0;$("#play").textContent="❚❚ Pause";requestAnimationFrame(tick)},900)}
+</script>
+
+</body>
+</html>

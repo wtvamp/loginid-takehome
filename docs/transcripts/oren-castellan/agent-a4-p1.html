@@ -1,0 +1,1514 @@
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oren Castellan — transcript p1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../t.css">
+<header class="sticky"><div class="wrap"><h1>Oren Castellan</h1><div class="sub">Hire (track 03) · session 26 of 26 · model <span class="mono">claude-sonnet-5</span> · Sep 13, 2026 6:37 PM PDT – Sep 13, 2026 7:04 PM PDT</div><div class="nav">  <a href="../index.html">index</a> <span class="pill">page 1 of 1</span></div></div></header>
+<div class="wrap">
+<div class="msg human"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Lead</span><div class="body">Please review PR #77 in the loginid-takehome repo (`gh pr diff 77` and/or `gh pr view 77` from `/Users/warrenthompson/Source/LoginID-worktrees/LT-53`, branch `feature/LT-53`): "LT-53: embedded /demo console — live, same-origin API demo page".
+
+Context you need (you have no memory of this project's recent history, so read this carefully):
+
+This is a brand-new story: LT-53, a client-facing HTML demo console for the take-home submission's live API (search/retrieve profiles behind JWT auth, a client-credentials token issuer, rate limiting, an object-level authorization scheme). The design is fixed by a refinement doc (`01-product-industry-research-design/refinement/LT-53.md`, worth reading for full context) and by an explicit PM/Warren design brief: a single static HTML page, embedded into the `api-service` Go binary via `go:embed`, served at `GET /demo` only on the "verifier" mode router (never on the "issuer" or "sweep" modes — those are separate run-modes of the same binary). The page's own vanilla JS is the only thing that ever touches a visitor-pasted QA OAuth client_id/client_secret — it mints a real token from the browser directly against `/auth/token` (same-origin, via ingress routing another track is implementing in a companion PR, #76) and then drives the real `/profiles/search` and `/profiles/{id}` endpoints, also directly from the browser. `api-service`'s own Go server-side code for this route is intentionally trivial: it just serves the embedded HTML bytes, nothing else — no proxying, no server-side handling of the secret at all.
+
+New/changed files in this PR:
+- `internal/app/demo.go` — the `go:embed` var and the (very small) HTTP handler.
+- `internal/app/demo_page.html` — the actual page: HTML/CSS/vanilla JS, no external assets, no build step.
+- `internal/app/demo_test.go` — Go tests, all against the embedded bytes / the router, no browser involved.
+- `internal/app/verifier_router.go` — one new `mux.Handle("GET /demo", demoHandler())` line registering the route, with no auth middleware and no new rate limiter wrapping it (deliberately: it's a static asset like `/healthz` already is, and the *real* rate limiting the page's own JS triggers happens inside the real `/profiles/search`/`/profiles/{id}` handlers it calls, which were already rate-limited before this PR).
+
+Please focus your review especially on:
+1. **Credential handling in `demo_page.html`'s JS** — this is the highest-stakes part of the story. Confirm the pasted QA client secret is read from its `&lt;input&gt;` exactly where you'd expect (to build a Basic-auth header for the one `/auth/token` mint call), is never assigned to a variable that outlives that one call, is cleared from the input immediately after use (success and failure paths), and is never written to `localStorage`/`sessionStorage`/a cookie/`console.log`/`console.debug`, and never sent to any endpoint other than `/auth/token`. Also check the secret `&lt;input&gt;`'s own attributes (`type`, `autocomplete`, `id`/`name`) for password-manager-heuristic hardening.
+2. **`internal/app/demo.go` and the route registration in `verifier_router.go`** — confirm the handler is genuinely inert (serves static bytes only, no request-dependent logic, no logging of anything request-derived), and confirm `/demo` is correctly scoped to the verifier router only (check `internal/app/app.go`'s `NewRouter`, `internal/app/issuer_router.go`'s `NewIssuerRouter`, and confirm there's no code path that could expose `/demo` on the issuer or a plain/unrecognized-mode router).
+3. **`internal/app/demo_test.go`** — these tests do textual/regexp analysis of the embedded HTML/JS bytes (since there's no JS runtime in `go test`) rather than executing the script. Look hard for ways a test could give a false sense of security here — e.g., a regex that's too narrow, a string-matching approach that a trivial reformatting of the page would silently break, or a test that checks the wrong file/variable. Also sanity-check the specific counting logic in `TestDemoPage_SecretOnlySentToAuthToken` (it distinguishes "read" vs "cleared" occurrences of the secret input's value by literal substring matching) for off-by-one or brittleness issues.
+4. Anything else you'd flag on a second-pass Go code review here — error semantics, nullability, unused/dead code, anything that looks like it doesn't do what its comment claims.
+
+Give me your standard second-pass review. I'm about to have this PR reviewed by the PM/PO and want your findings first.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> pwd</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "pwd"
+}</pre><div class="lbl">result</div><pre>/Users/warrenthompson/Source/LoginID/03-engineering-delivery</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# LoginID Take-Home POC — Project Root
+2	
+3	## Role
+4	
+5	You are the project manager agent for this repository. This file is the shared context every track refers back to. Each of the five track directories below has its own CLAUDE.md that can be worked independently by a scoped subagent, but that subagent should read this root file first for the assignment, the overall narrative, and how its track fits with the other four.
+6	
+7	When you spin up agents or subagents to do work in a track, point them at that track's CLAUDE.md as their brief, and tell them this root file exists for cross-track context. Don't let a track's agent silently duplicate scope another track owns — check the "Owns / does not own" boundaries below first.
+8	
+9	## What this repository is
+10	
+11	This is a take-home assignment for a LoginID interview, submitted as a full directory. The goal is not just to answer three coding questions — it's to demonstrate capability as an AI architect: how you scope a problem, use AI tooling deliberately, reason about security and data, and produce something that reads as an intentional, well-run engineering effort rather than a quick script.
+12	
+13	Code does not need to work or be fully complete. LoginID has said explicitly they care more about the design and the reasoning behind it, and about which AI tools/frameworks were used and how. Every track should document its reasoning, not just its output.
+14	
+15	## The assignment (verbatim from LoginID)
+16	
+17	Provide code solutions for the following questions in Go (preferably) or other languages — describe any tool, framework, or AI used.
+18	
+19	1. Code of a database DAO that can store and retrieve `user_profile` (name, address, phone) and `user_credential` (username, method, password), with support for multiple databases (PostgreSQL or CockroachDB, SQLite, etc).
+20	2. Design a RESTful API web service to search and retrieve the above user profile data, plus security API authentication.
+21	3. Design a service connector to third-party identity providers (referred to generically as ABC or XYZ) to retrieve personal data from vendors, with the following endpoints:
+22	   - `/auth` — retrieves an `access_token` based on a POST JSON body `{"username": "&lt;string&gt;", "password": "&lt;string&gt;"}`
+23	   - `/identity` — retrieves user PII (name, phone, address: `street_address`, `locality`, `region`, `postal_code`, `country`) based on a POST JSON body `{"phone": "&lt;string&gt;", "name": "&lt;string&gt;"}`
+24	
+25	Go is the preferred language. Other languages are acceptable if justified.
+26	
+27	## Track structure
+28	
+29	Five directories, each independently workable, each owning a distinct slice of the problem:
+30	
+31	| Directory | Track | Owns |
+32	|---|---|---|
+33	| `01-product-industry-research-design/` | Product &amp; Industry Research (incl. Design) | Market/industry framing (IAM, passwordless auth, IDP aggregation space), personas and use cases, API and data contract design rationale, UX of the surfaces that would sit on top of this |
+34	| `02-ai-security-architecture/` | AI Architecture &amp; Security Architecture | The AI tooling/workflow used to produce this submission, threat modeling, auth/authz design for the API, credential and PII handling, secrets management, third-party connector security |
+35	| `03-engineering-delivery/` | Engineering &amp; Delivery | The actual Go code for all three questions, project structure, test strategy, delivery documentation |
+36	| `04-infra-devops/` | Infra &amp; DevOps | How this would be built, containerized, deployed, and operated — CI/CD, environments, multi-database configuration, observability |
+37	| `05-data-ops/` | Data Ops | Data modeling for `user_profile` / `user_credential`, multi-database abstraction strategy, migrations, PII data governance and retention |
+38	
+39	Directories are numbered for reading order in the final submission, not for sequencing of work — tracks can be worked in any order or in parallel.
+40	
+41	## Working principles for every track
+42	
+43	- State your reasoning, not just your conclusion. LoginID is grading the "why" as much as the "what."
+44	- Name the AI tool/workflow you used for that track's output (this project is being built with Claude Code; say so, and say how — e.g., subagents scoped per track, a given skill, a given model).
+45	- Keep each track's CLAUDE.md self-contained enough that a fresh agent with no other context can pick it up and do correct work from it alone, plus this root file.
+46	- Cross-reference other tracks by relative path (e.g., `../05-data-ops/CLAUDE.md`) rather than restating their content.
+47	- Implementation is gated per story, not project-wide: Warren gave the implementation go on 2026-09-12 (evening) as an agile loop. Code (`.go`, `.sql`, `go.mod`, Dockerfiles, CI config) may be written only for a story the Product Owner has pulled, refined with the research team, and handed to engineering — recorded in `&lt;track&gt;/refinement/&lt;LT-key&gt;.md`. Work happens on a `feature/&lt;LT-key&gt;` branch, never directly on `main`. A story is done only when it is deployed to the public URL and the Product Owner has reviewed it there.
+48	- **Attribution rule (Warren, 2026-09-12): every commit, PR, and Jira ticket says who did the work.** *Commits:* the git author is the persona doing the work — set once per worktree with `git config --worktree user.name "&lt;Persona Name&gt; (&lt;track&gt; &lt;role&gt;, &lt;model&gt;)"` and `git config --worktree user.email "&lt;slug&gt;@agents.loginid-takehome.invalid"` (`extensions.worktreeConfig` is enabled repo-wide) — and every commit message ends with trailers: `Story: LT-nn`, `Work-By: &lt;persona&gt; (&lt;seat&gt;); &lt;persona&gt; (&lt;seat&gt;)…` naming each hire who contributed and what they did (implementation, tests, review, objection seat), then `Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;`. *PRs:* title `LT-nn: &lt;summary&gt;`; body has a **Who did the work** section (lead, hires and seats, reviewers incl. 02's independent reviewer where applicable, models), plus links to the refinement doc and the Jira issue. *Jira:* every transition and every PR link is a comment beginning `Work-By: …` with the same names; the story's final comment before Done names who deployed and who reviewed. The PM applies the same rule to its own commits. Persona names, not "Claude" or "the team".
+49	- **Shared working tree rule.** Every lead session shares this one checkout, so `git checkout`/`git switch` here changes everyone's tree — **never run them in this directory.** Feature branches live in worktrees outside the repo: `git worktree add /Users/warrenthompson/Source/LoginID-worktrees/&lt;LT-key&gt; -b feature/&lt;LT-key&gt; main`; work, commit, and push from that directory; the root tree stays on `main`. Remote: `origin` = `«email»:wtvamp/loginid-takehome.git` (public). Go code lives at the repo root (`cmd/`, `internal/`, `go.mod`); track directories hold documents.
+50	
+51	## Org, hiring, and orchestration
+52	
+53	The project is run as an org: this PM agent (Dana Whitfield) orchestrates five standing track-lead agents, and each lead hires a small sub-team of specialist agents with deliberately varied personalities. **Each track lead runs as its own top-level Claude Code session**, launched from its track directory in its own tmux window — so it loads its own track `CLAUDE.md` and persona natively, owns and spawns its hires as named teammates in that window, and talks to the PM session through cross-session messaging. Hires belong to their lead's session, not the PM's. The governing files, all at the root:
+54	
+55	- `PLAN.md` — the approved org plan for the planning phase (phases, gates, verification). `~/.claude/plans/` is scratch; this is the record.
+56	- `PLANNING.md` — the thin cross-track board: one row per track, one writer per row, plus the service-boundaries section 03 owns and 04 reads.
+57	- `CASTING.md` — archetype palette, org-wide variance rules, hire sizing, the persona-writing standard, the orchestration-pattern catalog (adversarial pair, red/blue, three hats, rotating devil's advocate, structured written debate, newcomer's question), the deep-research rule, the hire-creation procedure, and the registry of every hire.
+58	- `LOG.md` — dated, append-only journal of what happened and why (team-lead writes it; it is part of the submission).
+59	- `.claude/agents/` — one agent definition per hire (model pinned; a once-only per-agent `PreToolUse` hook displays its own persona on its first tool call). `.claude/AGENT_TEMPLATE.md` is the starting point (kept outside the agents directory so it is not registered as an agent type itself).
+60	- `02-ai-security-architecture/planning-approach.md` — the agreed Claude-architecture approach: model/effort by role, coordination rules, hand-off standard, dependency order.
+61	
+62	Rules that hold across every track:
+63	- Every agent — lead or hire — has a profile-gen persona (name, temperament, professional history, technical background, stated blind spot). Hires are created text-first with `--output file`; portraits arrive later from `scripts/portrait-queue.sh`. Hires are **never** added as `profile-gen` markers in any `CLAUDE.md` — only the six markers that exist today.
+64	- Hires do not spawn subagents. Only track leads (and team-lead) authorize or run deep research (patents, whitepapers, standards, primary sources); hires request it from their lead.
+65	- Tracks never modify root-level state (this file, the root persona, root config); flag it to team-lead instead.
+66	- **Decisions already made are not re-asked.** Warren's rulings reach tracks through the PM and are recorded in `LOG.md` and this file. A lead must not raise an `AskUserQuestion` to Warren for a decision that is already on the record (e.g., the deployment target, the public repo, the code go) — it asks the PM by message, which answers from the record or escalates. A dialog left open in a lead's session blocks that lead and everything queued behind it (this cost DevOps an hour on 2026-09-12). Genuinely new decisions that only Warren can make still go to Warren — through the PM.
+67	- Hand-offs are files by relative path, written so the receiver can act without re-deriving the sender's reasoning; chat messages signal readiness, they do not carry content.
+68	- **Before declaring anything handed off, merged-ready, or done, run `git status` and `git diff origin/main -- &lt;your track&gt;/`, and treat any `??` line under your track as unshipped work.** `git diff` compares tracked content only: a file that has never been committed reports no difference, so the diff alone returns a false clean for exactly the case most likely to be lost (Priya found `refinement/LT-20.md` this way on 2026-09-13, the fifth stranded artifact and the first where the detector, not the person, failed). Four times in this project a finished artifact sat unpushed or on a dead branch while its author reported it complete (2026-09-12/13). The author is the worst-placed person to notice, because they can see the work; the reviewer looking at `origin/main` sees the truth. Also check `gh pr view &lt;n&gt; --json state` before pushing to a story branch — once the PM merges, that branch is dead and pushes to it go nowhere.
+69	- Edit `CLAUDE.md` files at turn boundaries only (prompt-cache stability). Milestone `git` commits at the end of each phase; no mid-task commits.
+70	
+71	## Status
+72	
+73	**Backlog complete (2026-09-13, 15:00 PDT): all 24 LT stories Done, each deployed to the public URL and reviewed live by the Product Owner.** Live: `https://loginid-takehome.uplifttech.org` (build SHA == `main`, `db: ok`). `LOG.md` is the record from planning through the last review; `&lt;track&gt;/refinement/&lt;LT-key&gt;.md` holds each story's refinement, review, and findings; `02-ai-security-architecture/decisions/second-review-implementation.md` holds the security residuals. Secrets are delivered from Vault (no application Secret objects in the namespace); the CronJob `retention-sweep` runs daily at 03:17 UTC; Prometheus in `monitoring` scrapes `api-service:9101` and evaluates four retention rules. Open with Warren, not the team: the LT-20 ILM disposition (apply the 90-day floor or rule existing retention sufficient) and the Vault CA expiry on 2026-12-14. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`), expected the week of 2026-09-14.
+74	
+75	@profiles/dana-whitfield/dana-whitfield.md
+76	&lt;!-- profile-gen:end slug=dana-whitfield --&gt;
+77	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/CLAUDE.md"
+}</pre><div class="lbl">result</div><pre>1	# Track: Engineering &amp; Delivery
+2	
+3	Refer back to `../CLAUDE.md` for the full assignment text and how this track fits with the other four.
+4	
+5	## Mission
+6	
+7	Write the actual code that answers all three assignment questions, in Go, implementing the designs the other tracks produce rather than re-deciding them here. Code does not need to be complete or working end-to-end — LoginID cares about the design and reasoning — but it should be structured and readable enough to demonstrate real engineering judgment.
+8	
+9	## Owns
+10	
+11	- Question 1: the DAO layer for `user_profile` (name, address, phone) and `user_credential` (username, method, password), written to support multiple backing databases (PostgreSQL/CockroachDB, SQLite, etc.) behind a common interface, per the strategy in `../05-data-ops/CLAUDE.md`.
+12	- Question 2: the RESTful API service to search/retrieve `user_profile` data, wired to the authentication mechanism designed in `../02-ai-security-architecture/CLAUDE.md`.
+13	- Question 3: the third-party IDP connector service implementing `/auth` and `/identity` against the contracts specified in the assignment, following the connector security design in `../02-ai-security-architecture/CLAUDE.md`.
+14	- Project structure, module layout, and inline documentation of design decisions and trade-offs made during implementation.
+15	- Test strategy (unit/integration scope, what's stubbed vs. real) — tests don't need full coverage, but the approach should be stated.
+16	
+17	## Does not own
+18	
+19	- Deciding the API auth mechanism or threat model — that's `../02-ai-security-architecture/CLAUDE.md`; implement what it specifies.
+20	- Deciding the multi-database abstraction strategy or schema — that's `../05-data-ops/CLAUDE.md`; implement what it specifies.
+21	- Deployment, containerization, CI/CD — that's `../04-infra-devops/CLAUDE.md`.
+22	- Product/industry rationale for why the API is shaped this way — that's `../01-product-industry-research-design/CLAUDE.md`; reference it, don't re-derive it.
+23	
+24	## Deliverables
+25	
+26	- Go source implementing questions 1, 2, and 3.
+27	- A short README in this directory explaining what's implemented, what's stubbed/mocked, and why, plus which AI tool/workflow was used to produce the code and how.
+28	- Any test files demonstrating the stated test strategy.
+29	
+30	## AI tooling note
+31	
+32	Record which AI tool/workflow generated this track's code (this project is being built with Claude Code) and how much was AI-authored vs. human-reviewed/edited.
+33	
+34	## Status
+35	
+36	Planning complete (2026-09-12): 4 hires spawned and live, `PLAN.md` approved, Service boundaries published in root `PLANNING.md`, four implementation-call decisions ruled (`decisions/go-layout-debate.md`, `error-semantics.md`, `context-propagation.md`, `test-double-strategy.md`), 05's DAO contract accepted (including a second-pass review and 05's resulting `CreateProfileWithCredential` fix), 02's `handoff-03-auth.md` v3 accepted, `backlog.md` written (11 stories, Epic `LT-3`). No `.go`/`.sql`/`go.mod` exists yet — still waiting on Warren's explicit implementation go-ahead.
+37	
+38	&lt;!-- profile-gen:start slug=renata-cole --&gt;
+39	@profiles/renata-cole/renata-cole.md
+40	&lt;!-- profile-gen:end slug=renata-cole --&gt;
+41	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/PLAN.md"
+}</pre><div class="lbl">result</div><pre>1	# Track 03 (Engineering &amp; Delivery) — Phase 1 Plan
+2	
+3	## Context
+4	
+5	Team-lead has asked every track lead to plan in plan mode before any hiring or code. This
+6	track (Renata Cole) owns the actual Go implementation of all three assignment questions —
+7	the DAO, the REST API, and the IDP connector — so its plan needs to name concrete,
+8	Jira-shaped deliverables, propose a 4-hire roster with real personality variance (per
+9	`CASTING.md`), decide which decisions in this track deserve a debate pattern versus which are
+10	waste, state the dependency order this track already committed to in
+11	`../02-ai-security-architecture/planning-approach.md`, and produce the "Service boundaries"
+12	section of root `PLANNING.md` that 04 (Theo) is blocked on reading. Nothing here is new
+13	strategy — it operationalizes what's already agreed in `planning-approach.md` and the root
+14	`CLAUDE.md`'s org section. No code is written in this phase.
+15	
+16	## 1. Deliverables &amp; tasks (one Jira Story each; Epic = this track)
+17	
+18	*This table is the Phase 1 planning snapshot (2026-09-12). `backlog.md` (11 stories, Jira Epic `LT-3`) is the current, authoritative, PR-sized expansion — its story descriptions and acceptance criteria supersede this table's "What"/"Acceptance standard" columns wherever they differ. Consult `backlog.md`, not this table, for current story shape, hand-off versions, or acceptance criteria.*
+19	
+20	| Story | What | Hand-off consumed | Hand-off produced | Acceptance standard |
+21	|---|---|---|---|---|
+22	| S1. Scaffolding | Go module layout, `cmd/` entrypoints, route wiring, stub handlers, config loading | none (assignment text only) | `PLANNING.md` Service boundaries (this plan, §4 below) | Buildable skeleton; 04 can read the boundaries doc without asking a follow-up question |
+23	| S2. DAO per backend | `internal/dao` `Repository` interface + Postgres/CockroachDB/SQLite implementations for `user_profile`, `user_credential` | 05's Go-shaped contract in `../05-data-ops/multi-db-strategy.md` (interface signatures, field types/nullability, credential-method-as-lookup-table note) | none outbound | 03 implements directly from the contract with no re-derivation of schema or interface decisions; if the contract is prose instead of Go signatures, this story is blocked and kicked back to 05 |
+24	| S3. REST handlers + auth middleware | Search/retrieve `user_profile` endpoints (Q2) + middleware enforcing 02's scheme | 02's receiver-shaped auth hand-off (token scheme, validation point — the deferred follow-up to `api-auth-design.md` noted in 02's own `CLAUDE.md` Status) | none outbound | Middleware implements the scheme as specified; no alternatives re-litigated in code |
+25	| S4. Connector `/auth` + `/identity` | Go client + handlers per the assignment's fixed JSON contracts | 02's `connector-security.md` (token lifecycle: no-cache-by-default, fetch per `/identity` call, discard on return — TTL/refresh apply only to how quickly a re-fetch happens, not to any stored token) | none outbound | Token-lifecycle logic matches 02's spec exactly; endpoint paths/bodies are the assignment's, not re-designed |
+26	| S5. Tests | Table-driven unit tests for DAO (mocked driver), handlers (mocked DAO), connector (mocked HTTP), **plus the cross-backend conformance suite 05's per-driver ruling is conditional on (`multi-db-strategy.md` §7) — one suite, written once against the `Repository` interface, run against every backend** (consistency-pass finding F25: this was a requirement with no named deliverable until now; `backlog.md`'s S5 is the current, authoritative expansion of this story) | S1–S4 outputs | none | Stated strategy: unit-heavy, integration deliberately stubbed (assignment doesn't require full end-to-end); documented, not silently absent |
+27	| S6. README | What's implemented vs. stubbed/mocked and why; AI tool/workflow used (this plan's own hiring + patterns); test-strategy section must state the hand-written-fake rule from `decisions/test-double-strategy.md` (same-PR fake update on interface change) since that's where LoginID reads the test approach | all of the above | the track's README | A cold reader can tell what runs vs. what's a stub without asking |
+28	
+29	## 2. Hire roster — 4 hires (suggested cast from `CASTING.md`, adopted as-is)
+30	
+31	All four: **model sonnet** (planning/design/implementation tier per `planning-approach.md`;
+32	opus is reserved for the connector token-lifecycle *implementation* seat in a later phase, not
+33	planning — none of these four need it now). No hire spawns subagents; no CLAUDE.md marker;
+34	profile-gen text-first, after "hiring go".
+35	
+36	**Oren Castellan — Detail Hawk, code reviewer.** *Function:* second-pass review on DAO/handler/connector Go for error semantics, nullability, off-by-one — the review-seat Renata asked for on her own output, plus the independent pass 02 called for on security-graded surfaces. *Tags:* serious, cautious. *Pattern/role:* rotating devil's advocate seat (implementation calls); second-pass reviewer on S3/S4.
+37	
+38	*Persona:* Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied. (129 words)
+39	
+40	**Nolan Reyes — Veteran, ops/migrations/token-lifecycle sanity.** *Function:* pattern-matches implementation and layout decisions against real production failure modes; pessimist hat in the Go-layout three-hats run. *Tags:* serious, cautious. *Pattern/role:* three-hats pessimist (Go layout); rotating devil's advocate participant.
+41	
+42	*Persona:* Dry and unhurried; opens reviews with what broke last time he saw this pattern in production. Decides from incident history more than documentation. Pushes back on any "this will just work" claim about retries, timeouts, or token refresh under load. Eleven years in platform ops — six at a regional bank's card-issuing platform, five running SRE for a logistics SaaS — paged once for an expired-token cascade and once for a migration that locked a table for forty minutes; never forgot either. Deep in Go's `context` package, connection pooling, and graceful shutdown. Blind spot: he over-indexes on failures he personally lived through and under-weights new ones. Argues by scenario, not principle, and concedes fast when shown a failure mode he hasn't seen. (134 words)
+43	
+44	**Marisol Ferran — Enthusiast, Renata's temperament opposite (required).** *Function:* pushes for trying the promising-but-unproven tool (codegen, generics) rather than the safe default; optimist hat in three-hats. *Tags:* playful, bold. *Pattern/role:* three-hats optimist (Go layout); counterweight voice on S2's driver-abstraction choice.
+45	
+46	*Persona:* Bright and quick to say "let's just try it" before the room finishes weighing options; energized by tools that remove boilerplate. Decides by prototyping fast and showing the result rather than arguing it abstractly. Pushes back on "we've always done it this way" and on process that delays the first line of code by a week. Four years building internal tools at a logistics startup, two more at a small dev-tools shop evaluating codegen and ORM options for clients. Comfortable with `sqlc`, Go generics, and OpenAPI-driven scaffolding. Blind spot: she underweights the years-long operational cost of a clever tool and can talk a team into a dependency nobody wants to own. In disagreement she stays upbeat, offers to build the smaller version on the spot, and yields once the maintenance cost is spelled out. (141 words)
+47	
+48	**Ines Dabrowski — Systems Cartographer, Go layout / service topology.** *Function:* owns the diagramming behind the Service boundaries decision below; draws the package/dependency map before anyone commits to prose. *Tags:* serious, bold. *Pattern/role:* drafts the Service boundaries doc (§4); non-hat contributor to three-hats as tie-break if optimist/pessimist stall.
+49	
+50	*Persona:* Calm and visual; sketches a box-and-arrow diagram before committing an opinion to words. Decides by mapping every boundary and dependency first, then asking what crosses it and why. Pushes back on two services sharing a package for convenience rather than a real shared concern. Seven years as a platform engineer at a multi-tenant SaaS company, three designing service boundaries for a payments integration team. Strong on Go module layout, dependency direction, and where an interface should live versus where it's implemented. Blind spot: she can over-abstract a boundary that would have been fine as one package at this project's size, mistaking cleanliness for necessity. In disagreement she draws the alternative rather than argues it, and updates the diagram in front of the room when persuaded. (135 words)
+51	
+52	Roster spans both required axes (serious/playful via Marisol; cautious/bold via Ines and
+53	Marisol), includes Renata's required opposite (Marisol), and duplicates no archetype from
+54	another track's *function* (Detail Hawk here is a code reviewer; 05's Detail Hawk is a DDL
+55	reviewer, a different function — allowed per variance rule 2).
+56	
+57	## 3. Debate plan
+58	
+59	- **Three hats — Go layout (one binary vs. two).** Marisol (optimist: ship one binary, less
+60	  ceremony) / Nolan (pessimist: two binaries, because a shared-everything binary is how a
+61	  card-issuing platform he worked on ended up with the connector's outbound vendor calls
+62	  taking down the client-facing API during an incident) / **Renata takes the pragmatist hat
+63	  herself** rather than hiring a fifth (catalog explicitly allows this) — she's the
+64	  Minimalist-leaning lead per `CASTING.md` §7. Ines drafts the resulting diagram either way.
+65	  Decision recorded in `decisions/go-layout-debate.md`.
+66	- **Rotating devil's advocate — implementation calls.** Error semantics (wrap vs. sentinel
+67	  errors), context propagation into the DAO layer, test-double strategy (interface fakes vs.
+68	  generated mocks). Seat rotates Oren → Nolan → Marisol → Ines per decision so no one hire
+69	  becomes "the objector." Cheapest pattern; run on every non-trivial implementation call in
+70	  S2–S4.
+71	
+72	  *(Consistency-pass finding F47: this section named "Callum" as the pessimist/rotation-2 hire
+73	  through Phase 1 while the actual roster in §2 above was already "Nolan Reyes" — Callum
+74	  Reyes was renamed to clear a first-name collision with 04's Callum Ferreira before hiring;
+75	  this section simply hadn't been updated to match. Fixed above; no roster change.)*
+76	- **Newcomer's-question pass on hand-offs — run by Renata herself, not a hired Newcomer.**
+77	  This track wasn't allocated a Newcomer seat (04 has one; hiring a second here would exceed
+78	  the intent of a 4-hire cap for marginal gain). Renata reads 05's `multi-db-strategy.md` and
+79	  02's receiver-shaped hand-offs cold, the moment they land, and lists anything she can't act
+80	  on without re-deriving the sender's reasoning — same test the pattern exists to run, just
+81	  performed by the actual receiver instead of a proxy.
+82	- **Explicit waste:** the `/auth` and `/identity` endpoint paths and JSON bodies are fixed by
+83	  the assignment text — never debated. Red team/blue team is 02's pattern for the token
+84	  lifecycle's security properties, not this track's to re-run; 03 only debates *how* it
+85	  implements what 02 specifies (error handling, retries), never *whether* the scheme is right.
+86	
+87	## 4. Dependencies (and the Service boundaries output for 04)
+88	
+89	**Split start**, consistent with `planning-approach.md` §2: S1 (scaffolding) starts as soon as
+90	hiring completes — no upstream blocker. S2 (DAO) is blocked on 05's Go-shaped contract landing
+91	*stable* (not polished — unlikely to be rewritten). S3's middleware is blocked on 02's
+92	receiver-shaped auth hand-off; S3's route wiring and non-auth handler logic can start earlier.
+93	S4 is blocked on 02's `connector-security.md` token-lifecycle spec, which already exists in
+94	prose form — implementable now, refined if 02's deferred receiver-shaped version changes
+95	anything.
+96	
+97	**Service boundaries (written into root `PLANNING.md` alongside this plan):**
+98	
+99	*This subsection is the Phase 1 snapshot (2026-09-12, before hiring). Root `PLANNING.md`'s
+100	Service boundaries section is the current, authoritative version — it has since gained
+101	`internal/app` (shared bootstrap, `decisions/go-layout-debate.md`), `DB_DSN_FILE` (02's
+102	`handoff-04-secrets.md` S7), literal `AUTH_JWT_ISSUER`/`AUTH_JWT_AUDIENCE` values, and the
+103	connector's own audience/client-credential variables (consistency-pass F15). Consult
+104	`PLANNING.md`, not this snapshot, for what 04 or anyone else should build against.*
+105	
+106	- **Two binaries**, not one: `cmd/api-service` (Q1 DAO + Q2 REST API, client-facing, bearer-
+107	  token auth) and `cmd/idp-connector` (Q3, outbound-only to vendors). Reasoning: different
+108	  threat models and auth surfaces per 02's track, independent scaling/deploy needs, and it
+109	  mirrors the assignment's own Q2/Q3 split rather than inventing a new boundary.
+110	- **Package layout:**
+111	  ```
+112	  cmd/api-service/main.go
+113	  cmd/idp-connector/main.go
+114	  internal/dao/        # Repository interface + postgres/cockroachdb/sqlite implementations
+115	  internal/model/      # shared structs: UserProfile, UserCredential
+116	  internal/api/         # REST handlers, router, auth middleware
+117	  internal/connector/   # /auth, /identity client + handlers
+118	  internal/config/      # env-var config loading, shared by both binaries
+119	  ```
+120	- **Config surface:** environment variables only (12-factor, container-friendly for 04) —
+121	  `DB_DRIVER` (postgres|cockroachdb|sqlite), `DB_DSN`, `HTTP_ADDR`, `AUTH_JWT_ISSUER` /
+122	  `AUTH_JWT_AUDIENCE` (names pending 02's final scheme), `IDP_ABC_BASE_URL`,
+123	  `IDP_ABC_CLIENT_ID` / `IDP_ABC_CLIENT_SECRET`. No flags, no config files.
+124	- **DAO driver-selection mechanism:** a factory `dao.New(driver, dsn string) (dao.Repository, error)`
+125	  chosen at startup from `DB_DRIVER`; every backend satisfies one `Repository` interface
+126	  (exact method signatures finalized once 05's contract lands — the factory *shape* is stable
+127	  now, its return type's method set is not).
+128	- **What 04 may treat as stable:** the two-binary split, the `cmd/` entrypoint names, the
+129	  env-var config approach and the variable names above, and the `dao.New(driver, dsn)` factory
+130	  signature. **Not yet stable:** internal DAO implementation details, ORM/query-builder choice,
+131	  and handler-package internals — those can still shift as 05's and 02's hand-offs land.
+132	
+133	## Amendment: QA function (2026-09-12, Warren's agile-loop go-ahead)
+134	
+135	**Oren Castellan leads QA** (unit, integration, and the end-to-end/UX acceptance tests written from the PO's review script); **Nolan Reyes supports**. 02's independent second review still applies on top of this for every `security-graded` story — QA and 02's review are not the same gate.
+136	
+137	## Verification
+138	
+139	- `PLAN.md` for this track matches this file verbatim once copied.
+140	- `PLANNING.md` row 03 updated to "plan drafted — awaiting hiring go"; Service boundaries
+141	  section replaces its "TBD" with the content in §4 above.
+142	- No `.go`, `.sql`, `go.mod`, or agent-definition files exist yet — only prose changed.
+143	- Roster (4 hires) checked against `CASTING.md` variance rules before messaging team-lead:
+144	  no archetype repeated within this team; Renata's required opposite (Enthusiast) present;
+145	  two temperament axes spanned; no first name collides with any lead.
+146	</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/03-engineering-delivery/profiles/oren-castellan/oren-castellan.md"
+}</pre><div class="lbl">result</div><pre>1	---
+2	schema_version: 1
+3	name: "Oren Castellan"
+4	slug: "oren-castellan"
+5	image: "profiles/oren-castellan/oren-castellan.png"
+6	
+7	nsfw: false
+8	display:
+9	  image: true
+10	  name: true
+11	  autostart: false
+12	generation:
+13	  backend: "comfyui"
+14	  model: "comfyui-workflow.json"
+15	  prompt: "Oren Castellan, a meticulous and understated man in his late 30s with short neat hair, wire-rim glasses, wearing a plain navy button-down shirt, calm focused expression, head-and-shoulders portrait, centered, neutral light gray studio background, professional corporate headshot photography, soft studio lighting, sharp focus, photorealistic"
+16	  negative_prompt: blurry, low quality, distorted, extra limbs, watermark, text, nsfw, nude, nudity, explicit, sexual content
+17	  seed: null
+18	  gif_mode: null
+19	  created_at: "2026-09-12T00:00:00Z"
+20	---
+21	
+22	# Oren Castellan
+23	
+24	![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+25	
+26	
+27	## Personality
+28	
+29	Meticulous and understated; in review he goes quiet, then produces a numbered list nobody else caught. Decides by tracing every input to its type and zero value before trusting a code path. Pushes back on "the happy path handles it" and on errors swallowed with `_`. Eight years reviewing Go services at a logistics company, two more doing contract review for a fintech's PCI-scoped repos. Deep in `go vet`/`staticcheck`, table-driven tests, and nil-vs-empty-slice distinctions. Blind spot: he can spend an hour on a rare nullability edge case while missing that the function solves the wrong problem — pair him with someone who checks the solution's shape first. In disagreement he stays procedural, names the specific line and failure, and drops it once satisfied.
+30	
+31	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git status &amp;&amp; echo --- &amp;&amp; gh pr view 77</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git status &amp;&amp; echo --- &amp;&amp; gh pr view 77"
+}</pre><div class="lbl">result</div><pre>On branch feature/LT-53
+Your branch is up to date with 'origin/feature/LT-53'.
+
+nothing to commit, working tree clean
+---
+title:	LT-53: embedded /demo console — live, same-origin API demo page
+state:	OPEN
+author:	wtvamp (Warren Thompson)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	77
+url:	https://github.com/wtvamp/loginid-takehome/pull/77
+additions:	1012
+deletions:	0
+auto-merge:	disabled
+--
+## Summary
+
+Implements Naomi Voss's (01, PO) LT-53 refinement: a single static HTML page, embedded via `go:embed` into the `api-service` binary, served at `GET /demo` on the verifier only. No separate deploy artifact, no CORS — the page's own JS mints a real token from a visitor-pasted QA client credential and drives `/auth/token` and `/profiles/*` directly from the browser, same-origin via Theo Bergman's (04) ingress routing (PR #76, its counterpart). `api-service`'s server-side code never sees the plaintext QA secret; this handler only ever serves static bytes, on the same mux as every other route this router serves, with no special-cased auth/limiter bypass.
+
+**Panels** (each shows a literal `curl` line beside the real, formatted response — never a raw JSON dump):
+1. Masked search vs. full read
+2. The two 403s, with a live byte-equality check (uses two arbitrary client-generated ids, not real seeded records — deterministic, no data dependency)
+3. The 401
+4. The `reason_code` enum (accept/reject)
+5. The rate limit tripping (real burst, deliberately last — the window is shared across every visitor using the same seeded QA credential, per Tobias Lindqvist's objection)
+
+**Visual design** per Warren's brief: dark ground (`#0A0F1E` family), the six-color legend (green/coral/amber/red/violet/teal, exact hex values), system fonts only, no external assets, responsive at phone width, Imogen Hale's (01) panel copy placed verbatim.
+
+**Credential-handling hardening** (Marcus Ilori, 02): secret input is `type="password"`, `autocomplete="new-password"`, id/name deliberately not `password`/`secret` — mitigates what this design can control; a browser's own password-save heuristic is acknowledged as outside client-side control, per the refinement doc's own scoping.
+
+## Verification
+
+- `go build`/`go vet`/`go test`/`staticcheck`/`gofmt`/`gitleaks` all clean.
+- New tests: `/demo` serves the embedded page and requires no auth; embedded bytes contain no secret-shaped literal and no external URL; secret input's hardening attributes; the secret's value is read exactly once (to mint) and only ever sent to `/auth/token`; no `localStorage`/`sessionStorage`/cookie/`console.log` of anything this page holds; `/demo` absent from the issuer and unrecognized-mode routers.
+- **Live-verified end to end, not just unit-tested**: ran the real docker-compose dev-loop (LT-48) — real Postgres, real issuer, real verifier — seeded the three real QA client credentials (one per scope) and the demo profile rows, fronted with a throwaway reverse proxy replicating production's same-origin ingress split (the local dev-loop runs issuer/verifier on separate ports with no such proxy), and drove all five panels through a real headless browser: every mint, search, read, 403, 401, `reason_code`, and the live rate-limit trip worked exactly as designed against the real API. Confirmed no horizontal scroll at 400px width.
+
+## Who did the work
+
+- **Renata Cole** (03, lead) — implementation, tests, live verification.
+- **Naomi Voss** (PO) — refinement.
+- **Imogen Hale** (01) — panel copy.
+- **Tobias Lindqvist** (01) — credential-handling/shared-rate-limit objections.
+- **Marcus Ilori** (02) — credential-handling criteria.
+- **Theo Bergman** (04) — ingress routing (PR #76, this PR's counterpart).
+- **Warren** — visual design brief, will do the visual review at the live URL before Naomi's PO review.
+
+Model: Claude Sonnet 5 (Claude Code).
+
+Refinement doc: `01-product-industry-research-design/refinement/LT-53.md`
+
+---
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_011Cuba4JUvrsQCrTdUj4yzk</pre></div></details><details><summary><span class="tn">Read</span> /Users/warrenthompson/Source/LoginID/01-product-industry-research-design/refinement/LT-53.md</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/refinement/LT-53.md"
+}</pre><div class="lbl">result</div><pre>1	# LT-53 refinement — Demo console (epic LT-3)
+2	
+3	**Product Owner:** Naomi Voss (01). **Research team:** Imogen Hale (page copy), Tobias Lindqvist (objection seat — credential-handling risk). **Engineering:** Renata Cole (03, page + `go:embed` + tests), Theo Bergman (04, Ingress path). **Design input:** Marcus Ilori (02, seat on the credential-handling criterion). **Visual review:** Warren, at the live URL, before PO review. **Source:** Warren's ask ("does anything visual demonstrate what was built?" → "curl only" → "go ahead on a demo console"), routed by the PM as LT-53 under epic LT-3.
+4	
+5	**Who did the work:** Refined by Naomi Voss (PO).
+6	
+7	## Why this one, now
+8	
+9	Every other story in this backlog is `curl`-verified — real, but nothing a first-time viewer (an interviewer, e.g.) can look at and understand without already knowing the API surface. This is the last story: a demo page that makes the working system visible, not a new capability.
+10	
+11	## Constraints, not up for re-derivation (PM's ruling)
+12	
+13	- **One static HTML page, embedded in the `api-service` binary via `go:embed`.** Not a separate service, not a separate deploy artifact.
+14	- **Served at `GET /demo` on the verifier**, same origin as the API it demonstrates — no CORS work, and critically, **no secret is ever baked into the page itself**.
+15	- **The visitor pastes a QA client id and secret** (the same QA clients already seeded for review, `qa-client-credential`) **that live only in the browser tab** — never persisted, never sent anywhere but this origin's own `/auth/token`.
+16	- **The page mints a real token and drives the real endpoints** — no simulated/fake responses. Every action shows the request as a literal `curl` line next to the raw response.
+17	- **Required panels/flows:**
+18	  1. Masked search beside full read (the `read:own`/`read:any` scoping distinction, side by side).
+19	  2. The two `403`s beside each other with a byte-equality check on the response bodies (demonstrating the anti-enumeration identical-content design).
+20	  3. The `401` (no/invalid token).
+21	  4. The `reason_code` enum: one accepted value, one rejected value, shown together.
+22	  5. The rate limit tripping (a real burst against the real limiter, shown live, not staged).
+23	
+24	## Warren's visual/design criterion (added after his "make sure it looks good" note — now a hard acceptance criterion, not polish)
+25	
+26	- **A deliberate palette and type scale, system fonts only** — the page loads no external assets (fonts, icon sets, JS/CSS CDNs), consistent with this being a same-origin, no-CORS, no-external-dependency page by design, not just a performance nicety.
+27	- **Panels read request → response, left to right.**
+28	- **Masked fields are visually highlighted**, not just textually present — a viewer should be able to *see* which fields are masked without reading closely.
+29	- **Response states color-coded to the same legend the project's own retrospective uses:** agent teal, human coral, deploy amber, done green, incident red, security violet, dark ground. **Flagged here since no retrospective artifact exists yet in this repository as a file to cite** — this refinement doc is the authoritative definition of that palette for this story; Renata builds to the six names/roles above, not to a file that may not exist by the time this is implemented. If a retrospective artifact is later published with different exact hex values, this page's palette should be reconciled to match it, not the other way around.
+30	- **Responsive at phone width.**
+31	- **No raw, unformatted JSON** — every response is rendered through the page's own formatting, not a `&lt;pre&gt;{{raw}}&lt;/pre&gt;` dump.
+32	- **Imogen owns the page copy:** each panel states, in one sentence, what it proves — not what it does mechanically (a viewer should read "this shows the API can tell two failure reasons apart without leaking which one" rather than "this calls /profiles/search twice"). **Copy delivered, Renata builds to this verbatim (adjust only for length/wrapping, not substance):**
+33	  - **Page intro:** "This page lets you drive the actual identity API live from your browser, so you can watch its access rules and safeguards work in real time instead of taking our word for it."
+34	  - **Credential box:** "You paste a temporary QA test login here only to get a real access token for this demo — it stays in this browser tab, is never saved anywhere, and is only ever used to talk to this one page's own login endpoint."
+35	  - **Panel 1 (masked vs. full read):** "This shows the same person's record returned two different ways depending on what the caller is allowed to see — one version hides sensitive fields, the other reveals them — proving access is limited to what each caller has earned, not an all-or-nothing switch."
+36	  - **Panel 2 (two 403s, byte-equality):** "This shows that being denied for 'you don't have permission' and being denied because 'that record doesn't exist' look exactly, byte-for-byte, the same from the outside, so no one can use the error message to go fishing for which accounts are real."
+37	  - **Panel 3 (401):** "This shows the API simply refuses to answer at all when no valid login is presented, proving there's no accidental back door for anonymous requests."
+38	  - **Panel 4 (reason_code enum):** "This shows the system accepts a recognized reason for a request and rejects a made-up one, proving it enforces a fixed, checkable list of valid reasons rather than trusting whatever a caller types in."
+39	  - **Panel 5 (rate limit):** "This shows the API cutting off a rapid burst of real requests in real time, proving it can defend itself against being hammered rather than just claiming to."
+40	- **Warren does a visual review at the live URL before the PO review** — this story's sign-off order is Warren (visual) → Naomi (PO, functional + visual-criteria compliance), not PO-then-Warren.
+41	
+42	## Acceptance criteria
+43	
+44	- [ ] `GET /demo` serves a single HTML page embedded via `go:embed` in the `api-service` binary — no separate deploy artifact, no separate service.
+45	- [ ] **Architecture stated explicitly, per Marcus's review (item 1):** the page's JS calls the real `/auth/token` and protected endpoints **directly from the browser** (same-origin `fetch`, using a token the browser itself obtained) — `api-service`'s server-side code never sees the plaintext QA secret at all; it only ever serves static content at `/demo`. This is the design, not an implementation detail left implicit — if any future change introduces a server-side proxy step instead, that handler would need its own never-log coverage on the request body specifically (a new criterion at that point, not assumed covered by "the page" the way this one is).
+46	- [ ] The page never contains a secret value in its own source/markup/JS — the QA client id/secret are entered by the visitor into the page at runtime and held only in browser memory/DOM state for that tab, never written to `localStorage`/`sessionStorage`/a cookie, and never logged by the client-side JS to the console.
+47	- [ ] **Marcus's seat, credential-handling criterion:** the page's own JS never sends the pasted client secret anywhere except this origin's own `/auth/token` endpoint, exactly once per mint, over HTTPS — enforcement site: read the shipped JS directly, confirm no other network call ever references the secret variable, and confirm the token (not the secret) is what's held and reused for subsequent calls.
+48	- [ ] **Added per Marcus's review (item 2), a real gap — browser autofill/password-manager save prompts.** "Memory-only, never localStorage" covers what the application does, not what the browser's own chrome does: a plain credential-shaped `&lt;input&gt;` can trigger a "save this password?" prompt, putting the QA secret into the visitor's OS-level password store indefinitely — completely outside this design's control once that happens. Enforcement site: the secret input uses `type="password"`, `autocomplete="off"` (falling back to `autocomplete="new-password"` if a given browser ignores `off`, which some do), and a field `name`/`id` that doesn't pattern-match what password managers heuristically look for (avoid `password`/`secret` as the literal attribute value; something like `qa-token-input` is safer).
+49	- [ ] `/demo` and its own requests are excluded from audit-log bodies — the page's own static-asset serving and the visitor's direct browser-to-API calls (per the architecture criterion above) shouldn't pollute the audit trail with demo traffic the same way a real caller's would, or should be clearly distinguishable if they do.
+50	- [ ] The never-log lint (LT-49) covers this story's own new code paths, the same as everywhere else in this project — no exemption for "it's just a demo page."
+51	- [ ] The static `/demo` handler sits behind the same rate limiters as everything else `api-service` serves — no special-cased bypass for the demo route.
+52	- [ ] No authentication bypass anywhere in this story's own code — the demo page is a client of the real, fully-enforced API, not a backdoor or a relaxed-auth mode reachable only from `/demo`.
+53	- [ ] All required panels/flows present and each drives the **real** endpoint, not a canned/fake response: masked-vs-full read, the two 403s with a byte-equality check shown in the UI, the 401, the reason_code accept/reject pair, the rate limit tripping live.
+54	- [ ] **Added per Tobias's objection — the rate limiter's shared-identity blast radius must be stated, not silently discovered.** `internal/api.RateLimiter` is keyed **per client credential** (confirmed against `README.md`: 10 req/min for search, 60 req/min for read), and every `/demo` visitor pastes the **same seeded QA client id** — meaning one visitor's deliberate burst (the rate-limit panel's whole point) trips the bucket for **every other concurrent visitor and reviewer using that same QA client**, not just their own tab. The non-goal above correctly forbids special-casing the limiter for the demo (agreed — the demo should show the real system's real behavior), but that's an argument for stating this plainly, not for silence on it. Fix: the rate-limit panel's own copy (Imogen's, above) states this is a shared control, not per-visitor — e.g. "Note: this uses a shared test account, so tripping this may briefly rate-limit other visitors using the same demo login." Enforcement site: the panel's shipped copy.
+55	- [ ] Every action displays the literal `curl` command alongside the raw response — a viewer could copy the `curl` line and reproduce the call themselves.
+56	- [ ] Warren's visual criteria (palette/type scale, system fonts only, left-to-right request→response layout, highlighted masked fields, the six-color legend, responsive at phone width, no raw JSON, one-sentence-per-panel copy from Imogen) are all met — enforcement site: Warren's own visual review at the live URL, a precondition to the PO review, not a substitute for it.
+57	- [ ] No CORS configuration anywhere in this story's diff — same-origin service of the page is what makes this unnecessary; if a PR adds CORS handling, that's a signal the page isn't actually being served same-origin as designed.
+58	- [ ] Tests (Renata's, per the story's own engineering ownership): confirm `/demo` serves the embedded page, confirm the embed doesn't accidentally bundle any real secret file matching the never-log-list's field names, confirm the route exists in both `verifier`/default `APP_MODE` and doesn't get exposed on `issuer`/`sweep` modes (this is a demo of the search/retrieve/connector-adjacent surface, not the issuer internals).
+59	
+60	## Forward note, not a blocker (Marcus's review, item 3)
+61	
+62	An unauthenticated, publicly-reachable page whose whole purpose is pasting a real credential into a form is an unusual thing to leave running indefinitely. Fine for the review window this story serves; whether/how it's disabled or gated afterward (a feature flag, removed in a follow-up, left as-is with the QA clients themselves rotated/retired) is a decision for after the submission's review period, not something this story needs to resolve now — noted here so it doesn't just quietly stay live as a permanent oddity in the submission's final state.
+63	
+64	## Non-goals
+65	
+66	- No new API endpoints beyond what already exists — the demo page is a client of the existing surface, not new server-side capability.
+67	- No user accounts, no persistence of anything the visitor enters — every session starts blank.
+68	- No production/marketing polish beyond what's specified above — this is a technical demo for an interviewer, not a product landing page.
+69	- No change to rate-limiting, scoping, or any other already-shipped security control to make the demo "work better" — the demo shows the real system's real behavior, including its real limits (e.g., the rate limit tripping is a feature of the demo, not a bug to route around).
+70	
+71	## PO review script
+72	
+73	1. Load `https://loginid-takehome.uplifttech.org/demo` cold, as a first-time viewer would — confirm each panel's one-sentence copy actually explains what it proves without external context.
+74	2. Read the shipped page source/JS directly: confirm no secret is baked in, confirm the pasted secret is never sent anywhere but `/auth/token`, confirm no `localStorage`/`sessionStorage`/cookie writes of the secret or token.
+75	3. Run each required flow live: masked-vs-full read, the two 403s (confirm the byte-equality check is real, not simulated — mutate one response mentally/actually and confirm the UI would show a mismatch), the 401, the reason_code pair, the rate limit (drive real traffic until it trips, confirm the UI shows it live).
+76	4. Check responsiveness at phone width directly (resize/emulate), confirm no horizontal scroll, confirm the layout doesn't break.
+77	4a. **Added per Tobias's objection:** before running any other panel that needs the QA client's own request budget, confirm a self-triggered rate-limit trip from the rate-limit panel clears (waits out the limiter's own window) before proceeding to the next required panel — since this is a shared-identity limiter, running panels in the wrong order could produce a confusing false "it's broken" 429 on an unrelated panel later in the same review.
+78	5. Confirm no external asset requests in the browser's network panel — no CDN font, no external script, nothing but this origin.
+79	6. Confirm Warren's own visual review happened and is recorded before this PO review proceeds.
+80	7. Screenshot each panel (or the full page) into this refinement record for the retrospective, per the PM's instruction.
+81	
+82	## Research team review
+83	
+84	**Imogen Hale — page copy:** Delivered seven sentences (page intro, credential-box explainer, one per panel), incorporated verbatim above. Written for a first-time, non-engineer viewer — states what each panel proves about the system's behavior, not what it mechanically does.
+85	
+86	**Marcus Ilori (02) — credential-handling seat:** Reviewed the five originally-drafted criteria (memory-only/never localStorage, `/demo` excluded from audit-log bodies, never-log lint coverage, static handler behind the same limiters, no auth bypass) and found no objection to any as stated. Three additions, all applied: (1) the direct-from-browser architecture stated explicitly as a criterion, since it determines what "never-log" even has to cover (api-service's server code never sees the plaintext secret at all under this design); (2) a real, previously-unnamed gap — browser autofill/password-manager save prompts could persist the QA secret into the visitor's OS-level password store regardless of what the application itself does, fixed via `type="password"`/`autocomplete="off"`/a non-pattern-matching field name; (3) a forward note (not a criterion) that an unauthenticated public credential-paste page is unusual to leave running indefinitely — recorded for after the review window, not blocking this story.
+87	
+88	**Tobias Lindqvist — objection:** Found the next real gap beyond Marcus's mechanics-focused review: `internal/api.RateLimiter` is keyed per client credential, and every `/demo` visitor pastes the *same* seeded QA client — so the rate-limit panel's own deliberate trip is a shared-identity event, not a per-visitor sandbox one. One visitor's burst can transiently 429 every other concurrent visitor and reviewer using that same QA client, including the PO's own subsequent panels in the same review session. Confirmed against `README.md`'s own documented limiter scoping (10 req/min search, 60 req/min read, per client credential) before applying the fix — not assumed. Fix: the rate-limit panel's copy states this is a shared control, and a PO-review step confirms a self-triggered trip clears before continuing to the next panel.
+89	
+90	**Naomi Voss — ruling:** All fixes from both reviewers applied. This refinement is accepted and ready to hand off. The shared-identity rate-limiter risk Tobias caught is the same category as this project's very first live-review finding (LT-39's cross-replica rate-limiting bug) — a control that's individually correct but has an emergent, multi-actor interaction nobody names until someone actually runs concurrent traffic against it. Worth remembering for any future story that reuses a shared credential across multiple simultaneous actors.
+91	
+92	---
+93	Work-By: Naomi Voss (PO, refinement); Imogen Hale (page copy); Marcus Ilori (02, credential-handling seat); Tobias Lindqvist (shared-limiter objection); Renata Cole (03, implementation — page, embed, tests); Theo Bergman (04, Ingress path).
+94	</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; gh pr diff 77 &gt; /private/tmp/claude-501/-</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; gh pr diff 77 &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77.diff &amp;&amp; wc -l /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77.diff"
+}</pre><div class="lbl">result</div><pre>    1041 /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77.diff</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Read</span> /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706e</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "file_path": "/private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77.diff"
+}</pre><div class="lbl">result</div><pre>1	diff --git a/internal/app/demo.go b/internal/app/demo.go
+2	new file mode 100644
+3	index 0000000..7080dff
+4	--- /dev/null
+5	+++ b/internal/app/demo.go
+6	@@ -0,0 +1,40 @@
+7	+package app
+8	+
+9	+import (
+10	+	_ "embed"
+11	+	"net/http"
+12	+)
+13	+
+14	+// demoPage is LT-53's single static HTML page, embedded directly into
+15	+// the api-service binary — no separate deploy artifact, no separate
+16	+// service. Served only at GET /demo on NewVerifierRouter (never on the
+17	+// issuer or sweep code paths, since this is a demo of the
+18	+// search/retrieve surface, not the issuer internals — refinement/
+19	+// LT-53.md's own acceptance criterion).
+20	+//
+21	+// The page is a pure client of the real API: its own JS mints a real
+22	+// token from the visitor's pasted QA client credential and calls
+23	+// /auth/token and /profiles/* directly from the browser, same-origin
+24	+// (Theo Bergman's, 04, ingress routing puts both the issuer and
+25	+// verifier Deployments behind the one public hostname). api-service's
+26	+// server-side code here never sees the plaintext QA secret — this
+27	+// handler only ever serves static bytes.
+28	+//
+29	+//go:embed demo_page.html
+30	+var demoPage []byte
+31	+
+32	+// demoHandler serves the embedded page verbatim. No template
+33	+// execution, no per-request state, no query-string handling — a static
+34	+// GET, deliberately as simple as the acceptance criteria allow, so
+35	+// there's no server-side code path here to add never-log coverage for
+36	+// beyond "this handler never logs anything, and never will" (LT-53's
+37	+// own architecture criterion — a future server-side proxy step would
+38	+// need its own review at that point, not be assumed covered by this
+39	+// one).
+40	+func demoHandler() http.HandlerFunc {
+41	+	return func(w http.ResponseWriter, r *http.Request) {
+42	+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+43	+		w.WriteHeader(http.StatusOK)
+44	+		_, _ = w.Write(demoPage)
+45	+	}
+46	+}
+47	diff --git a/internal/app/demo_page.html b/internal/app/demo_page.html
+48	new file mode 100644
+49	index 0000000..d5cc5ed
+50	--- /dev/null
+51	+++ b/internal/app/demo_page.html
+52	@@ -0,0 +1,709 @@
+53	+&lt;!DOCTYPE html&gt;
+54	+&lt;html lang="en"&gt;
+55	+&lt;head&gt;
+56	+&lt;meta charset="utf-8"&gt;
+57	+&lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+58	+&lt;title&gt;LoginID take-home — live API demo&lt;/title&gt;
+59	+&lt;style&gt;
+60	+  /* ---- design tokens (refinement/LT-53.md's six-color legend, exact
+61	+     hex values from Warren's design brief) ---- */
+62	+  :root {
+63	+    --bg:        #0A0F1E;
+64	+    --bg-raised: #101A30;
+65	+    --bg-panel:  #0D1526;
+66	+    --border:    #1E2A44;
+67	+    --text:      #E7EDF7;
+68	+    --text-mute: #8B96AD;
+69	+    --green:     #5BE49B; /* 200 success */
+70	+    --coral:     #FF7A59; /* 401 / 403 */
+71	+    --amber:     #FFC857; /* 429 */
+72	+    --red:       #FF5C6C; /* 5xx / errors */
+73	+    --violet:    #9D8CFF; /* security notes / masked fields */
+74	+    --teal:      #3DD6C8; /* agent / request labels */
+75	+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+76	+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+77	+  }
+78	+
+79	+  * { box-sizing: border-box; }
+80	+  html, body {
+81	+    background: var(--bg);
+82	+    color: var(--text);
+83	+    font-family: var(--font-sans);
+84	+    margin: 0;
+85	+    padding: 0;
+86	+  }
+87	+  body {
+88	+    padding: 24px 16px 64px;
+89	+    line-height: 1.5;
+90	+  }
+91	+  .wrap { max-width: 1080px; margin: 0 auto; }
+92	+
+93	+  h1, h2, h3 { font-weight: 650; letter-spacing: -0.01em; margin: 0 0 8px; }
+94	+  h1 { font-size: clamp(1.5rem, 1.1rem + 1.5vw, 2.1rem); }
+95	+  h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; }
+96	+  h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-mute); margin: 0 0 6px; }
+97	+  p  { margin: 0 0 8px; }
+98	+  .lede {
+99	+    color: var(--text-mute);
+100	+    font-size: 1rem;
+101	+    max-width: 68ch;
+102	+  }
+103	+  .copy {
+104	+    color: var(--text-mute);
+105	+    font-size: 0.92rem;
+106	+    max-width: 72ch;
+107	+    margin-bottom: 16px;
+108	+  }
+109	+
+110	+  a { color: var(--teal); }
+111	+
+112	+  .badge {
+113	+    display: inline-flex;
+114	+    align-items: center;
+115	+    justify-content: center;
+116	+    font-family: var(--font-mono);
+117	+    font-size: 0.72rem;
+118	+    font-weight: 600;
+119	+    padding: 2px 8px;
+120	+    border-radius: 999px;
+121	+    line-height: 1.6;
+122	+    white-space: nowrap;
+123	+  }
+124	+  .badge-num {
+125	+    background: var(--bg-raised);
+126	+    color: var(--teal);
+127	+    border: 1px solid var(--border);
+128	+    min-width: 1.6em;
+129	+  }
+130	+  .status-2xx { background: rgba(91,228,155,0.14); color: var(--green); border: 1px solid rgba(91,228,155,0.4); }
+131	+  .status-401, .status-403 { background: rgba(255,122,89,0.14); color: var(--coral); border: 1px solid rgba(255,122,89,0.4); }
+132	+  .status-429 { background: rgba(255,200,87,0.16); color: var(--amber); border: 1px solid rgba(255,200,87,0.45); }
+133	+  .status-4xx { background: rgba(255,92,108,0.14); color: var(--red); border: 1px solid rgba(255,92,108,0.4); }
+134	+  .status-5xx { background: rgba(255,92,108,0.14); color: var(--red); border: 1px solid rgba(255,92,108,0.4); }
+135	+  .status-pending { background: var(--bg-raised); color: var(--text-mute); border: 1px solid var(--border); }
+136	+
+137	+  section.panel {
+138	+    background: var(--bg-panel);
+139	+    border: 1px solid var(--border);
+140	+    border-radius: 14px;
+141	+    padding: 20px 20px 22px;
+142	+    margin-bottom: 20px;
+143	+  }
+144	+  section.credential {
+145	+    background: var(--bg-raised);
+146	+    border: 1px solid var(--border);
+147	+    border-radius: 14px;
+148	+    padding: 20px 20px 22px;
+149	+    margin-bottom: 28px;
+150	+  }
+151	+
+152	+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 16px; }
+153	+  input[type="text"], input[type="password"] {
+154	+    background: var(--bg);
+155	+    border: 1px solid var(--border);
+156	+    color: var(--text);
+157	+    border-radius: 8px;
+158	+    padding: 8px 10px;
+159	+    font-family: var(--font-mono);
+160	+    font-size: 0.85rem;
+161	+    min-width: 0;
+162	+    flex: 1 1 200px;
+163	+  }
+164	+  input:focus, button:focus {
+165	+    outline: 2px solid var(--teal);
+166	+    outline-offset: 1px;
+167	+  }
+168	+  label.field-label {
+169	+    display: block;
+170	+    font-size: 0.72rem;
+171	+    color: var(--text-mute);
+172	+    margin-bottom: 4px;
+173	+  }
+174	+  .field { flex: 1 1 200px; min-width: 160px; }
+175	+
+176	+  button {
+177	+    background: var(--teal);
+178	+    color: #04211E;
+179	+    border: none;
+180	+    border-radius: 8px;
+181	+    padding: 9px 16px;
+182	+    font-size: 0.85rem;
+183	+    font-weight: 650;
+184	+    cursor: pointer;
+185	+    font-family: var(--font-sans);
+186	+  }
+187	+  button:hover { filter: brightness(1.08); }
+188	+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+189	+  button.secondary {
+190	+    background: transparent;
+191	+    color: var(--text);
+192	+    border: 1px solid var(--border);
+193	+  }
+194	+
+195	+  .token-status { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+196	+  .token-chip {
+197	+    font-family: var(--font-mono);
+198	+    font-size: 0.72rem;
+199	+    padding: 4px 9px;
+200	+    border-radius: 999px;
+201	+    border: 1px solid var(--border);
+202	+    color: var(--text-mute);
+203	+    background: var(--bg);
+204	+  }
+205	+  .token-chip.live { color: var(--green); border-color: rgba(91,228,155,0.4); background: rgba(91,228,155,0.08); }
+206	+
+207	+  .flows {
+208	+    display: grid;
+209	+    grid-template-columns: 1fr 1fr;
+210	+    gap: 16px;
+211	+  }
+212	+  @media (max-width: 700px) {
+213	+    .flows { grid-template-columns: 1fr; }
+214	+    .flow-pair { grid-template-columns: 1fr !important; }
+215	+  }
+216	+  .flow {
+217	+    border: 1px solid var(--border);
+218	+    border-radius: 10px;
+219	+    padding: 12px;
+220	+    background: var(--bg);
+221	+    min-width: 0;
+222	+  }
+223	+  .flow-pair {
+224	+    display: grid;
+225	+    grid-template-columns: 1fr 1fr;
+226	+    gap: 12px;
+227	+  }
+228	+  .flow-title { font-size: 0.78rem; color: var(--text-mute); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+229	+  pre.curl {
+230	+    font-family: var(--font-mono);
+231	+    font-size: 0.76rem;
+232	+    color: var(--teal);
+233	+    background: var(--bg-panel);
+234	+    border: 1px solid var(--border);
+235	+    border-radius: 8px;
+236	+    padding: 8px 10px;
+237	+    overflow-x: auto;
+238	+    white-space: pre-wrap;
+239	+    word-break: break-word;
+240	+    margin: 0 0 8px;
+241	+  }
+242	+  .response-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+243	+  .json {
+244	+    font-family: var(--font-mono);
+245	+    font-size: 0.78rem;
+246	+    background: var(--bg-panel);
+247	+    border: 1px solid var(--border);
+248	+    border-radius: 8px;
+249	+    padding: 8px 10px;
+250	+    overflow-x: auto;
+251	+    min-height: 1.4em;
+252	+  }
+253	+  .json .k { color: var(--teal); }
+254	+  .json .s { color: var(--text); }
+255	+  .json .n { color: var(--amber); }
+256	+  .json .b { color: var(--violet); }
+257	+  .json .nul { color: var(--text-mute); }
+258	+  .json .punc { color: var(--text-mute); }
+259	+  .json .placeholder { color: var(--text-mute); font-style: italic; }
+260	+  .field-tag {
+261	+    display: inline-block;
+262	+    font-size: 0.62rem;
+263	+    font-weight: 700;
+264	+    text-transform: uppercase;
+265	+    letter-spacing: 0.04em;
+266	+    padding: 0 5px;
+267	+    border-radius: 4px;
+268	+    margin-left: 6px;
+269	+    vertical-align: 1px;
+270	+  }
+271	+  .masked-val { background: rgba(157,140,255,0.16); border-radius: 4px; padding: 0 3px; }
+272	+  .masked-tag { background: rgba(157,140,255,0.22); color: var(--violet); }
+273	+  .full-val { background: rgba(91,228,155,0.14); border-radius: 4px; padding: 0 3px; }
+274	+  .full-tag { background: rgba(91,228,155,0.22); color: var(--green); }
+275	+
+276	+  .note { font-size: 0.82rem; color: var(--text-mute); margin-top: 10px; }
+277	+  .note.warn { color: var(--amber); }
+278	+  .result-line {
+279	+    font-family: var(--font-mono);
+280	+    font-size: 0.82rem;
+281	+    margin-top: 10px;
+282	+    padding: 8px 10px;
+283	+    border-radius: 8px;
+284	+    border: 1px solid var(--border);
+285	+    background: var(--bg);
+286	+  }
+287	+  .result-line.pass { color: var(--green); border-color: rgba(91,228,155,0.4); }
+288	+  .result-line.fail { color: var(--red); border-color: rgba(255,92,108,0.4); }
+289	+
+290	+  .burst-log { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+291	+  .burst-chip {
+292	+    font-family: var(--font-mono);
+293	+    font-size: 0.7rem;
+294	+    padding: 3px 7px;
+295	+    border-radius: 6px;
+296	+    border: 1px solid var(--border);
+297	+  }
+298	+
+299	+  footer { color: var(--text-mute); font-size: 0.78rem; margin-top: 32px; }
+300	+&lt;/style&gt;
+301	+&lt;/head&gt;
+302	+&lt;body&gt;
+303	+&lt;div class="wrap"&gt;
+304	+
+305	+  &lt;header&gt;
+306	+    &lt;h1&gt;LoginID take-home — live API demo&lt;/h1&gt;
+307	+    &lt;p class="lede"&gt;This page lets you drive the actual identity API live from your browser, so you can watch its access rules and safeguards work in real time instead of taking our word for it.&lt;/p&gt;
+308	+  &lt;/header&gt;
+309	+
+310	+  &lt;section class="credential" aria-label="Credential entry"&gt;
+311	+    &lt;h2&gt;&lt;span class="badge badge-num"&gt;&amp;#9679;&lt;/span&gt; Get a token&lt;/h2&gt;
+312	+    &lt;p class="copy"&gt;You paste a temporary QA test login here only to get a real access token for this demo — it stays in this browser tab, is never saved anywhere, and is only ever used to talk to this one page's own login endpoint.&lt;/p&gt;
+313	+    &lt;div class="controls"&gt;
+314	+      &lt;div class="field"&gt;
+315	+        &lt;label class="field-label" for="qa-client-id"&gt;QA client id&lt;/label&gt;
+316	+        &lt;input type="text" id="qa-client-id" name="qa-client-id" autocomplete="off" placeholder="paste your QA client id"&gt;
+317	+      &lt;/div&gt;
+318	+      &lt;div class="field"&gt;
+319	+        &lt;label class="field-label" for="qa-token-input"&gt;QA client secret&lt;/label&gt;
+320	+        &lt;input type="password" id="qa-token-input" name="qa-token-input" autocomplete="new-password" placeholder="paste the QA secret"&gt;
+321	+      &lt;/div&gt;
+322	+      &lt;button id="mint-btn" type="button"&gt;Mint token&lt;/button&gt;
+323	+    &lt;/div&gt;
+324	+    &lt;div id="mint-flow"&gt;&lt;/div&gt;
+325	+    &lt;div class="token-status" id="token-status" aria-live="polite"&gt;&lt;/div&gt;
+326	+  &lt;/section&gt;
+327	+
+328	+  &lt;section class="panel" aria-labelledby="panel1-title"&gt;
+329	+    &lt;h2 id="panel1-title"&gt;&lt;span class="badge badge-num"&gt;1&lt;/span&gt; Masked search vs. full read&lt;/h2&gt;
+330	+    &lt;p class="copy"&gt;This shows the same person's record returned two different ways depending on what the caller is allowed to see — one version hides sensitive fields, the other reveals them — proving access is limited to what each caller has earned, not an all-or-nothing switch.&lt;/p&gt;
+331	+    &lt;div class="controls"&gt;
+332	+      &lt;div class="field"&gt;
+333	+        &lt;label class="field-label" for="p1-query"&gt;Search by name&lt;/label&gt;
+334	+        &lt;input type="text" id="p1-query" value="Review Demo"&gt;
+335	+      &lt;/div&gt;
+336	+      &lt;button type="button" data-run="panel1"&gt;Run this panel&lt;/button&gt;
+337	+      &lt;span class="note"&gt;Needs a &lt;code&gt;profile:search&lt;/code&gt; token and a &lt;code&gt;profile:read:any&lt;/code&gt; token minted above.&lt;/span&gt;
+338	+    &lt;/div&gt;
+339	+    &lt;div class="flows"&gt;
+340	+      &lt;div class="flow" id="p1-search-flow"&gt;
+341	+        &lt;div class="flow-title"&gt;Masked (profile:search)&lt;/div&gt;
+342	+        &lt;pre class="curl" id="p1-search-curl"&gt;&amp;mdash;&lt;/pre&gt;
+343	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p1-search-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+344	+        &lt;div class="json" id="p1-search-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+345	+      &lt;/div&gt;
+346	+      &lt;div class="flow" id="p1-read-flow"&gt;
+347	+        &lt;div class="flow-title"&gt;Full (profile:read:any)&lt;/div&gt;
+348	+        &lt;pre class="curl" id="p1-read-curl"&gt;&amp;mdash;&lt;/pre&gt;
+349	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p1-read-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+350	+        &lt;div class="json" id="p1-read-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+351	+      &lt;/div&gt;
+352	+    &lt;/div&gt;
+353	+  &lt;/section&gt;
+354	+
+355	+  &lt;section class="panel" aria-labelledby="panel2-title"&gt;
+356	+    &lt;h2 id="panel2-title"&gt;&lt;span class="badge badge-num"&gt;2&lt;/span&gt; The two 403s&lt;/h2&gt;
+357	+    &lt;p class="copy"&gt;This shows that being denied for "you don't have permission" and being denied because "that record doesn't exist" look exactly, byte-for-byte, the same from the outside, so no one can use the error message to go fishing for which accounts are real.&lt;/p&gt;
+358	+    &lt;div class="controls"&gt;
+359	+      &lt;button type="button" data-run="panel2"&gt;Run this panel&lt;/button&gt;
+360	+      &lt;span class="note"&gt;Needs a &lt;code&gt;profile:read:own&lt;/code&gt; token minted above. Uses two fresh, unpredictable record ids this credential was never granted — one may exist, one almost certainly doesn't; neither matters to the result.&lt;/span&gt;
+361	+    &lt;/div&gt;
+362	+    &lt;div class="flows"&gt;
+363	+      &lt;div class="flow" id="p2-a-flow"&gt;
+364	+        &lt;div class="flow-title"&gt;Record A&lt;/div&gt;
+365	+        &lt;pre class="curl" id="p2-a-curl"&gt;&amp;mdash;&lt;/pre&gt;
+366	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p2-a-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+367	+        &lt;div class="json" id="p2-a-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+368	+      &lt;/div&gt;
+369	+      &lt;div class="flow" id="p2-b-flow"&gt;
+370	+        &lt;div class="flow-title"&gt;Record B&lt;/div&gt;
+371	+        &lt;pre class="curl" id="p2-b-curl"&gt;&amp;mdash;&lt;/pre&gt;
+372	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p2-b-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+373	+        &lt;div class="json" id="p2-b-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+374	+      &lt;/div&gt;
+375	+    &lt;/div&gt;
+376	+    &lt;div class="result-line" id="p2-result"&gt;byte-equality check: not run yet&lt;/div&gt;
+377	+  &lt;/section&gt;
+378	+
+379	+  &lt;section class="panel" aria-labelledby="panel3-title"&gt;
+380	+    &lt;h2 id="panel3-title"&gt;&lt;span class="badge badge-num"&gt;3&lt;/span&gt; The 401&lt;/h2&gt;
+381	+    &lt;p class="copy"&gt;This shows the API simply refuses to answer at all when no valid login is presented, proving there's no accidental back door for anonymous requests.&lt;/p&gt;
+382	+    &lt;div class="controls"&gt;
+383	+      &lt;button type="button" data-run="panel3"&gt;Run this panel&lt;/button&gt;
+384	+      &lt;span class="note"&gt;No token needed — that's the point.&lt;/span&gt;
+385	+    &lt;/div&gt;
+386	+    &lt;div class="flows" style="grid-template-columns: 1fr;"&gt;
+387	+      &lt;div class="flow" id="p3-flow"&gt;
+388	+        &lt;div class="flow-title"&gt;No Authorization header&lt;/div&gt;
+389	+        &lt;pre class="curl" id="p3-curl"&gt;&amp;mdash;&lt;/pre&gt;
+390	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p3-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+391	+        &lt;div class="json" id="p3-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+392	+      &lt;/div&gt;
+393	+    &lt;/div&gt;
+394	+  &lt;/section&gt;
+395	+
+396	+  &lt;section class="panel" aria-labelledby="panel4-title"&gt;
+397	+    &lt;h2 id="panel4-title"&gt;&lt;span class="badge badge-num"&gt;4&lt;/span&gt; The reason_code enum&lt;/h2&gt;
+398	+    &lt;p class="copy"&gt;This shows the system accepts a recognized reason for a request and rejects a made-up one, proving it enforces a fixed, checkable list of valid reasons rather than trusting whatever a caller types in.&lt;/p&gt;
+399	+    &lt;div class="controls"&gt;
+400	+      &lt;button type="button" data-run="panel4"&gt;Run this panel&lt;/button&gt;
+401	+      &lt;span class="note"&gt;Needs a &lt;code&gt;profile:read:any&lt;/code&gt; token minted above (and, if panel 1 hasn't run yet, a &lt;code&gt;profile:search&lt;/code&gt; token too, to find a real record id).&lt;/span&gt;
+402	+    &lt;/div&gt;
+403	+    &lt;div class="flows"&gt;
+404	+      &lt;div class="flow" id="p4-ok-flow"&gt;
+405	+        &lt;div class="flow-title"&gt;reason_code=support_ticket (accepted)&lt;/div&gt;
+406	+        &lt;pre class="curl" id="p4-ok-curl"&gt;&amp;mdash;&lt;/pre&gt;
+407	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p4-ok-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+408	+        &lt;div class="json" id="p4-ok-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+409	+      &lt;/div&gt;
+410	+      &lt;div class="flow" id="p4-bad-flow"&gt;
+411	+        &lt;div class="flow-title"&gt;reason_code=made_up_reason (rejected)&lt;/div&gt;
+412	+        &lt;pre class="curl" id="p4-bad-curl"&gt;&amp;mdash;&lt;/pre&gt;
+413	+        &lt;div class="response-head"&gt;&lt;span class="badge status-pending" id="p4-bad-status"&gt;not run&lt;/span&gt;&lt;/div&gt;
+414	+        &lt;div class="json" id="p4-bad-json"&gt;&lt;span class="placeholder"&gt;run the panel to see a real response&lt;/span&gt;&lt;/div&gt;
+415	+      &lt;/div&gt;
+416	+    &lt;/div&gt;
+417	+  &lt;/section&gt;
+418	+
+419	+  &lt;section class="panel" aria-labelledby="panel5-title"&gt;
+420	+    &lt;h2 id="panel5-title"&gt;&lt;span class="badge badge-num"&gt;5&lt;/span&gt; The rate limit tripping&lt;/h2&gt;
+421	+    &lt;p class="copy"&gt;This shows the API cutting off a rapid burst of real requests in real time, proving it can defend itself against being hammered rather than just claiming to.&lt;/p&gt;
+422	+    &lt;p class="note warn"&gt;Runs last on purpose: the limit is shared by every visitor currently using the same seeded QA credential, so tripping it here really does affect anyone else driving this panel in the same window — not a per-visitor sandbox.&lt;/p&gt;
+423	+    &lt;div class="controls"&gt;
+424	+      &lt;button type="button" data-run="panel5"&gt;Run this panel&lt;/button&gt;
+425	+      &lt;span class="note"&gt;Needs a &lt;code&gt;profile:search&lt;/code&gt; token minted above. Fires real requests, one at a time, until one comes back &lt;span class="badge status-429"&gt;429&lt;/span&gt; or a safety cap is hit.&lt;/span&gt;
+426	+    &lt;/div&gt;
+427	+    &lt;div class="burst-log" id="p5-log"&gt;&lt;/div&gt;
+428	+    &lt;div class="flow" id="p5-flow" style="margin-top:10px;"&gt;
+429	+      &lt;div class="flow-title"&gt;Last req
+… truncated (20 KB cap)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:37 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; sed -n '1,50p' internal/app/app.go 2&gt;/dev</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; sed -n '1,50p' internal/app/app.go 2&gt;/dev/null; echo ---ISSUER---; sed -n '1,50p' internal/app/issuer_router.go 2&gt;/dev/null; echo ---VERIFIER-FULL---; cat internal/app/verifier_router.go"
+}</pre><div class="lbl">result</div><pre>// Package app is the shared bootstrap both cmd/api-service and
+// cmd/idp-connector wrap thinly, per decisions/go-layout-debate.md's ruling:
+// route registration and config wiring live once here, not duplicated per
+// binary. It carries no behavior beyond wiring — service-specific handlers
+// belong in internal/api and internal/connector as those stories land.
+package app
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"log"
+	"net/http"
+	"time"
+)
+
+// healthResponse is the JSON body every health probe returns. Field set is
+// deliberately minimal per 02's ruling (api-auth-design.md) on this
+// unauthenticated endpoint: an up/down status, which service answered, and
+// an opaque build identifier (commit SHA) — never a version string, build
+// timestamp, connection detail, or anything else. Do not add fields here
+// without checking that ruling first; see refinement/LT-34.md.
+//
+// DB is the one addition LT-52 criterion 5 allows: a boolean/enum-only
+// DB-connectivity signal ("ok"/"down"), never a DSN, host, port, or raw
+// driver error string. omitempty so idp-connector and issuer-mode
+// api-service — neither of which has a DB dependency — keep the original
+// three-field shape unchanged.
+type healthResponse struct {
+	Status  string `json:"status"`
+	Service string `json:"service"`
+	Build   string `json:"build"`
+	DB      string `json:"db,omitempty"`
+}
+
+// dbPingTimeout bounds the /healthz DB check so a wedged connection pool
+// can never make the health probe itself hang past a kubelet liveness
+// deadline — a health check has to be faster than what it's checking.
+const dbPingTimeout = 1 * time.Second
+
+// healthHandlerWithDB is /healthz for api-service's verifier Deployment
+// only (LT-52 criterion 5) — pingDB is a lightweight *sql.DB opened
+// purely for this bounded connectivity probe, separate from the
+// dao.Repository used for actual queries (see NewVerifierRouter's own
+// doc comment on why it's a second handle rather than reaching through
+// the Repository interface, which 05's contract doesn't expose a Ping
+// through). pingDB may be nil (DB never configured, or dao.New failed at
+// startup) — reported as "down", same as a ping that errors out; the
+// distinction between "never configured" and "configured but
+// unreachable" is not exposed here, since both mean the same thing to a
+---ISSUER---
+package app
+
+import (
+	"database/sql"
+	"log"
+	"net/http"
+	"time"
+
+	"loginid-takehome/internal/api"
+	"loginid-takehome/internal/config"
+)
+
+// grantLimiterBaseBackoff/maxBackoff/alertThreshold are this story's own
+// engineering defaults for api.GrantLimiter (handoff-03-auth.md v3
+// requires the mechanism — failed-grant rate limiting/backoff per
+// client_id and per source IP, plus alerting on a sustained run against
+// one client_id — but names no specific numbers, unlike LT-40's
+// touch-cap and JWKS-staleness constants, which 02 ruled explicitly).
+// Doubling from 1s, capped at 5m, mirrors this codebase's other
+// exponential-backoff component (InProcessRateLimiter's own doc
+// comment); alerting after 5 consecutive failures against one client_id
+// is a deliberately low bar — a real client mistyping a secret twice is
+// not the failure mode this exists to catch, five in a row without an
+// intervening success is. Flagged for 02's review rather than treated
+// as a closed decision.
+const (
+	grantLimiterBaseBackoff    = 1 * time.Second
+	grantLimiterMaxBackoff     = 5 * time.Minute
+	grantLimiterAlertThreshold = 5
+)
+
+// NewIssuerRouter builds api-service's issuer-mode router — LT-51's real
+// token-issuance handler and JWKS-serving endpoint, replacing the plain
+// NewRouter's placeholder /auth/token (LT-32) on this Deployment only.
+// The verifier Deployment never calls this — it has no signing key, no
+// client store, and no legitimate use for either (LT-32's
+// physical-absence criterion).
+//
+// key must be non-nil (cmd/api-service/main.go's config.Load already
+// fails startup in issuer mode if JWT_SIGNING_KEY_FILE is missing or
+// unreadable — see resolveSigningKeyPath's own doc comment — so by the
+// time this function runs, a missing key is a startup bug, not a
+// runtime condition this router needs to degrade gracefully for).
+//
+// issuerDB is the *sql.DB dialed against config.Config.IssuerDBDSN — may
+// be nil if IssuerDBDSN was never configured, in which case /auth/token
+// fails every grant closed with server_error rather than panicking on a
+// nil ClientStore, the same fail-closed shape NewVerifierRouter uses for
+// a nil dao.Repository.
+func NewIssuerRouter(cfg config.Config, key *api.SigningKey, issuerDB *sql.DB) http.Handler {
+---VERIFIER-FULL---
+package app
+
+import (
+	"database/sql"
+	"net/http"
+	"time"
+
+	"loginid-takehome/internal/api"
+	"loginid-takehome/internal/config"
+	"loginid-takehome/internal/dao"
+)
+
+// jwksCacheTTL matches the token TTL per handoff-03-auth.md v4's own
+// guidance ("Verifier caches the fetched key set in memory with a short
+// TTL (matching token TTL is reasonable)") — using the upper bound of the
+// 5-15 minute TTL range so a cache refresh never fires more often than a
+// token itself could have already expired and been re-issued.
+const jwksCacheTTL = 15 * time.Minute
+
+// NewVerifierRouter builds api-service's real, authenticated router —
+// LT-39's handlers (search/retrieve) wired behind LT-40's JWT
+// verification middleware, plus /healthz. This is the ModeVerifier
+// Deployment's router; the issuer Deployment (ModeIssuer) still uses the
+// plain NewRouter above, since it has no need for any of this — it never
+// verifies inbound tokens, only issues them.
+//
+// repo may be nil — cmd/api-service/main.go passes nil rather than
+// crash-looping the whole process when the DAO repository couldn't be
+// constructed at startup (no DB_DRIVER/DB_DSN yet, e.g. before the
+// database exists in this environment). /healthz must stay reachable
+// regardless (LT-34's live-URL story); the two protected routes fail
+// closed with 503 instead of panicking on a nil Repository or silently
+// pretending to work.
+//
+// pingDB (LT-52 criterion 5) is a separate, lightweight *sql.DB used
+// only for /healthz's bounded connectivity probe — deliberately not the
+// dao.Repository above, since 05's Repository contract exposes no Ping
+// and this story has no reason to ask for one just for a health check.
+// pingDB may be nil (same startup-failure path as repo above); either
+// way /healthz keeps reporting "status":"ok" and "db":"down" rather
+// than going unreachable — a DB outage is this router's problem to fail
+// the two DB-backed routes closed on, not a reason to take the whole
+// process's liveness probe down with it.
+func NewVerifierRouter(cfg config.Config, repo dao.Repository, pingDB *sql.DB) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthHandlerWithDB("api-service", pingDB))
+
+	auditLog := api.StdoutAuditLogger{}
+	keys := api.NewJWKSCache(cfg.AuthJWKSURL, jwksCacheTTL, nil)
+	authMiddleware := api.NewJWTMiddleware(keys, cfg.AuthJWTIssuer, cfg.AuthJWTAudience, auditLog)
+
+	// api.NewDeadlineMiddleware outermost: the deadline budget must cover
+	// JWT verification (including a JWKS cache-miss fetch) as well as
+	// the handler's own DAO call, per decisions/context-propagation.md's
+	// ruling — a single deadline, not the middleware's and the handler's
+	// own disagreeing.
+	protect := func(h http.Handler) http.Handler {
+		return api.NewDeadlineMiddleware(authMiddleware(h))
+	}
+
+	var searchHandler, getHandler http.Handler
+	if repo == nil {
+		searchHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.WriteServiceUnavailable(w) })
+		getHandler = searchHandler
+	} else {
+		deps := api.Deps{
+			Repo:        repo,
+			RateLimiter: api.NewInProcessRateLimiter(),
+			TouchCounter: api.NewInProcessTouchCounter(
+				api.TouchCapPerWindow, api.TouchCapWindow),
+			AuditLog: auditLog,
+			Authz: &amp;api.StopgapAuthorizer{
+				ReadOwnAllow: stopgapReadOwnAllow(cfg),
+			},
+		}
+		searchHandler = api.NewSearchHandler(deps)
+		getHandler = api.NewGetProfileHandler(deps)
+	}
+
+	mux.Handle("POST /profiles/search", protect(searchHandler))
+	mux.Handle("GET /profiles/{id}", protect(getHandler))
+
+	// LT-53: the demo console. A plain static handler — no auth
+	// middleware, no rate limiter of its own — sitting on the exact
+	// same mux as every other route this router serves, so there is no
+	// special-cased bypass to build or to accidentally omit: it gets
+	// exactly the same (lack of) treatment /healthz already has, not a
+	// new exemption invented for this route. The page's own JS is what
+	// drives the real, fully-enforced /profiles/search and
+	// /profiles/{id} routes above (and /auth/token on the issuer,
+	// same-origin via Theo Bergman's, 04, ingress routing) — those
+	// calls hit the real rate limiters inside searchHandler/getHandler
+	// exactly as any other caller's would.
+	mux.Handle("GET /demo", demoHandler())
+
+	return mux
+}
+
+// stopgapReadOwnAllow builds StopgapAuthorizer's hard-coded (sub -&gt;
+// allowed record id) map from cfg — empty (denies everything) unless
+// both AuthzQASub and AuthzQAAllowedProfileID are set, which LT-51 does
+// once the QA client credential and a matching seeded profile exist.
+func stopgapReadOwnAllow(cfg config.Config) map[string]map[string]bool {
+	if cfg.AuthzQASub == "" || cfg.AuthzQAAllowedProfileID == "" {
+		return nil
+	}
+	return map[string]map[string]bool{
+		cfg.AuthzQASub: {cfg.AuthzQAAllowedProfileID: true},
+	}
+}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:38 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n "func NewRouter" -A 40 internal/a</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n \"func NewRouter\" -A 40 internal/app/app.go"
+}</pre><div class="lbl">result</div><pre>124:func NewRouter(service string, mode Mode) http.Handler {
+125-	mux := http.NewServeMux()
+126-	mux.HandleFunc("/healthz", healthHandler(service))
+127-	switch mode {
+128-	case ModeIssuer:
+129-		mux.HandleFunc("/auth/token", issuerPlaceholderHandler)
+130-	case ModeVerifier:
+131-		// no additional routes
+132-	default:
+133-		log.Printf("app: NewRouter called with unrecognized mode %q — serving verifier routes only", mode)
+134-	}
+135-	return mux
+136-}
+137-
+138-// issuerPlaceholderHandler exists only to make the issuer/verifier router
+139-// split observable and testable before S7/LT-40 implements real token
+140-// issuance. It deliberately does no cryptography and holds no reference to
+141-// config.Config.JWTSigningKeyPath — that wiring belongs to whichever S7
+142-// handler replaces this one.
+143-func issuerPlaceholderHandler(w http.ResponseWriter, r *http.Request) {
+144-	http.Error(w, "token issuance not yet implemented — reserved for LT-40", http.StatusNotImplemented)
+145-}
+146-
+147-func healthHandler(service string) http.HandlerFunc {
+148-	return func(w http.ResponseWriter, r *http.Request) {
+149-		w.Header().Set("Content-Type", "application/json")
+150-		w.WriteHeader(http.StatusOK)
+151-		_ = json.NewEncoder(w).Encode(healthResponse{
+152-			Status:  "ok",
+153-			Service: service,
+154-			Build:   Commit,
+155-		})
+156-	}
+157-}</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:38 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n "NewRouter\|NewVerifierRouter\|Ne</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n \"NewRouter\\|NewVerifierRouter\\|NewIssuerRouter\\|ModeSweep\\|runSweepMode\" cmd/api-service/main.go | head -50"
+}</pre><div class="lbl">result</div><pre>177:// structured log line runSweepMode emits on a connect failure — a
+195:// runSweepMode is APP_MODE=sweep's entire job: run LT-44's retention
+213:func runSweepMode(cfg config.Config) {
+333:	if app.Mode(cfg.AppMode) == app.ModeSweep {
+336:		runSweepMode(cfg)
+361:		// NewVerifierRouter fails those two routes closed with 503
+392:		// consumed by NewVerifierRouter's handlers; this exists only so
+422:		handler = app.NewVerifierRouter(cfg, repo, pingDB)
+440:		// NewIssuerRouter's /auth/token then fails every grant closed
+453:		handler = app.NewIssuerRouter(cfg, key, issuerDB)
+455:		// The unrecognized-mode fallback (NewRouter itself already logs
+456:		// loudly and treats it as verifier — see app.NewRouter's own doc
+457:		// comment) doesn't need the full verifier stack; NewRouter's
+460:		handler = app.NewRouter("api-service", app.Mode(cfg.AppMode))</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:38 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; sed -n '325,345p' cmd/api-service/main.go</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; sed -n '325,345p' cmd/api-service/main.go"
+}</pre><div class="lbl">result</div><pre>	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("api-service: loading config: %v", err)
+	}
+	if err := validateAuthConfig(app.Mode(cfg.AppMode)); err != nil {
+		log.Fatalf("api-service: %v", err)
+	}
+
+	if app.Mode(cfg.AppMode) == app.ModeSweep {
+		// Short-circuits before any of the HTTP-serving setup below —
+		// APP_MODE=sweep never builds a router or listens on a port.
+		runSweepMode(cfg)
+		return
+	}
+
+	addr := cfg.HTTPAddr
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	log.Printf("api-service: mode=%s listening on %s", cfg.AppMode, addr)</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:38 PM PDT</span><span class="who">Oren Castellan</span><div class="body">Confirmed correct — sweep mode returns before any router is built. Route scoping to verifier-only checks out.
+
+Now let me check the panel-2 test for byte-equality and rate-limiting panel for any correctness concerns.</div><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n "TouchCapPerWindow\|TouchCapWindo</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n \"TouchCapPerWindow\\|TouchCapWindow\\|NewInProcessRateLimiter\" -r internal/api | head -20"
+}</pre><div class="lbl">result</div><pre>internal/api/ratelimit_test.go:10:	rl := NewInProcessRateLimiter()
+internal/api/ratelimit_test.go:31:	rl := NewInProcessRateLimiter()
+internal/api/ratelimit_test.go:49:	rl := NewInProcessRateLimiter()
+internal/api/ratelimit.go:38:// NewInProcessRateLimiter constructs a ready-to-use limiter.
+internal/api/ratelimit.go:39:func NewInProcessRateLimiter() *InProcessRateLimiter {
+internal/api/handlers.go:32:	// TouchCapPerWindow and TouchCapWindow are the cumulative
+internal/api/handlers.go:39:	TouchCapPerWindow = 2000
+internal/api/handlers.go:40:	TouchCapWindow    = 24 * time.Hour</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 6:39 PM PDT</span><span class="who">Oren Castellan</span><div class="body">Reviewed PR #77 (`gh pr diff 77` / `gh pr view 77` from `/Users/warrenthompson/Source/LoginID-worktrees/LT-53`) against `01-product-industry-research-design/refinement/LT-53.md`. Second-pass findings, in priority order:
+
+1. **Real bug — panel 5's burst loop swallows network errors.** In `internal/app/demo_page.html`, the `attempt(n)` function inside the panel-5 handler (around the `fetch(origin + "/profiles/search", ...)` call) has no `.catch`, unlike every other panel, which goes through the shared `runFlow` helper (which does have one). If a network hiccup happens mid-burst, that's an unhandled promise rejection — the badge is left reading "running…" forever with no failure state. Fix: wrap it the same way `runFlow` does, or route panel 5 through `runFlow` itself instead of a bespoke `fetch` call.
+
+2. **Minted tokens carry an `exp` nobody reads.** `tokens[scope] = { token, exp: Date.now() + expires_in*1000 }` records an expiry but `requireScope`/`runFlow` never check it. If a token ages out mid-review — plausible, since the PO review script (LT-53.md step 4a) already tells reviewers to deliberately wait out a rate-limit window — the next panel just gets an unexplained 401 that looks indistinguishable from a real bug. Not a security issue, but it undermines the one thing this page exists for (a clean live demo). Worth a expiry check before firing, or a distinct "token expired, re-mint" message on 401.
+
+3. **`autocomplete` value diverges from the written AC.** LT-53.md's own criterion says `autocomplete="off"`, falling back to `new-password` only if a browser ignores `off`. The shipped input (`qa-token-input`) goes straight to `autocomplete="new-password"` with no `off` attempt. Probably the functionally better choice — Chrome specifically ignores `off` on password fields, so `new-password` may be the only one that actually does anything — but it's a silent deviation from the letter of the criterion. Should be a one-line note (PR body or refinement doc), not left implicit.
+
+4. **`TestDemoPage_SecretOnlySentToAuthToken`'s counting is fragile, though it happens to be correct today.** `secretRead` (`el("qa-token-input").value`) is a literal substring of both `secretActuallyRead` and `secretCleared`, which is exactly why `total == accounted` balances — correct arithmetic, not luck, but it's pure substring counting with no boundary awareness. A cosmetic quote-style change, or an unrelated comment elsewhere in the file that happens to quote this exact expression, silently changes the counts without changing behavior — either a false failure on an unrelated diff, or a false pass if a real stray reference happens to still balance. I'd rather see this anchor structurally (e.g., assert the literal `fetch(origin + "/auth/token"` call site directly) or, at minimum, carry a comment warning the next person not to "fix" this test during an unrelated refactor without checking it's still testing anything.
+
+5. Checked and clean, no findings: `authValue` (the concatenated `clientId:secret`) is function-scoped to the click handler only, never escapes it, and is cleared from the input on both the success and `.catch` paths — the one-read/one-or-two-clear shape the tests assert is real, not just asserted. `demo.go`'s handler reads nothing off the request and logs nothing. Route scoping is provably correct: `/demo` only exists on `NewVerifierRouter`; `NewIssuerRouter` and the unrecognized-mode `NewRouter` fallback don't register it (confirmed by reading `internal/app/app.go`'s `NewRouter`, `issuer_router.go`, and `cmd/api-service/main.go`'s dispatch); sweep mode never builds an `http.Handler` at all, so there's no router for `/demo` to leak onto there by construction, not by a check that could regress.
+
+Recommend fixing #1 before merge (silent hang is a real defect, not an edge case); #2 and #4 as fast follow-ups or same-PR if cheap; #3 as a docs-only fix.
+
+Relevant paths: `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/demo.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/demo_page.html`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/demo_test.go`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/verifier_router.go`, `/Users/warrenthompson/Source/LoginID/01-product-industry-research-design/refinement/LT-53.md`.</div></div>
+<div class="msg human"><span class="when">Sep 13, 7:03 PM PDT</span><span class="who">Lead</span><div class="body">The coordinator sent a message while you were working:
+I pushed a follow-up commit (16ee5df) to PR #77 addressing all four of your findings:
+
+1. Panel 5's burst loop now has a `.catch` matching runFlow's shape, plus a distinct message on a mid-burst 401.
+2. `requireScope` now checks token expiry and prompts a re-mint instead of letting a stale request through.
+3. Added an inline HTML comment documenting why `autocomplete="new-password"` was chosen directly over `"off"` (Chrome ignores `off` on password fields).
+4. `TestDemoPage_SecretOnlySentToAuthToken` now has a direct structural assertion on the literal `fetch(origin + "/auth/token"` call site, plus a comment warning against loosening the substring-count check without re-verifying it.
+
+I also live-verified the actual bug fix (not just the unit tests): rebuilt the docker-compose dev-loop image, used Playwright network interception to abort a request mid-burst, confirmed it now renders a visible error chip instead of hanging, and confirmed the happy path across all five panels still passes. Please take a quick look at the diff (`gh pr diff 77`) and confirm these fully address your findings before I tell the PM to merge.
+
+Address this before completing your current task.</div></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:03 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git fetch origin &gt;/dev/null 2&gt;&amp;1; git log</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git fetch origin &gt;/dev/null 2&gt;&amp;1; git log --oneline -5 origin/feature/LT-53 2&gt;/dev/null; gh pr diff 77 --patch &gt; /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77-v2.diff; wc -l /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77-v2.diff"
+}</pre><div class="lbl">result</div><pre>16ee5df LT-53: fix panel 5's silent hang on network error, catch expired tokens
+2eab64d LT-53: embedded /demo console — live, same-origin API demo page
+8cd6ee8 retrospective.html: rebuilt as an animated control room — playhead drives the org grid, hourly dollars + burn-up, event feed, and heat map; Sankey tokens→models→roles; live architecture canvas; particle hero; editable prices
+ea5dd83 retrospective.html: two-column metric grids at desktop width
+51b0678 retrospective.html: tokens to dollars — editable per-model prices, spend by role/model/persona, replayable hourly cost + burn-up, animated bars and count-ups
+    1277 /private/tmp/claude-501/-Users-warrenthompson-Source-LoginID-03-engineering-delivery/35c20edc-753d-4d96-b512-7114684706eb/scratchpad/pr77-v2.diff</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:03 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git show 16ee5df --stat &amp;&amp; echo ---FULL--</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; git show 16ee5df --stat &amp;&amp; echo ---FULL--- &amp;&amp; git show 16ee5df"
+}</pre><div class="lbl">result</div><pre>commit 16ee5df77ddf15707b1972bd6b5fbe014f6cd744
+Author: Renata Cole (03-engineering-delivery lead, Claude Sonnet 5) &lt;renata-cole@agents.loginid-takehome.invalid&gt;
+Date:   Sun Sep 13 18:53:38 2026 -0700
+
+    LT-53: fix panel 5's silent hang on network error, catch expired tokens
+    
+    Oren Castellan's review of PR #77 found a real bug: panel 5's burst
+    loop had no .catch on its fetch chain, unlike runFlow (which every
+    other panel goes through) — a network hiccup mid-burst left the badge
+    reading "running..." forever with no failure state, an unhandled
+    promise rejection. Fixed with the same catch shape runFlow already
+    uses, plus a distinct 401-mid-burst message (see below) rather than
+    letting that look like an identical, unexplained failure.
+    
+    Also addressed:
+    - Minted tokens carry an expiry nobody checked. requireScope now treats
+      an expired token as absent and tells the visitor to re-mint, rather
+      than firing a stale request that surfaces as an unexplained 401 —
+      plausible in a real review session, since the PO review script
+      itself has a reviewer deliberately wait out a rate-limit window,
+      long enough for a 10-minute token to age out.
+    - The secret input's autocomplete="new-password" (not "off", the
+      refinement doc's literal primary value) is a deliberate choice, now
+      documented inline: Chrome specifically ignores "off" on password
+      fields, so "new-password" is the value that actually suppresses its
+      save-prompt heuristic more often in practice — not a shortcut, but a
+      silent deviation from the AC's letter until this comment.
+    - TestDemoPage_SecretOnlySentToAuthToken's total/accounted check is
+      correct today but is pure substring counting with no structural
+      anchor (a cosmetic edit elsewhere could silently rebalance it).
+      Added a direct assertion on the one real network call site
+      (`fetch(origin + "/auth/token"`) plus a comment warning against
+      "simplifying" the substring check without re-verifying it.
+    
+    Live-verified the actual fix, not just the unit tests: rebuilt the
+    docker-compose dev-loop image, drove panel 5 through a real headless
+    browser with Playwright's network interception aborting one request
+    mid-burst — confirmed the aborted request now renders a visible
+    "network error" chip instead of hanging, confirmed the rest of the
+    burst continues normally, and confirmed the happy path (all five
+    panels) still passes after the rebuild. Separately forced Date.now()
+    20 minutes forward and confirmed requireScope's new expiry check fires
+    the intended re-mint prompt instead of letting a stale request through.
+    
+    Story: LT-53
+    Work-By: Renata Cole (03, fix, live re-verification); Oren Castellan (03, review findings)
+    Co-Authored-By: Claude Sonnet 5 &lt;noreply@anthropic.com&gt;
+    Claude-Session: https://claude.ai/code/session_011Cuba4JUvrsQCrTdUj4yzk
+
+ internal/app/demo_page.html | 38 ++++++++++++++++++++++++++++++++++++++
+ internal/app/demo_test.go   | 16 ++++++++++++++++
+ 2 files changed, 54 insertions(+)
+---FULL---
+commit 16ee5df77ddf15707b1972bd6b5fbe014f6cd744
+Author: Renata Cole (03-engineering-delivery lead, Claude Sonnet 5) &lt;renata-cole@agents.loginid-takehome.invalid&gt;
+Date:   Sun Sep 13 18:53:38 2026 -0700
+
+    LT-53: fix panel 5's silent hang on network error, catch expired tokens
+    
+    Oren Castellan's review of PR #77 found a real bug: panel 5's burst
+    loop had no .catch on its fetch chain, unlike runFlow (which every
+    other panel goes through) — a network hiccup mid-burst left the badge
+    reading "running..." forever with no failure state, an unhandled
+    promise rejection. Fixed with the same catch shape runFlow already
+    uses, plus a distinct 401-mid-burst message (see below) rather than
+    letting that look like an identical, unexplained failure.
+    
+    Also addressed:
+    - Minted tokens carry an expiry nobody checked. requireScope now treats
+      an expired token as absent and tells the visitor to re-mint, rather
+      than firing a stale request that surfaces as an unexplained 401 —
+      plausible in a real review session, since the PO review script
+      itself has a reviewer deliberately wait out a rate-limit window,
+      long enough for a 10-minute token to age out.
+    - The secret input's autocomplete="new-password" (not "off", the
+      refinement doc's literal primary value) is a deliberate choice, now
+      documented inline: Chrome specifically ignores "off" on password
+      fields, so "new-password" is the value that actually suppresses its
+      save-prompt heuristic more often in practice — not a shortcut, but a
+      silent deviation from the AC's letter until this comment.
+    - TestDemoPage_SecretOnlySentToAuthToken's total/accounted check is
+      correct today but is pure substring counting with no structural
+      anchor (a cosmetic edit elsewhere could silently rebalance it).
+      Added a direct assertion on the one real network call site
+      (`fetch(origin + "/auth/token"`) plus a comment warning against
+      "simplifying" the substring check without re-verifying it.
+    
+    Live-verified the actual fix, not just the unit tests: rebuilt the
+    docker-compose dev-loop image, drove panel 5 through a real headless
+    browser with Playwright's network interception aborting one request
+    mid-burst — confirmed the aborted request now renders a visible
+    "network error" chip instead of hanging, confirmed the rest of the
+    burst continues normally, and confirmed the happy path (all five
+    panels) still passes after the rebuild. Separately forced Date.now()
+    20 minutes forward and confirmed requireScope's new expiry check fires
+    the intended re-mint prompt instead of letting a stale request through.
+    
+    Story: LT-53
+    Work-By: Renata Cole (03, fix, live re-verification); Oren Castellan (03, review findings)
+    Co-Authored-By: Claude Sonnet 5 &lt;noreply@anthropic.com&gt;
+    Claude-Session: https://claude.ai/code/session_011Cuba4JUvrsQCrTdUj4yzk
+
+diff --git a/internal/app/demo_page.html b/internal/app/demo_page.html
+index d5cc5ed..535cdf3 100644
+--- a/internal/app/demo_page.html
++++ b/internal/app/demo_page.html
+@@ -265,6 +265,21 @@
+       &lt;/div&gt;
+       &lt;div class="field"&gt;
+         &lt;label class="field-label" for="qa-token-input"&gt;QA client secret&lt;/label&gt;
++        &lt;!--
++          autocomplete is "new-password", not "off" — a deliberate
++          deviation from the letter of refinement/LT-53.md's own
++          criterion ("autocomplete=off, falling back to new-password if
++          a browser ignores off"). Chrome specifically ignores "off" on
++          password-typed inputs, so "new-password" is the value that
++          actually suppresses its save-prompt heuristic more often in
++          practice; going straight there is the functionally stronger
++          choice, not a shortcut. Even so, a browser's own
++          password-manager UI can still offer to save this field
++          regardless of either value — this attribute-level hardening,
++          plus the id/name below not pattern-matching "password"/
++          "secret", is what this page's own markup can control; it
++          isn't a guarantee no save-prompt ever appears.
++        --&gt;
+         &lt;input type="password" id="qa-token-input" name="qa-token-input" autocomplete="new-password" placeholder="paste the QA secret"&gt;
+       &lt;/div&gt;
+       &lt;button id="mint-btn" type="button"&gt;Mint token&lt;/button&gt;
+@@ -595,6 +610,17 @@
+       window.alert("This panel needs a " + scope + " token — mint one with the matching QA credential above first.");
+       return false;
+     }
++    if (Date.now() &gt;= tokens[scope].exp) {
++      // Caught here rather than left to surface as an unexplained 401
++      // from the real API — a token aging out mid-review is expected
++      // (the PO review script has a reviewer deliberately wait out a
++      // rate-limit window, which is long enough for a 10-minute token
++      // to expire), not a bug in the page or the API.
++      delete tokens[scope];
++      updateTokenStatus();
++      window.alert("Your " + scope + " token has expired — mint a fresh one with the matching QA credential above, then run this panel again.");
++      return false;
++    }
+     return true;
+   }
+ 
+@@ -695,9 +721,21 @@
+           setStatus("p5", resp.status);
+           renderJSON("p5-json", text);
+ 
++          if (resp.status === 401) {
++            var expiredChip = document.createElement("span");
++            expiredChip.className = "burst-chip status-401";
++            expiredChip.textContent = "got 401 mid-burst — this token likely expired; mint a fresh profile:search token and run this panel again";
++            log.appendChild(expiredChip);
++            return;
++          }
+           if (resp.status === 429) return;
+           return attempt(n + 1);
+         });
++      }).catch(function (err) {
++        var chip = document.createElement("span");
++        chip.className = "burst-chip status-5xx";
++        chip.textContent = "#" + n + ": network error — " + err;
++        log.appendChild(chip);
+       });
+     }
+     attempt(1);
+diff --git a/internal/app/demo_test.go b/internal/app/demo_test.go
+index cc46645..79ba2a4 100644
+--- a/internal/app/demo_test.go
++++ b/internal/app/demo_test.go
+@@ -154,6 +154,22 @@ func TestDemoPage_SecretOnlySentToAuthToken(t *testing.T) {
+ 	secretActuallyRead := `+ el("qa-token-input").value` // used (concatenated) to build the Basic-auth header
+ 	secretCleared := `el("qa-token-input").value = ""`   // reset to empty — a write, not a read
+ 
++	// Oren Castellan's review of PR #77 flagged that the
++	// total-vs-accounted check below is pure substring counting with
++	// no structural anchor — correct today because secretRead happens
++	// to be a literal substring of both secretActuallyRead and
++	// secretCleared, but a cosmetic quote-style edit or an unrelated
++	// comment quoting this same expression elsewhere in the file would
++	// silently change the counts without changing behavior. This
++	// direct structural check is the one that actually matters: the
++	// real network call site that uses the secret is exactly this one
++	// fetch, to exactly this one endpoint. Don't "simplify" this away
++	// during an unrelated refactor without re-verifying the counts
++	// below still mean what they claim to.
++	if n := strings.Count(body, `fetch(origin + "/auth/token"`); n != 1 {
++		t.Errorf(`fetch(origin + "/auth/token" appears %d times, want exactly 1 — this is the one real network call the secret's value may ever reach`, n)
++	}
++
+ 	// Exactly one real read (to build the Basic-auth header for the
+ 	// mint call) — never a second site that could mean "send it
+ 	// somewhere else too".</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:03 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n "function attempt" -A 40 internal</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; grep -n \"function attempt\" -A 40 internal/app/demo_page.html | head -60"
+}</pre><div class="lbl">result</div><pre>704:    function attempt(n) {
+705-      if (n &gt; maxAttempts) {
+706-        var chip = document.createElement("span");
+707-        chip.className = "burst-chip status-amber";
+708-        chip.textContent = "stopped after " + maxAttempts + " requests without a 429 — the shared window may already be spent for this credential; try again shortly";
+709-        log.appendChild(chip);
+710-        return;
+711-      }
+712-      var headers = { "Content-Type": "application/json", "Authorization": "Bearer " + tokens["profile:search"].token };
+713-      fetch(origin + "/profiles/search", { method: "POST", headers: headers, body: body }).then(function (resp) {
+714-        return resp.text().then(function (text) {
+715-          var chip = document.createElement("span");
+716-          chip.className = "burst-chip " + statusClass(resp.status);
+717-          chip.textContent = "#" + n + ": " + resp.status;
+718-          log.appendChild(chip);
+719-
+720-          el("p5-curl").textContent = curlLine("POST", "/profiles/search", { bearer: true, contentType: "application/json", data: body });
+721-          setStatus("p5", resp.status);
+722-          renderJSON("p5-json", text);
+723-
+724-          if (resp.status === 401) {
+725-            var expiredChip = document.createElement("span");
+726-            expiredChip.className = "burst-chip status-401";
+727-            expiredChip.textContent = "got 401 mid-burst — this token likely expired; mint a fresh profile:search token and run this panel again";
+728-            log.appendChild(expiredChip);
+729-            return;
+730-          }
+731-          if (resp.status === 429) return;
+732-          return attempt(n + 1);
+733-        });
+734-      }).catch(function (err) {
+735-        var chip = document.createElement("span");
+736-        chip.className = "burst-chip status-5xx";
+737-        chip.textContent = "#" + n + ": network error — " + err;
+738-        log.appendChild(chip);
+739-      });
+740-    }
+741-    attempt(1);
+742-  });
+743-
+744-})();</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:04 PM PDT</span><span class="who">Oren Castellan</span><details><summary><span class="tn">Bash</span> cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; go version 2&gt;&amp;1; go build ./... 2&gt;&amp;1 | ta</summary><div class="inner"><div class="lbl">input</div><pre>{
+  "command": "cd /Users/warrenthompson/Source/LoginID-worktrees/LT-53 &amp;&amp; go version 2&gt;&amp;1; go build ./... 2&gt;&amp;1 | tail -30; echo ---TEST---; go test ./internal/app/... 2&gt;&amp;1 | tail -60"
+}</pre><div class="lbl">result</div><pre>go version go1.27.1 darwin/arm64
+---TEST---
+ok  	loginid-takehome/internal/app	0.792s</pre></div></details></div>
+<div class="msg assistant"><span class="when">Sep 13, 7:04 PM PDT</span><span class="who">Oren Castellan</span><div class="body">All four findings are addressed correctly, and the code actually builds and the package tests pass. Confirmed line-by-line:
+
+1. **Panel 5 hang** — fixed. `.catch` is chained onto the full `fetch(...).then(...)` sequence (`demo_page.html:713-739`), so it catches rejections from both the `fetch` call and the nested `resp.text().then(...)` — a mid-burst network error now renders a `network error` chip instead of leaving the badge on "running…" forever. The 401-specific chip is a nice addition beyond what I asked for: it distinguishes "your token expired" from a generic failure, which matters given finding #2.
+
+2. **Token expiry** — fixed correctly. `requireScope` now checks `Date.now() &gt;= tokens[scope].exp`, deletes the stale entry, refreshes the status chips, and alerts with a concrete re-mint instruction rather than letting a stale bearer token go out and surface as an unexplained 401.
+
+3. **`autocomplete` deviation** — now documented inline with the actual reasoning (Chrome ignores `off` on password-typed inputs, so `new-password` is the more effective choice), plus an honest caveat that this is markup-level hardening only, not a guarantee against a save prompt. That's exactly what I wanted — the deviation from the AC's literal wording is now traceable, not silent.
+
+4. **Test brittleness** — the new assertion (`strings.Count(body, `fetch(origin + "/auth/token"`) != 1`) is a real structural anchor: it ties the secret-adjacent code directly to the one actual network call site, independent of the substring-counting arithmetic. The added comment correctly frames the existing count check as "correct today, not structurally guaranteed" rather than pretending the fragility is gone — that's the right level of honesty for a test comment.
+
+I ran `go build ./...` and `go test ./internal/app/...` myself in the worktree rather than taking the commit message's word for it — clean build, tests pass. Combined with your live Playwright re-verification of the actual failure mode (not just the unit test), this closes out my second-pass review. No objection to merging.
+
+Relevant paths: `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/demo_page.html`, `/Users/warrenthompson/Source/LoginID-worktrees/LT-53/internal/app/demo_test.go`, commit `16ee5df` on `feature/LT-53`.</div></div>
+<div class="nav" style="margin:24px 0">  <a href="../index.html">Back to index</a></div>
+</div>
