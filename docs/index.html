@@ -463,6 +463,37 @@ GET <b>/profiles/{id}</b>      Authorization: Bearer &lt;profile:read:any token&
 <section id="orgsec">
   <div class="sec-head"><div><span class="eyebrow">AI architecture</span><h2>How the work was actually organised</h2></div><p>LoginID asked which AI tools were used and how. The honest answer is longer than a tool name, so this section gives the whole design: the layers, the model chosen for each seat and why, the rules that kept the agents from simply agreeing with each other, and a plain statement of which parts are Anthropic's documented patterns and which parts this project invented.</p></div>
 
+  <div class="panel" style="border-left:3px solid var(--done);margin-bottom:26px">
+    <h3>Why these choices were the right call, not just a choice</h3>
+    <p class="sub">Every design decision below was made against a specific cost, and paid for itself. This is the part worth reading if you're deciding whether this person can run an AI-driven team, not just prompt one.</p>
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">It was cheaper, on purpose</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">Fable 5.1 costs five times what Sonnet 5 costs per token. Putting Fable only on the one seat that holds cross-track state, instead of on all six leads, is the difference between an orchestrator premium and an organisation-wide one. <a href="#cost" style="color:var(--agent)">The cost breakdown below</a> shows leads and hires, not the manager, carried most of the token volume — exactly the seats where the cheaper model was the correct call, not a corner cut.</p>
+      </div>
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">The cache did the heavy lifting</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">99.1% of the 4.15 billion input tokens were prompt-cache reads, not fresh input, because every track's brief was written once and left stable at turn boundaries instead of being re-edited mid-task. Stable prefixes are what make a cache hit possible at all. Cache reads saved <span id="cacheInline" class="mono">—</span> against what the same tokens would have cost as fresh input, <a href="#cost" style="color:var(--agent)">at current prices</a> — an architecture decision, not a discount.</p>
+      </div>
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">The human spent time on judgement, not toil</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">Twenty-seven human decisions against 9,402 agent turns: one human input for roughly every 350 agent turns. None of the twenty-seven was "write this code" or "fix this bug" — every one was a call only a human is accountable for: the real cluster, the attribution rule, a Vault ruling, a permission grant. That ratio is the actual argument for hiring someone who can run this kind of team: the human's attention went to what only a human could decide.</p>
+      </div>
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">Bounded context beat one giant session</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">A single session holding all five tracks' history would have hit context rot long before hour thirty — re-reading its own accumulated noise on every turn. Six scoped sessions, each loading only its own brief, never had to compact mid-task and never lost a decision to a summarisation pass. The org chart above is a cost-engineering decision as much as a management one.</p>
+      </div>
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">Adversarial review is cheap insurance against expensive mistakes</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">The independent review that caught the silent no-op rate limiter cost a few dozen agent turns. Shipping that bug to a security-graded surface and finding it after a real incident would have cost immeasurably more. Six named orchestration patterns exist because each earns its cost on a specific class of decision — <a href="#orgsec" style="color:var(--agent)">see below</a> for where each one does and does not pay for itself.</p>
+      </div>
+      <div>
+        <b style="font-family:var(--display);font-size:15px;color:var(--done)">Everything is attributable, which is what makes it fundable</b>
+        <p style="font-size:13.5px;color:var(--ink2);margin:6px 0 0">A team whose output cannot be traced to a decision-maker is a liability in any regulated or reviewed environment. Every commit, PR and Jira comment here names the persona and seat responsible. That is not a nicety — it is the property that lets an organisation actually trust and audit AI-driven delivery at this scale.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="stack">
     <div class="layer"><div><div class="lt">The tool</div><div class="ls">Claude Code</div></div><p>Anthropic's agentic command-line tool, chosen because the deliverable is itself an argument about AI-architecture judgement. Using the tool that is the subject of the question makes the workflow inspectable: every session was recorded, and those recordings are published further down this page.</p></div>
     <div class="layer"><div><div class="lt">The briefs</div><div class="ls">one root file, five track files</div></div><p>A root brief carries the assignment, the track boundaries and the working rules. Each of the five track directories carries its own brief, written to be self-sufficient: a fresh agent with no history can pick up that track from those two files alone. Context is retrieved when it is needed rather than all loaded at once, which is how a thirty-hour project stays inside a context window.</p></div>
@@ -556,6 +587,27 @@ GET <b>/profiles/{id}</b>      Authorization: Bearer &lt;profile:read:any token&
 <section id="timeline">
   <div class="sec-head"><div><span class="eyebrow">Timeline</span><h2>The full tape</h2></div><p>Times are Pacific. Dashed gaps are usage pauses.</p></div>
   <div class="tl" id="tl"></div>
+</section>
+
+<!-- HUMAN, OFF THE CLOCK -->
+<section id="offclock">
+  <div class="sec-head"><div><span class="eyebrow">Meanwhile</span><h2>What Warren did while supervising the agents</h2></div><p>The twenty-seven decisions above were the whole job. Here is the rest of the thirty-two hours, for the record.</p></div>
+  <div class="panel">
+    <ol style="margin:0;padding-left:22px;color:var(--ink2);font-size:14.5px;line-height:2;columns:2;column-gap:40px">
+      <li>Two cups of coffee at GovCup downtown</li>
+      <li>Antique shopping next door</li>
+      <li>A workout at Courthouse Gym</li>
+      <li>Watched the entire new season of Ted Lasso</li>
+      <li>A few hours of The Witcher 3</li>
+      <li>Caught up on laundry</li>
+      <li>Hung Halloween decorations</li>
+      <li>A second workout</li>
+      <li>Taught a class for the UPLIFT Foundation</li>
+      <li>Dinner out with his daughter</li>
+      <li>Cleaned the bathroom and living room, top to bottom</li>
+    </ol>
+    <p class="note" style="margin-top:14px">This is the actual point of the exercise: the org kept running, kept a record of everything it did, and only interrupted him for the twenty-seven calls that were genuinely his to make.</p>
+  </div>
 </section>
 
 <!-- LESSONS -->
@@ -751,6 +803,7 @@ function recompute(){
   const total=cost(TOK.byModel);const fullInput=Object.entries(TOK.byModel).reduce((a,[m,r])=>{const p=PRICES[m];return p?a+((r.in+r.cr+r.cw)*p.in+r.out*p.out)/1e6:a},0);
   $("#bigCost").innerHTML=usd(total)+"<small>USD</small>";$("#heroCost").textContent=usd(total);
   $("#uStory").textContent=usd(total/25);$("#uPR").textContent=usd(total/73);$("#uLoc").textContent=usd(total/19444);$("#uHour").textContent=usd(total/30);$("#uHuman").textContent=usd(total/27);$("#uCache").textContent=usd(fullInput-total)+" · "+Math.round((1-total/fullInput)*100)+"%";
+  const ci=$("#cacheInline");if(ci)ci.textContent=Math.round((1-total/fullInput)*100)+"% ("+usd(fullInput-total)+")";
   const groups={};for(const k in TOK.byRole){const g=roleGroup(k);groups[g]=(groups[g]||0)+cost(TOK.byRole[k])}
   const order=["Leads","PM","Hires","Research"];const dn=$("#donut");dn.innerHTML="";const C=2*Math.PI*78;let off=0;
   order.forEach(g=>{const v=groups[g]||0;const len=C*v/total;dn.appendChild(el("circle",{cx:110,cy:110,r:78,fill:"none",stroke:roleCol[g],"stroke-width":30,"stroke-dasharray":`${len} ${C-len}`,"stroke-dashoffset":-off,transform:"rotate(-90 110 110)",class:"seg"}));off+=len});
