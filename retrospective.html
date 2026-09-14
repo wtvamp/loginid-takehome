@@ -139,6 +139,13 @@ header{position:relative;padding-block:64px 40px}
 .price input{font-family:var(--mono);font-size:12.5px;padding:4px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--panel);color:var(--ink);width:100%}
 .price .assume{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--deploy);margin-top:6px}.price .assume.pub{color:var(--done)}
 
+.shots{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.45fr);gap:18px;align-items:start}
+@media (max-width:900px){.shots{grid-template-columns:1fr}}
+.shots figure{margin:0;background:var(--bg2);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.shots img{display:block;width:100%;height:auto}
+.shots figcaption{font-size:13px;color:var(--ink2);padding:10px 12px 12px;line-height:1.45}
+.shots .phone img{max-height:640px;object-fit:cover;object-position:top}
+
 /* HUMAN */
 .hil{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:22px}
 @media (max-width:860px){.hil{grid-template-columns:1fr}}
@@ -202,7 +209,7 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
       </div>
     </div>
     <div class="kpis">
-      <div class="kpi"><div class="k">Stories Done</div><div class="v"><span data-count="42">0</span> / 42</div><div class="s">18 planning, 24 implementation</div></div>
+      <div class="kpi"><div class="k">Stories Done</div><div class="v"><span data-count="43">0</span> / 43</div><div class="s">18 planning, 25 implementation</div></div>
       <div class="kpi kpi-money"><div class="k">Estimated spend</div><div class="v" id="heroCost">$0</div><div class="s">at list price, prices editable below</div></div>
       <div class="kpi"><div class="k">Tokens generated</div><div class="v" data-count="6532377" data-fmt="tok">0</div><div class="s">9,402 turns · 9,967 tool calls</div></div>
       <div class="kpi"><div class="k">Tokens read</div><div class="v" data-count="4151239000" data-fmt="tokb">0</div><div class="s">99.1% from the prompt cache</div></div>
@@ -287,6 +294,17 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
         <tr><td>Cadence</td><td class="num">5</td><td>"usage has reset, keep going" ×5</td></tr>
       </tbody></table></div></div>
   </div>
+</section>
+
+<!-- WHAT IT LOOKS LIKE -->
+<section id="demo">
+  <div class="sec-head"><div><span class="eyebrow">What it looks like</span><h2>The live demo console</h2></div><p>Pulled as the forty-third story after the backlog closed, with one requirement added by the human: "make sure it looks good." A single page embedded in the API binary and served at <a href="https://loginid-takehome.uplifttech.org/demo">/demo</a> from the same origin, so it carries no secret and needs no CORS. You paste a QA credential that lives only in the tab; the page mints a real token and drives the real endpoints, showing each request as a curl line beside the raw response. These are the product owner's screenshots from her live review.</p></div>
+  <div class="shots">
+    <figure><img src="retrospective-assets/demo-desktop.jpg" alt="Demo console at desktop width: token minted for three scopes, masked search beside full read with masked fields highlighted" loading="lazy"><figcaption>Three single-scope QA tokens minted, then the same profile read two ways: masked under <span class="mono">profile:search</span>, full under <span class="mono">profile:read:any</span>.</figcaption></figure>
+    <figure><img src="retrospective-assets/demo-desktop-2.jpg" alt="Demo console: the two 403 responses shown side by side with a byte-equality check, the 401, and the reason_code enum accepted and rejected" loading="lazy"><figcaption>Scope denial and policy denial return byte-identical 403 bodies (65 bytes, compared on the page); the 401 with no token; a recognised <span class="mono">reason_code</span> accepted, a made-up one rejected.</figcaption></figure>
+    <figure class="phone"><img src="retrospective-assets/demo-phone.jpg" alt="Demo console at phone width, stacked panels" loading="lazy"><figcaption>The same page at 390px: panels stack, nothing scrolls sideways.</figcaption></figure>
+  </div>
+  <p class="note" style="max-width:70ch">The review also recorded one honest limitation: the page sets every autofill hint the platform offers, and a browser-extension password manager still offered to save the QA credential, because extensions use their own heuristics. The control that holds is that the credentials are single-scope, low-value, and revocable by runbook.</p>
 </section>
 
 <!-- ARCH -->
