@@ -297,8 +297,8 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
   </div>
   <div class="playbar" id="playbar">
     <button type="button" id="play">▶ Play the 30 hours</button>
-    <div class="scrub"><input type="range" id="scrub" min="0" max="31" step="0.05" value="31" aria-label="Scrub the timeline"><div class="ticks"><span>Fri 09</span><span>Fri 15</span><span>Fri 21</span><span>Sat 03</span><span>Sat 09</span><span>Sat 15</span></div></div>
-    <div class="stats"><span>clock <b id="pClock">Sat 15:00</b></span><span class="sp">spent <b id="pCost">$0</b></span><span>Done <b id="pDone">42</b></span><span>commits <b id="pCommits">289</b></span></div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="31" step="0.05" value="31" aria-label="Scrub the timeline"><div class="ticks"><span>Sun 09</span><span>Sun 15</span><span>Sat 21</span><span>Sun 03</span><span>Sun 09</span><span>Sun 15</span></div></div>
+    <div class="stats"><span>clock <b id="pClock">Sun 15:00</b></span><span class="sp">spent <b id="pCost">$0</b></span><span>Done <b id="pDone">42</b></span><span>commits <b id="pCommits">289</b></span></div>
   </div>
 </header>
 
@@ -327,7 +327,12 @@ footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-si
         <tr><td>QA read-own client</td><td><span class="mono">profile:read:own</span></td><td>Read only records this client owns. Used to produce the two identical 403s.</td></tr>
         <tr><td>QA read-any client</td><td><span class="mono">profile:read:any</span></td><td>Full unmasked read, but only with a valid <span class="mono">reason_code</span>.</td></tr>
       </tbody></table></div>
-      <div class="warnbox"><b>The secrets are not on this page, deliberately</b><p>A client secret is the password half of an OAuth2 client credential. Publishing one on a public page would contradict every control this submission argues for. The three id and secret pairs are sent separately, in the email that carries this link. Each is single-scope, low value, and revocable in one SQL statement.</p></div>
+      <div class="warnbox"><b>Demo credentials — single-scope, revocable, for this page only</b><p>These three clients exist only so a reviewer can drive the console with nothing else to set up. Each is scoped to one permission, points at fictional review rows, is rate-limited, and can be revoked in one SQL statement whenever this demo is retired.</p></div>
+      <div class="tblwrap"><table><thead><tr><th>Client id</th><th>Client secret</th><th>Scope</th></tr></thead><tbody>
+        <tr><td class="mono">qa-demo-search</td><td class="mono">de2b087e4d1a70406a9038f3a90300c4e2b7cece</td><td class="mono">profile:search</td></tr>
+        <tr><td class="mono">qa-demo-read-own</td><td class="mono">caf2769fdc521d5daa0b6bc0ce5c2bd46c43d16a</td><td class="mono">profile:read:own</td></tr>
+        <tr><td class="mono">qa-demo-read-any</td><td class="mono">788fb14402e6fc3cb7679fb0eb9a7f28234fa195</td><td class="mono">profile:read:any</td></tr>
+      </tbody></table></div>
     </div>
   </div>
 
@@ -631,7 +636,7 @@ const costOf=(r,m)=>{const p=PRICES[m];return p?(r.in*p.in+r.cr*p.cr+r.cw*p.cw+r
 const roleGroup=k=>k==="pm"?"PM":k.startsWith("lead")?"Leads":k.startsWith("hire")?"Hires":"Research";
 const roleCol={PM:"#3DD6C8",Leads:"#2BB3A8",Hires:"#6F86B8",Research:"#9D8CFF"};
 const hourDec=h=>{const [d,hh]=h.split("-").map(Number);return (d-12)*24+hh};
-const decToLabel=t=>{const d=Math.floor(t/24),h=Math.floor(t%24);return (d===0?"Fri ":"Sat ")+String(h).padStart(2,"0")+":00"};
+const decToLabel=t=>{const d=Math.floor(t/24),h=Math.floor(t%24);return (d===0?"Sat ":"Sun ")+String(h).padStart(2,"0")+":00"};
 // role share per hour from PH output
 const seatRole=k=>k==="dana-whitfield"?"PM":["naomi-voss","marcus-ilori","renata-cole","theo-bergman","priya-nandakumar"].includes(k)?"Leads":k==="research"?"Research":"Hires";
 const roleShareByHour=HOURS.map((h,i)=>{const g={PM:0,Leads:0,Hires:0,Research:0};for(const k in PH.series)if(k!=="other")g[seatRole(k)]+=PH.series[k][i];const t=g.PM+g.Leads+g.Hires+g.Research||1;for(const r in g)g[r]/=t;return g});
@@ -771,7 +776,7 @@ function recompute(){
 // ================= TIMELINE =================
 (function(){const root=$("#tl");let day=null;const tags={human:['h','human'],deploy:['d','deploy'],incident:['i','incident'],done:['ok','Done'],sec:['s','security'],agent:['a','agent']};
   events.forEach(ev=>{const [d,t,dec,k,title,detail]=ev;if(d==="gap"){const g=document.createElement("div");g.className="tl-gap";g.innerHTML=`<div></div><div class="spine"></div><div class="body">${t} · ${title}</div>`;root.appendChild(g);return}
-    if(d!==day){day=d;const h=document.createElement("div");h.className="tl-day";h.innerHTML=`<h3>${d==="12"?"Friday 12 September":"Saturday 13 September"}</h3><span class="eyebrow">PDT</span>`;root.appendChild(h)}
+    if(d!==day){day=d;const h=document.createElement("div");h.className="tl-day";h.innerHTML=`<h3>${d==="12"?"Saturday 12 September":"Sunday 13 September"}</h3><span class="eyebrow">PDT</span>`;root.appendChild(h)}
     const r=document.createElement("div");r.className="tl-row "+(k==="agent"?"":k);r.innerHTML=`<div class="t">${t}</div><div class="spine"><div class="node"></div></div><div class="body"><b>${title}</b><span class="tag ${tags[k][0]}">${tags[k][1]}</span>${detail?`<p>${detail}</p>`:""}</div>`;root.appendChild(r)});
   if(!REDUCE){const rows=document.querySelectorAll(".tl-row");rows.forEach(r=>r.classList.add("pre"));const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.remove("pre");io.unobserve(e.target)}}),{rootMargin:"0px 0px -8% 0px"});rows.forEach(r=>io.observe(r))}
 })();
@@ -827,6 +832,8 @@ function recompute(){
 
 
 // ================= TRANSCRIPT INDEX =================
+const TMAN=[{"persona":"Dana Whitfield","slug":"dana-whitfield","role":"Project manager (PM)","group":"pm","model":"claude-fable-5-1","turns":1273,"tool_calls":1733,"nsess":1,"page":"dana-whitfield/e179bddc-p1.html"},{"persona":"Naomi Voss","slug":"naomi-voss","role":"Product Owner, lead 01","group":"lead","model":"claude-sonnet-5","turns":1182,"tool_calls":1130,"nsess":1,"page":"naomi-voss/8be33b92-p1.html"},{"persona":"Marcus Ilori","slug":"marcus-ilori","role":"Security & AI architecture lead","group":"lead","model":"claude-sonnet-5","turns":520,"tool_calls":479,"nsess":1,"page":"marcus-ilori/7a0f5ae1-p1.html"},{"persona":"Renata Cole","slug":"renata-cole","role":"Engineering lead","group":"lead","model":"claude-sonnet-5","turns":3183,"tool_calls":3128,"nsess":1,"page":"renata-cole/35c20edc-p1.html"},{"persona":"Theo Bergman","slug":"theo-bergman","role":"Infra & DevOps lead","group":"lead","model":"claude-sonnet-5","turns":1783,"tool_calls":1642,"nsess":1,"page":"theo-bergman/08e23ae6-p1.html"},{"persona":"Priya Nandakumar","slug":"priya-nandakumar","role":"Data ops lead","group":"lead","model":"claude-opus-5","turns":379,"tool_calls":324,"nsess":1,"page":"priya-nandakumar/f8e0a327-p1.html"},{"persona":"Desmond Okafor","slug":"desmond-okafor","role":"Hire (track 01)","group":"hire","model":"claude-sonnet-5","turns":178,"tool_calls":193,"nsess":6,"page":"desmond-okafor/agent-ac-p1.html"},{"persona":"Imogen Hale","slug":"imogen-hale","role":"Hire (track 01)","group":"hire","model":"claude-sonnet-5","turns":20,"tool_calls":18,"nsess":3,"page":"imogen-hale/agent-a9-p1.html"},{"persona":"Research subagent (Naomi Voss's session)","slug":"research-subagent-naomi-voss","role":"Unnamed research / consistency subagent","group":"hire","model":"claude-haiku-4-5-20251001","turns":15,"tool_calls":19,"nsess":1,"page":"research-subagent-naomi-voss/agent-a1-p1.html"},{"persona":"Tobias Lindqvist","slug":"tobias-lindqvist","role":"Hire (track 01)","group":"hire","model":"claude-sonnet-5","turns":74,"tool_calls":51,"nsess":6,"page":"tobias-lindqvist/agent-ad-p1.html"},{"persona":"Felix Adebayo","slug":"felix-adebayo","role":"Hire (track 02)","group":"hire","model":"claude-sonnet-5","turns":14,"tool_calls":12,"nsess":1,"page":"felix-adebayo/33fc1f5e-p1.html"},{"persona":"Helena Marsh","slug":"helena-marsh","role":"Hire (track 02)","group":"hire","model":"claude-sonnet-5","turns":41,"tool_calls":24,"nsess":1,"page":"helena-marsh/01db5ea7-p1.html"},{"persona":"Ingrid Solano","slug":"ingrid-solano","role":"Hire (track 02)","group":"hire","model":"claude-sonnet-5","turns":45,"tool_calls":38,"nsess":2,"page":"ingrid-solano/85dbc0f6-p1.html"},{"persona":"Tomasz Wrede","slug":"tomasz-wrede","role":"Hire (track 02)","group":"hire","model":"claude-sonnet-5","turns":64,"tool_calls":55,"nsess":1,"page":"tomasz-wrede/24287bc9-p1.html"},{"persona":"Ines Dabrowski","slug":"ines-dabrowski","role":"Hire (track 03)","group":"hire","model":"claude-sonnet-5","turns":18,"tool_calls":19,"nsess":2,"page":"ines-dabrowski/agent-ab-p1.html"},{"persona":"Marisol Ferran","slug":"marisol-ferran","role":"Hire (track 03)","group":"hire","model":"claude-sonnet-5","turns":15,"tool_calls":15,"nsess":2,"page":"marisol-ferran/agent-a3-p1.html"},{"persona":"Nolan Reyes","slug":"nolan-reyes","role":"Hire (track 03)","group":"hire","model":"claude-sonnet-5","turns":158,"tool_calls":224,"nsess":15,"page":"nolan-reyes/agent-a0-p1.html"},{"persona":"Oren Castellan","slug":"oren-castellan","role":"Hire (track 03)","group":"hire","model":"claude-sonnet-5","turns":315,"tool_calls":421,"nsess":26,"page":"oren-castellan/agent-ad-p1.html"},{"persona":"Bree Sandoval","slug":"bree-sandoval","role":"Hire (track 04)","group":"hire","model":"claude-sonnet-5","turns":15,"tool_calls":17,"nsess":2,"page":"bree-sandoval/908b085f-p1.html"},{"persona":"Callum Ferreira","slug":"callum-ferreira","role":"Hire (track 04)","group":"hire","model":"claude-sonnet-5","turns":12,"tool_calls":14,"nsess":2,"page":"callum-ferreira/830f8543-p1.html"},{"persona":"Wesley Okonkwo","slug":"wesley-okonkwo","role":"Hire (track 04)","group":"hire","model":"claude-sonnet-5","turns":23,"tool_calls":18,"nsess":3,"page":"wesley-okonkwo/1b1e09b5-p1.html"},{"persona":"Anders Vogel","slug":"anders-vogel","role":"Hire (track 05)","group":"hire","model":"claude-opus-5","turns":13,"tool_calls":9,"nsess":1,"page":"anders-vogel/67a60962-p1.html"},{"persona":"Beatriz Achterberg","slug":"beatriz-achterberg","role":"Hire (track 05)","group":"hire","model":"claude-opus-5","turns":15,"tool_calls":11,"nsess":1,"page":"beatriz-achterberg/9be53911-p1.html"},{"persona":"Research subagent (Priya Nandakumar's session)","slug":"research-subagent-priya-nandakumar","role":"Unnamed research / consistency subagent","group":"hire","model":"claude-sonnet-5","turns":10,"tool_calls":19,"nsess":2,"page":"research-subagent-priya-nandakumar/agent-ad-p1.html"},{"persona":"Saoirse Byrne","slug":"saoirse-byrne","role":"Hire (track 05)","group":"hire","model":"claude-opus-5","turns":11,"tool_calls":9,"nsess":1,"page":"saoirse-byrne/ad848190-p1.html"},{"persona":"Yusuf Karadag","slug":"yusuf-karadag","role":"Hire (track 05)","group":"hire","model":"claude-opus-5","turns":13,"tool_calls":11,"nsess":1,"page":"yusuf-karadag/670307da-p1.html"},{"persona":"Research subagent (Dana Whitfield's session)","slug":"research-subagent-dana-whitfield","role":"Unnamed research / consistency subagent","group":"hire","model":"claude-sonnet-5","turns":74,"tool_calls":136,"nsess":12,"page":"research-subagent-dana-whitfield/agent-a0-p1.html"},{"persona":"Naomi Voss","slug":"naomi-voss","role":"Product Owner, lead 01 \u2014 planning-phase run","group":"planning","model":"claude-fable-5-1","turns":71,"tool_calls":84,"nsess":2,"page":"naomi-voss/fa4d4dda-p1.html"},{"persona":"Marcus Ilori","slug":"marcus-ilori","role":"Security & AI architecture lead \u2014 planning-phase run","group":"planning","model":"claude-fable-5-1","turns":81,"tool_calls":128,"nsess":2,"page":"marcus-ilori/718947b3-p1.html"},{"persona":"Renata Cole","slug":"renata-cole","role":"Engineering lead \u2014 hiring session","group":"planning","model":"claude-sonnet-5","turns":54,"tool_calls":59,"nsess":1,"page":"renata-cole/9742161a-p1.html"},{"persona":"Theo Bergman","slug":"theo-bergman","role":"Infra & DevOps lead \u2014 planning-phase run \u00b7 Infra & DevOps lead \u2014 hiring session","group":"planning","model":"claude-sonnet-5","turns":67,"tool_calls":65,"nsess":2,"page":"theo-bergman/bfdaa8b8-p1.html"},{"persona":"Priya Nandakumar","slug":"priya-nandakumar","role":"Data ops lead \u2014 planning-phase run","group":"planning","model":"claude-sonnet-5","turns":81,"tool_calls":80,"nsess":3,"page":"priya-nandakumar/90d4da28-p1.html"},{"persona":"Dana Whitfield","slug":"dana-whitfield","role":"PM teammate run","group":"planning","model":"claude-opus-5","turns":30,"tool_calls":32,"nsess":1,"page":"dana-whitfield/e9cc731e-p1.html"},{"persona":"PM-directed utility session","slug":"pm-utility","role":"Cross-track pass / Jira scribe (spawned by Dana Whitfield)","group":"planning","model":"claude-sonnet-5","turns":97,"tool_calls":347,"nsess":2,"page":"pm-utility/47cb5423-p1.html"}];
+
 const TBASE="https://wtvamp.github.io/loginid-takehome/transcripts/";
 const PERSON_DESC={
  "dana-whitfield":"Ran the board, merged every pull request, wrote every Jira transition, and carried the questions only the human could answer.",
@@ -858,35 +865,26 @@ const PERSON_DESC={
 const GROUP_TITLE={pm:"The manager",lead:"The five track leads",hire:"The eighteen specialists",planning:"The planning phase, before any code",other:"Research subagents"};
 (function(){
   const box=$("#transcripts");if(!box)return;
-  fetch(TBASE+"manifest.json").then(r=>{if(!r.ok)throw 0;return r.json()}).then(M=>{
-    const rows=Array.isArray(M)?M:(M.personas||M.people||[]);
-    if(!rows.length)throw 0;
+  try{
+    const rows=TMAN;
     const bucket={pm:[],lead:[],hire:[],planning:[],other:[]};
-    rows.forEach(r=>{
-      const role=(r.role||"").toLowerCase();
-      let k=r.group&&bucket[r.group]?r.group:(/project manager|\bpm\b/.test(role)?"pm":/lead/.test(role)?"lead":/hire|specialist/.test(role)?"hire":"other");
-      bucket[k].push(r);
-    });
+    rows.forEach(r=>{const g=bucket[r.group]?r.group:"other";bucket[g].push(r)});
     let html="";
     ["pm","lead","hire","planning","other"].forEach(k=>{
       if(!bucket[k].length)return;
-      html+=`<div class="groupttl">${GROUP_TITLE[k]}</div><div class="people">`;
+      html+=`<div class="groupttl">${GROUP_TITLE[k]||""}</div><div class="people">`;
       bucket[k].sort((a,b)=>(b.turns||0)-(a.turns||0)).forEach(r=>{
-        const s=(r.sessions&&r.sessions[0]&&r.sessions[0].pages&&r.sessions[0].pages[0])||null;
-        const href=TBASE+(s?s.replace(/^\.?\//,""):"index.html");
-        const turns=r.turns||(r.sessions||[]).reduce((a,x)=>a+(x.turns||0),0);
-        const tools=r.tool_calls||(r.sessions||[]).reduce((a,x)=>a+(x.tool_calls||0),0);
-        const nsess=(r.sessions||[]).length;
-        const mdl=(r.model||"").replace("claude-","").replace("fable-5-1","Fable 5.1").replace("opus-5","Opus 5").replace("sonnet-5","Sonnet 5").replace("haiku-4-5-20251001","Haiku 4.5");
-        html+=`<a class="person ${k==="pm"?"pmx":""}" href="${href}"><span class="nm">${r.persona||r.name||r.slug}</span><span class="rl">${r.role||""}${mdl?" · "+mdl:""}</span><span class="ds">${PERSON_DESC[r.slug]||""}</span><span class="mt">${turns.toLocaleString()} turns · ${tools.toLocaleString()} tool calls${nsess>1?" · "+nsess+" sessions":""} →</span></a>`;
+        const href=TBASE+String(r.page).replace(/^\.?\//,"");
+        const mdl=(r.model||"").replace("claude-","").replace("fable-5-1","Fable 5.1").replace("opus-5","Opus 5").replace("sonnet-5","Sonnet 5").replace(/haiku-4-5.*/,"Haiku 4.5");
+        html+=`<a class="person ${k==="pm"?"pmx":""}" href="${href}"><span class="nm">${r.persona||r.slug}</span><span class="rl">${r.role||""}${mdl?" · "+mdl:""}</span><span class="ds">${PERSON_DESC[r.slug]||""}</span><span class="mt">${(r.turns||0).toLocaleString()} turns · ${(r.tool_calls||0).toLocaleString()} tool calls${r.nsess>1?" · "+r.nsess+" sessions":""} →</span></a>`;
       });
       html+=`</div>`;
     });
     html+=`<p class="note" style="margin-top:18px"><a href="${TBASE}index.html" style="color:var(--agent)">Open the full archive index →</a></p>`;
     box.innerHTML=html;
-  }).catch(()=>{
-    box.innerHTML=`<p class="note">The archive is published at <a href="${TBASE}index.html" style="color:var(--agent)">${TBASE.replace("https://","")}</a>. Twenty-five personas, every message and every tool call, with credentials redacted.</p>`;
-  });
+  }catch(e){
+    box.innerHTML=`<p class="note">The archive is published at <a href="${TBASE}index.html" style="color:var(--agent)">the transcript index</a>.</p>`;
+  }
 })();
 
 // ================= BOOT =================
