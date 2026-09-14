@@ -120,7 +120,7 @@ jobs:
         # a per-PR gate that history it didn't introduce can break.
         run: |
           git fetch origin "${{ github.base_ref }}" --no-tags
-          gitleaks detect --source . --no-banner \
+          gitleaks detect --source . --no-banner --config .gitleaks.toml \
             --log-opts="origin/${{ github.base_ref }}..HEAD"
 
   no-vault-migrated-secrets:
