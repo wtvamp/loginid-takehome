@@ -1,0 +1,26 @@
+# gitleaks config for this repo.
+#
+# `docs/transcripts/` is a published archive of Claude Code session logs:
+# thousands of shell-command examples (curl -u <token>, image:<tag>,
+# postgres://user:pass@host) that were already run through our own
+# redaction pass (see scripts/render-transcripts.py) before publishing —
+# every real secret in them is already replaced with a visible «REDACTED»
+# marker, verified independently against 4,900+ high-entropy strings pulled
+# from the raw session logs (LOG.md, 2026-09-14). What is left is shell
+# *syntax* that gitleaks' generic-api-key and curl-auth-user rules match on
+# volume alone: "curl -u ${VAR}", "api-service:<git-sha>" build tags, and
+# the literal word REDACTED itself. None of it is a credential.
+#
+# This allowlist exists so that noise, not so real secrets in application
+# code get a pass — everything outside docs/transcripts/ is still scanned
+# at full strength, including docs/index.html (the retrospective page).
+#
+# [extend] keeps gitleaks' full built-in rule set active; this file only
+# adds a path exemption on top of it, it does not replace the ruleset.
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''docs/transcripts/.*''',
+]

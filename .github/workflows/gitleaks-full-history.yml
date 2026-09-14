@@ -43,7 +43,7 @@ jobs:
         id: scan
         run: |
           set +e
-          gitleaks detect --source . --no-banner --redact -v \
+          gitleaks detect --source . --no-banner --redact -v --config .gitleaks.toml \
             --report-format json --report-path gitleaks-report.json
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
