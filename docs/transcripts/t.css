@@ -19,6 +19,8 @@ h3{font-size:15px;margin:18px 0 6px}
 .nav a{margin-right:12px}
 .msg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:14px 0;background:var(--panel);}
 .msg.human{border-left:4px solid var(--orange);margin-left:8%;}
+.msg.human.auto{border-left-color:var(--ink3);opacity:.75}
+.msg.human.auto .who{color:var(--ink3);font-style:italic}
 .msg.assistant{border-left:4px solid var(--teal);margin-right:4%;}
 .msg.system{border-left:4px solid var(--mut);background:transparent;font-size:13px;color:var(--mut)}
 .who{font-weight:700;font-size:13px;letter-spacing:.02em}

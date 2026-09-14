@@ -354,7 +354,7 @@ Shell cwd was reset to /Users/warrenthompson/Source/LoginID/03-engineering-deliv
   "content": "Nolan's review is posted on PR #39 — no blockers.…"
 }</pre><div class="lbl">result</div><pre>{"success":true,"message":"“Nolan's review posted on #39, all gates should be clear now” → project manager (another Claude session on this machine)","msg_id":"759dde5e-795a-4e33-9b6a-0bbb1a6bf24a"}</pre></div></details></div>
 <div class="msg assistant"><span class="when">Sep 13, 6:31 AM PDT</span><span class="who">Renata Cole</span><div class="body">PR #39 now has all four required reviews posted. Waiting on the PM's merge and on Oren/Nolan's re-posts plus Tomasz's re-check on PR #40's delta.</div></div>
-<div class="msg human"><span class="when">Sep 13, 6:36 AM PDT</span><span class="who">Message from project manager</span><div class="body">Another Claude session sent a message:
+<div class="msg human auto"><span class="when">Sep 13, 6:36 AM PDT</span><span class="who">Message from project manager</span><div class="body">Another Claude session sent a message:
 &lt;cross-session-message from="uds:/tmp/cc-socks/54169.sock" from-name="project manager" from-mode="prompting"&gt;
 #40 is fully green at 5d67789. Remaining gate: Nolan's post (none on the PR yet), Oren's re-post on the delta (lint + per-identity limiter), and Tomasz's re-check of the limiter fix (route via Marcus). Once those three are up I merge #40 — after the current LT-51 deploy (34760265224) finishes its apply, so the connector rolls out on a settled cluster. Then LT-41's in-cluster review by Naomi with the connector QA client.
 &lt;/cross-session-message&gt;
@@ -1762,7 +1762,7 @@ Shell cwd was reset to /Users/warrenthompson/Source/LoginID/03-engineering-deliv
   "content": "PR #42 (AUTH_JWT_ISSUER/AUDIENCE startup validati…"
 }</pre><div class="lbl">result</div><pre>{"success":true,"message":"“PR #42 approved by Oren; also posted Nolan+Oren reviews on #40” → project manager (another Claude session on this machine; it is also connected via Remote Control)","msg_id":"7574823d-9527-466e-b0de-af57993f813b"}</pre></div></details></div>
 <div class="msg assistant"><span class="when">Sep 13, 6:49 AM PDT</span><span class="who">Renata Cole</span><div class="body">PR #42 is approved and ready to merge. Waiting on Tomasz's re-check for PR #40's overflow-bucket fix.</div></div>
-<div class="msg human"><span class="when">Sep 13, 6:50 AM PDT</span><span class="who">Message from project manager</span><div class="body">Another Claude session sent a message:
+<div class="msg human auto"><span class="when">Sep 13, 6:50 AM PDT</span><span class="who">Message from project manager</span><div class="body">Another Claude session sent a message:
 &lt;cross-session-message from="uds:/tmp/cc-socks/54169.sock" from-name="project manager" from-mode="prompting"&gt;
 Second live finding: with a correct token the verifier still 401s because the JWKS fetch is refused (Service port mismatch — Theo fixing), and the verifier logged nothing at all — the pod log shows only the startup line. Fail-closed is right; silent is not: add a log line (no token material) on JWKS fetch failure with the URL host and error class, rate-limited to once per failure streak, and a distinct audit event kind for "verification unavailable" vs "token invalid" so operators can tell an outage from an attack. Fold into #42 if quick, else its own small PR; Nolan's review fits (failure-mode). #42 as-is merges now.
 &lt;/cross-session-message&gt;

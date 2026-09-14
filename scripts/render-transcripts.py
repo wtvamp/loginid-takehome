@@ -299,7 +299,9 @@ def parse_file(path):
             if not txt.strip():
                 continue
             items.append({"kind": "human", "ts": dt, "text": txt,
-                          "meta": r.get("userType") or r.get("promptSource") or ""})
+                          "meta": r.get("userType") or r.get("promptSource") or "",
+                          "is_meta": bool(r.get("isMeta")),
+                          "scheduled": bool(r.get("scheduledTaskId"))})
             continue
 
         # assistant
@@ -545,6 +547,8 @@ h3{font-size:15px;margin:18px 0 6px}
 .nav a{margin-right:12px}
 .msg{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:14px 0;background:var(--panel);}
 .msg.human{border-left:4px solid var(--orange);margin-left:8%;}
+.msg.human.auto{border-left-color:var(--ink3);opacity:.75}
+.msg.human.auto .who{color:var(--ink3);font-style:italic}
 .msg.assistant{border-left:4px solid var(--teal);margin-right:4%;}
 .msg.system{border-left:4px solid var(--mut);background:transparent;font-size:13px;color:var(--mut)}
 .who{font-weight:700;font-size:13px;letter-spacing:.02em}
@@ -579,6 +583,8 @@ HEAD = """<meta charset="utf-8"><meta name="viewport" content="width=device-widt
 
 SR_RE = re.compile(r"<system-reminder>(.*?)</system-reminder>", re.S)
 XS_RE = re.compile(r'<cross-session-message[^>]*from-name="([^"]*)"', re.S)
+CMD_RE = re.compile(r"<command-name>\s*([^<]*?)\s*</command-name>", re.S)
+LOCAL_RE = re.compile(r"<local-command-stdout>|<local-command-caveat>")
 
 
 def esc(s):
@@ -677,10 +683,21 @@ def render_tool(b):
     return "".join(out)
 
 
-def human_label(fd, text):
-    m = XS_RE.search(text or "")
+def human_label(fd, text, is_meta=False, scheduled=False):
+    t = text or ""
+    m = XS_RE.search(t)
     if m:
         return "Message from %s" % esc(m.group(1))
+    if is_meta:
+        return "Claude Code (automated) — skill or command content, not typed by a person"
+    m = CMD_RE.search(t)
+    if m:
+        who = "Warren" if fd["group"] != "hire" else "the lead"
+        return "Slash command: /%s (typed by %s, expanded by Claude Code)" % (esc(m.group(1).lstrip("/")), who)
+    if LOCAL_RE.search(t):
+        return "Local command output (Claude Code, not typed by a person)"
+    if scheduled:
+        return "Scheduled wake-up (a timer firing, not typed by a person)" if fd["group"] != "hire" else "Lead"
     if fd["group"] == "hire":
         return "Lead"
     return "Warren"
@@ -692,9 +709,11 @@ def render_item(it, fd):
                 '<span class="who">system · %s</span><div class="body">%s</div></div>'
                 % (esc(fmt_ts(it["ts"])), esc(it.get("sub") or ""), render_text(it["text"][:4000])))
     if it["kind"] == "human":
-        return ('<div class="msg human"><span class="when">%s</span>'
+        lbl = human_label(fd, it["text"], it.get("is_meta"), it.get("scheduled"))
+        auto = " auto" if (it.get("is_meta") or (it.get("scheduled") and fd["group"] != "hire") or LOCAL_RE.search(it["text"] or "")) else ""
+        return ('<div class="msg human%s"><span class="when">%s</span>'
                 '<span class="who">%s</span><div class="body">%s</div></div>'
-                % (esc(fmt_ts(it["ts"])), human_label(fd, it["text"]), render_text(it["text"])))
+                % (auto, esc(fmt_ts(it["ts"])), lbl, render_text(it["text"])))
     parts = ['<div class="msg assistant"><span class="when">%s</span><span class="who">%s</span>'
              % (esc(fmt_ts(it["ts"])), esc(fd["persona"]))]
     for b in it["blocks"]:
