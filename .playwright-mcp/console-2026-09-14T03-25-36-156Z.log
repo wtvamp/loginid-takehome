@@ -1,0 +1,5 @@
+[      67ms] [INFO] Images loaded lazily and replaced with placeholders. Load events are deferred. See https://go.microsoft.com/fwlink/?linkid=2048113 @ http://127.0.0.1:8971/loginid-flight-recorder.html:881
+[     409ms] [ERROR] Access to fetch at 'https://wtvamp.github.io/loginid-takehome/transcripts/manifest.json' from origin 'http://127.0.0.1:8971' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://127.0.0.1:8971/loginid-flight-recorder.html:0
+[     410ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://wtvamp.github.io/loginid-takehome/transcripts/manifest.json:0
+[     424ms] [LOG] Unsupported site: 127.0.0.1 @ chrome-extension://capigligggeijgmocnaflanlbghnamgm/src/content.js:58
+[     731ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8971/favicon.ico:0

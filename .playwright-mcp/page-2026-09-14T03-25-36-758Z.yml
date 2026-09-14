@@ -1,0 +1,1499 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: LoginID take-home Â· uplift-kub Â· 12 â†’ 13 Sep 2026
+      - generic [ref=e8]: Go Â· Kubernetes Â· Claude Code
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - heading "Thirty hours. One human. Twenty-four agents." [level=1] [ref=e11]:
+          - generic [ref=e12]: Thirty hours.
+          - generic [ref=e13]: One human.
+          - generic [ref=e14]: Twenty-four agents.
+        - paragraph [ref=e15]: "A Go data-access layer, a secured REST API, and an identity-provider connector: designed, argued over, built, deployed to a real Kubernetes cluster, and reviewed live. It is still running. You can drive it yourself in the next four minutes, then read every word the agents said while building it."
+        - 'link "loginid-takehome.uplifttech.org Â· live Â· db: ok" [ref=e16] [cursor=pointer]':
+          - /url: https://loginid-takehome.uplifttech.org/healthz
+        - navigation [ref=e18]:
+          - link "â–¸ Open the live demo" [ref=e19] [cursor=pointer]:
+            - /url: https://loginid-takehome.uplifttech.org/demo
+            - generic [ref=e20]: â–¸
+            - text: Open the live demo
+          - link "? How to use it" [ref=e21] [cursor=pointer]:
+            - /url: "#usedemo"
+            - generic [ref=e22]: "?"
+            - text: How to use it
+          - link "</> Source on GitHub" [ref=e23] [cursor=pointer]:
+            - /url: https://github.com/wtvamp/loginid-takehome
+            - generic [ref=e24]: </>
+            - text: Source on GitHub
+          - link "â–¦ The Jira board" [ref=e25] [cursor=pointer]:
+            - /url: https://uplifttech.atlassian.net/jira/software/projects/LT/boards/1
+            - generic [ref=e26]: â–¦
+            - text: The Jira board
+          - link "â—‰ Watch the agents work" [ref=e27] [cursor=pointer]:
+            - /url: "#agents"
+            - generic [ref=e28]: â—‰
+            - text: Watch the agents work
+          - link "âŒ— Read every agent transcript" [ref=e29] [cursor=pointer]:
+            - /url: transcripts/index.html
+            - generic [ref=e30]: âŒ—
+            - text: Read every agent transcript
+        - generic [ref=e31]:
+          - generic [ref=e32]: agent
+          - generic [ref=e34]: human decision
+          - generic [ref=e36]: deployment
+          - generic [ref=e38]: story Done
+          - generic [ref=e40]: incident
+          - generic [ref=e42]: security ruling
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - generic [ref=e46]: Stories Done
+          - generic [ref=e47]: 27 / 43
+          - generic [ref=e48]: 18 planning, 25 implementation
+        - generic [ref=e49]:
+          - generic [ref=e50]: Estimated spend
+          - generic [ref=e51]: $2,307
+          - generic [ref=e52]: at list price, prices editable below
+        - generic [ref=e53]:
+          - generic [ref=e54]: Tokens generated
+          - generic [ref=e55]: 4.08 M
+          - generic [ref=e56]: 9,402 turns Â· 9,967 tool calls
+        - generic [ref=e57]:
+          - generic [ref=e58]: Tokens read
+          - generic [ref=e59]: 2.59 B
+          - generic [ref=e60]: 99.1% from the prompt cache
+        - generic [ref=e61]:
+          - generic [ref=e62]: Human decisions
+          - generic [ref=e63]: "17"
+          - generic [ref=e64]: no lines of code
+        - generic [ref=e65]:
+          - generic [ref=e66]: Live-review failures
+          - generic [ref=e67]: "12"
+          - generic [ref=e68]: before the 24 passes
+    - generic [ref=e69]:
+      - button "â–¶ Play the 30 hours" [ref=e70] [cursor=pointer]
+      - generic [ref=e71]:
+        - slider "Scrub the timeline" [ref=e72]: "31"
+        - generic [ref=e73]:
+          - generic [ref=e74]: Fri 09
+          - generic [ref=e75]: Fri 15
+          - generic [ref=e76]: Fri 21
+          - generic [ref=e77]: Sat 03
+          - generic [ref=e78]: Sat 09
+          - generic [ref=e79]: Sat 15
+      - generic [ref=e80]:
+        - generic [ref=e81]: clock Sat 15:00
+        - generic [ref=e82]: spent $2,307
+        - generic [ref=e83]: Done 42
+        - generic [ref=e84]: commits 289
+  - generic [ref=e85]:
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - text: Start here
+        - heading "Drive the real API yourself" [level=2] [ref=e88]
+      - paragraph [ref=e89]:
+        - text: "The assignment asked for three things: a multi-database DAO, a secured REST service to search and retrieve profiles, and a connector to a third-party identity provider. All three are running right now on a Kubernetes cluster."
+        - link "The demo console" [ref=e90] [cursor=pointer]:
+          - /url: https://loginid-takehome.uplifttech.org/demo
+        - text: is a single page served by the API binary itself, on the same origin, so it holds no secret and needs no CORS. It makes real calls with a real token and prints the request as a curl line beside the raw response.
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - heading "What you can try with no credentials at all" [level=3] [ref=e93]
+        - paragraph [ref=e94]: Open these in any browser, right now.
+        - generic [ref=e95]:
+          - generic [ref=e97]:
+            - heading "The health endpoint" [level=4] [ref=e98]
+            - paragraph [ref=e99]: Reports the build SHA running in the cluster and whether the database connection is live. The SHA always matches the tip of main, because deployment is the only way code reaches the cluster.
+            - generic [ref=e100]: "curl -s https://loginid-takehome.uplifttech.org/healthz {\"status\":\"ok\",\"service\":\"api-service\",\"build\":\"â€¦\",\"db\":\"ok\"}"
+          - generic [ref=e102]:
+            - heading "The refusal to answer without a token" [level=4] [ref=e103]
+            - paragraph [ref=e104]: Panel 3 on the demo page needs nothing from you. An unauthenticated read returns 401 with no hint about whether the record exists.
+            - generic [ref=e105]: curl -i https://loginid-takehome.uplifttech.org/profiles/00000000-0000-4000-8000-000000000001 HTTP/2 401
+        - paragraph [ref=e106]: Everything else needs a token, because the API has no anonymous read path. That is the design, not a gate on the demo.
+      - generic [ref=e107]:
+        - heading "Getting a credential" [level=3] [ref=e108]
+        - paragraph [ref=e109]: Three QA client credentials exist, each granted exactly one scope.
+        - table [ref=e111]:
+          - rowgroup [ref=e112]:
+            - row [ref=e113]:
+              - columnheader "Credential" [ref=e114]
+              - columnheader "Scope it carries" [ref=e115]
+              - columnheader "What it can do" [ref=e116]
+          - rowgroup [ref=e117]:
+            - row [ref=e118]:
+              - cell "QA search client" [ref=e119]
+              - cell "profile:search" [ref=e120]
+              - cell "Search by name. Phone and region come back masked." [ref=e121]
+            - row [ref=e122]:
+              - cell "QA read-own client" [ref=e123]
+              - cell "profile:read:own" [ref=e124]
+              - cell "Read only records this client owns. Used to produce the two identical 403s." [ref=e125]
+            - row [ref=e126]:
+              - cell "QA read-any client" [ref=e127]
+              - cell "profile:read:any" [ref=e128]
+              - cell "Full unmasked read, but only with a valid reason_code." [ref=e129]
+        - generic [ref=e130]:
+          - generic [ref=e131]: The secrets are not on this page, deliberately
+          - paragraph [ref=e132]: A client secret is the password half of an OAuth2 client credential. Publishing one on a public page would contradict every control this submission argues for. The three id and secret pairs are sent separately, in the email that carries this link. Each is single-scope, low value, and revocable in one SQL statement.
+    - generic [ref=e133]:
+      - heading "Running the console, step by step" [level=3] [ref=e134]
+      - paragraph [ref=e135]: "About four minutes. Nothing you type is stored: the credential lives in the browser tab and dies with it."
+      - generic [ref=e136]:
+        - generic [ref=e138]:
+          - heading "Open the console" [level=4] [ref=e139]
+          - paragraph [ref=e140]:
+            - text: Go to
+            - link "loginid-takehome.uplifttech.org/demo" [ref=e141] [cursor=pointer]:
+              - /url: https://loginid-takehome.uplifttech.org/demo
+            - text: . You will see one credential box at the top and five numbered panels below it, each with its own Run button.
+        - generic [ref=e143]:
+          - heading "Mint your first token" [level=4] [ref=e144]
+          - paragraph [ref=e145]: Paste the QA search client id into QA client id and its secret into QA client secret, then press Mint token. A green chip appears reading profile:search âœ“ live. The page shows you the exact request it just made.
+          - generic [ref=e146]: "POST /auth/token Authorization: Basic <client-id>:<client-secret> Content-Type: application/x-www-form-urlencoded grant_type=client_credentials"
+          - paragraph [ref=e147]: There is no scope parameter to send. The scope is a property of the credential, stored server-side, so a caller cannot ask for more than it was granted. Tokens last ten minutes; if one expires mid-review the page tells you to mint another rather than showing you a bare 401.
+        - generic [ref=e149]:
+          - heading "Repeat for the other two credentials" [level=4] [ref=e150]
+          - paragraph [ref=e151]: Paste the read-own pair, mint; paste the read-any pair, mint. You now hold three live tokens, one per scope, and three green chips. Clearing the fields does not clear the tokens.
+        - generic [ref=e153]:
+          - heading "Panel 1 â€” masked search beside full read" [level=4] [ref=e154]
+          - paragraph [ref=e155]: "Leave the search box at its default, Review Demo, and press Run. Three fictional records come back: Review Demo One, Two and Three. In the left-hand response, phone and region are masked and highlighted as such. The page then re-reads the same record with the read-any token, and the right-hand response shows those fields in full."
+          - paragraph [ref=e156]: The point is that authorisation is graduated, not a switch. The same row, the same handler, two different callers, two different shapes of truth.
+          - generic [ref=e157]: "POST /profiles/search Authorization: Bearer <profile:search token> {\"name\": \"Review Demo\"} GET /profiles/{id} Authorization: Bearer <profile:read:any token>"
+        - generic [ref=e159]:
+          - heading "Panel 2 â€” the two identical 403s" [level=4] [ref=e160]
+          - paragraph [ref=e161]: "Press Run. The page requests two record ids the read-own credential was never granted: one that exists and one that almost certainly does not. Both come back 403 with the same 65-byte body, and the page compares them byte for byte in front of you and prints PASS."
+          - paragraph [ref=e162]: If "you may not see this" and "this does not exist" looked different, an attacker could enumerate which customers are real by reading error messages. They do not look different.
+        - generic [ref=e164]:
+          - heading "Panel 3 â€” no token at all" [level=4] [ref=e165]
+          - paragraph [ref=e166]: Press Run with nothing minted. 401. There is no anonymous back door, including on the search path.
+        - generic [ref=e168]:
+          - heading "Panel 4 â€” the reason-code enum" [level=4] [ref=e169]
+          - paragraph [ref=e170]: "Press Run. A full read is attempted twice with the read-any token: once carrying reason_code=support_ticket, which is on the server's closed list and is accepted, and once carrying reason_code=made_up_reason, which is rejected."
+          - paragraph [ref=e171]: An unmasked read of someone's home address should require a stated, checkable purpose that gets written to the audit log. A free-text field would let the caller write anything; a closed enum will not.
+        - generic [ref=e173]:
+          - heading "Panel 5 â€” tripping the rate limiter, for real" [level=4] [ref=e174]
+          - paragraph [ref=e175]: Run this one last. The page fires real requests one at a time until the API answers 429, then stops. The limiter is shared across everyone using that QA credential, so if a colleague is on the page at the same moment you will both feel it. That is stated on the page rather than hidden behind a per-visitor sandbox.
+      - paragraph [ref=e176]: Prefer a terminal? Every request above is printed on the page as a copyable curl line, so the console doubles as documentation for the API.
+    - generic [ref=e177]:
+      - generic [ref=e178]:
+        - text: The same thing, in pictures
+        - heading "What the product owner saw when she signed it off" [level=3] [ref=e179]
+      - paragraph [ref=e180]: "The console was the forty-third and last story, pulled after the backlog had already closed because a reviewer should be able to see the thing work, not read that it works. The human added one requirement: make sure it looks good."
+    - generic [ref=e181]:
+      - figure "Three single-scope tokens live, then one profile read two ways. Masked fields are tagged in the response itself." [ref=e182]:
+        - 'img "Demo console: three tokens minted, then the same profile returned masked under profile:search and unmasked under profile:read:any"'
+      - figure "The two 403s compared byte for byte on the page. Below them the 401, and the reason code accepted then refused." [ref=e184]:
+        - 'img "Demo console: two 403 responses compared byte for byte, the 401, and the reason_code enum accepted then rejected"'
+      - figure "At 390px the panels stack and nothing scrolls sideways." [ref=e186]:
+        - img "The demo console at 390 pixels wide, panels stacked"
+    - paragraph [ref=e188]: "One honest limitation went into the record: the page sets every autofill hint the platform offers, and a browser-extension password manager still offered to save the QA credential, because extensions use their own heuristics and ignore those hints. The control that actually holds is that the credential is single-scope, low value, and revocable by runbook."
+  - generic [ref=e189]:
+    - generic [ref=e190]:
+      - generic [ref=e191]:
+        - text: Control room
+        - heading "Who was working, what it cost, what happened" [level=2] [ref=e192]
+      - paragraph [ref=e193]: Everything here follows the playhead. Agent tiles glow with the tokens they generated in the current hour; the bars are dollars per hour by role, the green line is stories Done, coral ticks are human decisions; the feed shows the moment on the tape.
+    - generic [ref=e194]:
+      - generic [ref=e195]:
+        - heading "The org, live" [level=3] [ref=e196]
+        - paragraph [ref=e197]: Brightness = output tokens this hour. Bar = share of that persona's total so far.
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]: Warren Thompson
+            - generic [ref=e201]: human Â· 27 decisions
+          - generic [ref=e203]:
+            - generic [ref=e204]: Amber
+            - generic [ref=e205]: OpenClaw Â· Opus 4.7 Â· Vault, DNS, Filebeat
+          - generic [ref=e207]:
+            - generic [ref=e208]: Dana Whitfield
+            - generic [ref=e209]: PM Â· Fable 5.1
+          - generic [ref=e212]:
+            - generic [ref=e213]: Naomi Voss
+            - generic [ref=e214]: 01 lead Â· Sonnet 5
+          - generic [ref=e217]:
+            - generic [ref=e218]: Marcus Ilori
+            - generic [ref=e219]: 02 lead Â· Sonnet 5
+          - generic [ref=e222]:
+            - generic [ref=e223]: Renata Cole
+            - generic [ref=e224]: 03 lead Â· Sonnet 5
+          - generic [ref=e227]:
+            - generic [ref=e228]: Theo Bergman
+            - generic [ref=e229]: 04 lead Â· Sonnet 5
+          - generic [ref=e232]:
+            - generic [ref=e233]: Priya Nandakumar
+            - generic [ref=e234]: 05 lead Â· Opus 5
+          - generic [ref=e237]:
+            - generic [ref=e238]: Imogen Hale
+            - generic [ref=e239]: 01 Â· Storyteller
+          - generic [ref=e242]:
+            - generic [ref=e243]: Desmond Okafor
+            - generic [ref=e244]: 01 Â· Spreadsheet
+          - generic [ref=e247]:
+            - generic [ref=e248]: Tobias Lindqvist
+            - generic [ref=e249]: 01 Â· Skeptic
+          - generic [ref=e252]:
+            - generic [ref=e253]: Tomasz Wrede
+            - generic [ref=e254]: 02 Â· Adversary
+          - generic [ref=e257]:
+            - generic [ref=e258]: Helena Marsh
+            - generic [ref=e259]: 02 Â· Architect
+          - generic [ref=e262]:
+            - generic [ref=e263]: Felix Adebayo
+            - generic [ref=e264]: 02 Â· Tinkerer
+          - generic [ref=e267]:
+            - generic [ref=e268]: Ingrid Solano
+            - generic [ref=e269]: 02 Â· Skeptic
+          - generic [ref=e272]:
+            - generic [ref=e273]: Oren Castellan
+            - generic [ref=e274]: 03 Â· Detail Hawk
+          - generic [ref=e277]:
+            - generic [ref=e278]: Nolan Reyes
+            - generic [ref=e279]: 03 Â· Veteran
+          - generic [ref=e282]:
+            - generic [ref=e283]: Marisol Ferran
+            - generic [ref=e284]: 03 Â· Enthusiast
+          - generic [ref=e287]:
+            - generic [ref=e288]: Ines Dabrowski
+            - generic [ref=e289]: 03 Â· Cartographer
+          - generic [ref=e292]:
+            - generic [ref=e293]: Wesley Okonkwo
+            - generic [ref=e294]: 04 Â· Newcomer
+          - generic [ref=e297]:
+            - generic [ref=e298]: Bree Sandoval
+            - generic [ref=e299]: 04 Â· Enthusiast
+          - generic [ref=e302]:
+            - generic [ref=e303]: Callum Ferreira
+            - generic [ref=e304]: 04 Â· Minimalist
+          - generic [ref=e307]:
+            - generic [ref=e308]: Anders Vogel
+            - generic [ref=e309]: 05 Â· Cartographer
+          - generic [ref=e312]:
+            - generic [ref=e313]: Beatriz Achterberg
+            - generic [ref=e314]: 05 Â· Spreadsheet
+          - generic [ref=e317]:
+            - generic [ref=e318]: Yusuf Karadag
+            - generic [ref=e319]: 05 Â· Detail Hawk
+          - generic [ref=e322]:
+            - generic [ref=e323]: Saoirse Byrne
+            - generic [ref=e324]: 05 Â· Storyteller
+      - generic [ref=e327]:
+        - heading "On the tape" [level=3] [ref=e328]
+        - paragraph [ref=e329]: Sixty-eight log entries compressed to the moments that changed something.
+        - generic [ref=e330]:
+          - generic [ref=e331]:
+            - generic [ref=e332]: Fri 09:17
+            - generic [ref=e334]: Repository scaffolded; six research subagents fan out
+          - generic [ref=e335]:
+            - generic [ref=e336]: Fri 09:50
+            - generic [ref=e338]: Code written prematurely is wiped
+          - generic [ref=e339]:
+            - generic [ref=e340]: Fri 10:45
+            - generic [ref=e342]: Org plan approved
+          - generic [ref=e343]:
+            - generic [ref=e344]: Fri ~12:30
+            - generic [ref=e346]: "Deployment target: the real shared cluster"
+          - generic [ref=e347]:
+            - generic [ref=e348]: Fri ~13:00
+            - generic [ref=e350]: Attribution rule
+          - generic [ref=e351]:
+            - generic [ref=e352]: Fri 14:55
+            - generic [ref=e354]: "Planning closes: 18 stories Done"
+          - generic [ref=e355]:
+            - generic [ref=e356]: Fri ~17:30
+            - generic [ref=e358]: Implementation go, as an agile loop
+          - generic [ref=e359]:
+            - generic [ref=e360]: Fri 20:45
+            - generic [ref=e362]: First deployment to the public URL
+          - generic [ref=e363]:
+            - generic [ref=e364]: Fri 20:55
+            - generic [ref=e366]: "LT-34 Done: first story closed end to end"
+          - generic [ref=e367]:
+            - generic [ref=e368]: Fri 21:30
+            - generic [ref=e370]: "LT-32 Done: issuer split into its own Deployment"
+          - generic [ref=e371]:
+            - generic [ref=e372]: Fri 21:55
+            - generic [ref=e374]: Teardown on Warren's word, next week, unscheduled
+          - generic [ref=e375]:
+            - generic [ref=e376]: Sat 04:50
+            - generic [ref=e378]: A database behind the API
+          - generic [ref=e379]:
+            - generic [ref=e380]: Sat 05:23
+            - generic [ref=e382]: LT-52 Done; LT-40 live and failing closed
+          - generic [ref=e383]:
+            - generic [ref=e384]: Sat 06:30
+            - generic [ref=e386]: First real token minted at the URL, and what verifying it found
+          - generic [ref=e387]:
+            - generic [ref=e388]: Sat 07:06
+            - generic [ref=e390]: "Joint live review: LT-40 and LT-51 Done"
+          - generic [ref=e391]:
+            - generic [ref=e392]: Sat 07:10
+            - generic [ref=e394]: CI had been skipping every Postgres and CockroachDB test
+          - generic [ref=e395]:
+            - generic [ref=e396]: Sat 07:30
+            - generic [ref=e398]: "LT-39 Done: the rate limit now limits"
+          - generic [ref=e399]:
+            - generic [ref=e400]: Sat 07:55
+            - generic [ref=e402]: Connector's inbound auth was never wired
+          - generic [ref=e403]:
+            - generic [ref=e404]: Sat 08:00
+            - generic [ref=e406]: "LT-41 Done: Q3 delivered"
+          - generic [ref=e407]:
+            - generic [ref=e408]: Sat 09:40
+            - generic [ref=e410]: "Close-out wave: fourteen Done, two honest reversals"
+          - generic [ref=e411]:
+            - generic [ref=e412]: Sat 09:55
+            - generic [ref=e414]: "Ruling: Vault, not etcd encryption"
+          - generic [ref=e415]:
+            - generic [ref=e416]: Sat 10:25
+            - generic [ref=e418]: Amber provisions Vault; three workloads shared the default identity
+          - generic [ref=e419]:
+            - generic [ref=e420]: Sat 10:44
+            - generic [ref=e422]: LT-46 deploy takes the database down for sixteen minutes
+          - generic [ref=e423]:
+            - generic [ref=e424]: Sat 11:15
+            - generic [ref=e426]: "Forced-failure test: a denied pod hung in Init forever"
+          - generic [ref=e427]:
+            - generic [ref=e428]: Sat 11:42
+            - generic [ref=e430]: Warren approves deleting the six Kubernetes Secrets
+          - generic [ref=e431]:
+            - generic [ref=e432]: Sat 11:44
+            - generic [ref=e434]: "LT-46 Done: no application secret in etcd"
+          - generic [ref=e435]:
+            - generic [ref=e436]: Sat 12:00
+            - generic [ref=e438]: Amber inventories the observability stack, read-only
+          - generic [ref=e439]:
+            - generic [ref=e440]: Sat 12:18
+            - generic [ref=e442]: Warren approves the shared Filebeat fix; Amber applies it
+          - generic [ref=e443]:
+            - generic [ref=e444]: Sat 12:40
+            - generic [ref=e446]: LT-48 Done on the third live run
+          - generic [ref=e447]:
+            - generic [ref=e448]: Sat 14:28
+            - generic [ref=e450]: "LT-20 Done: a 90-day floor, not a ceiling"
+          - generic [ref=e451]:
+            - generic [ref=e452]: Sat 14:52
+            - generic [ref=e454]: "Last hotfix: a Service with no labels had no scrape target"
+          - generic [ref=e455]:
+            - generic [ref=e456]: Sat 15:00
+            - generic [ref=e458]:
+              - text: "Backlog closed: 42 of 42"
+              - paragraph [ref=e459]: "LT-49 passes: scrape target up, four rules loaded, a real alert in Alertmanager."
+    - generic [ref=e460]:
+      - heading "Dollars per hour, stories Done, human decisions" [level=3] [ref=e461]
+      - paragraph [ref=e462]: "Bars stacked by role (PM, leads, hires, research). Right axis: cumulative stories. Coral ticks: the 27 human decisions. Grey band: usage pause."
+      - img [ref=e464]:
+        - generic [ref=e466]: usage pause
+        - generic [ref=e467]: $0
+        - generic [ref=e468]: $50
+        - generic [ref=e469]: $100
+        - generic [ref=e470]: $150
+        - generic [ref=e471]: $200
+        - generic [ref=e472]: $250
+        - generic [ref=e473]: "0"
+        - generic [ref=e474]: "14"
+        - generic [ref=e475]: "28"
+        - generic [ref=e476]: "42"
+        - generic [ref=e533]: Fri 09
+        - generic [ref=e534]: Fri 12
+        - generic [ref=e535]: Fri 15
+        - generic [ref=e536]: Fri 18
+        - generic [ref=e537]: Fri 21
+        - generic [ref=e538]: Sat 00
+        - generic [ref=e539]: Sat 03
+        - generic [ref=e540]: Sat 06
+        - generic [ref=e541]: Sat 09
+        - generic [ref=e542]: Sat 12
+        - generic [ref=e543]: Sat 15
+  - generic [ref=e546]:
+    - generic [ref=e547]:
+      - generic [ref=e548]:
+        - text: Heat map
+        - heading "Thirty-one hours Ã— twelve seats" [level=2] [ref=e549]
+      - paragraph [ref=e550]: Output tokens per hour per seat, drawn from the transcripts. Leads run hot all day; hires flare during refinement and review; the PM is a steady line, which is what orchestration looks like from above.
+    - generic [ref=e551]:
+      - generic [ref=e552]:
+        - generic [ref=e553]: Dana Â· PM
+        - generic [ref=e554]:
+          - generic "Dana Â· PM Â· Fri 09:00 Â· 83 k tokens" [ref=e555]
+          - generic "Dana Â· PM Â· Fri 10:00 Â· 94 k tokens" [ref=e556]
+          - generic "Dana Â· PM Â· Fri 11:00 Â· 110 k tokens" [ref=e557]
+          - generic "Dana Â· PM Â· Fri 12:00 Â· 0 tokens" [ref=e558]
+          - generic "Dana Â· PM Â· Fri 13:00 Â· 0 tokens" [ref=e559]
+          - generic "Dana Â· PM Â· Fri 14:00 Â· 122 k tokens" [ref=e560]
+          - generic "Dana Â· PM Â· Fri 15:00 Â· 206 k tokens" [ref=e561]
+          - generic "Dana Â· PM Â· Fri 16:00 Â· 59 k tokens" [ref=e562]
+          - generic "Dana Â· PM Â· Fri 17:00 Â· 0 tokens" [ref=e563]
+          - generic "Dana Â· PM Â· Fri 18:00 Â· 0 tokens" [ref=e564]
+          - generic "Dana Â· PM Â· Fri 19:00 Â· 54 k tokens" [ref=e565]
+          - generic "Dana Â· PM Â· Fri 20:00 Â· 68 k tokens" [ref=e566]
+          - generic "Dana Â· PM Â· Fri 21:00 Â· 47 k tokens" [ref=e567]
+          - generic "Dana Â· PM Â· Fri 22:00 Â· 0 tokens" [ref=e568]
+          - generic "Dana Â· PM Â· Fri 23:00 Â· 0 tokens" [ref=e569]
+          - generic "Dana Â· PM Â· Sat 00:00 Â· 0 tokens" [ref=e570]
+          - generic "Dana Â· PM Â· Sat 01:00 Â· 0 tokens" [ref=e571]
+          - generic "Dana Â· PM Â· Sat 02:00 Â· 0 tokens" [ref=e572]
+          - generic "Dana Â· PM Â· Sat 03:00 Â· 0 tokens" [ref=e573]
+          - generic "Dana Â· PM Â· Sat 04:00 Â· 47 k tokens" [ref=e574]
+          - generic "Dana Â· PM Â· Sat 05:00 Â· 71 k tokens" [ref=e575]
+          - generic "Dana Â· PM Â· Sat 06:00 Â· 55 k tokens" [ref=e576]
+          - generic "Dana Â· PM Â· Sat 07:00 Â· 33 k tokens" [ref=e577]
+          - generic "Dana Â· PM Â· Sat 08:00 Â· 0 tokens" [ref=e578]
+          - generic "Dana Â· PM Â· Sat 09:00 Â· 52 k tokens" [ref=e579]
+          - generic "Dana Â· PM Â· Sat 10:00 Â· 49 k tokens" [ref=e580]
+          - generic "Dana Â· PM Â· Sat 11:00 Â· 55 k tokens" [ref=e581]
+          - generic "Dana Â· PM Â· Sat 12:00 Â· 31 k tokens" [ref=e582]
+          - generic "Dana Â· PM Â· Sat 13:00 Â· 0 tokens" [ref=e583]
+          - generic "Dana Â· PM Â· Sat 14:00 Â· 24 k tokens" [ref=e584]
+          - generic "Dana Â· PM Â· Sat 15:00 Â· 58 k tokens" [ref=e585]
+        - generic [ref=e586]: Naomi Â· 01
+        - generic [ref=e587]:
+          - generic "Naomi Â· 01 Â· Fri 09:00 Â· 14 k tokens" [ref=e588]
+          - generic "Naomi Â· 01 Â· Fri 10:00 Â· 3 k tokens" [ref=e589]
+          - generic "Naomi Â· 01 Â· Fri 11:00 Â· 97 k tokens" [ref=e590]
+          - generic "Naomi Â· 01 Â· Fri 12:00 Â· 0 tokens" [ref=e591]
+          - generic "Naomi Â· 01 Â· Fri 13:00 Â· 0 tokens" [ref=e592]
+          - generic "Naomi Â· 01 Â· Fri 14:00 Â· 7 k tokens" [ref=e593]
+          - generic "Naomi Â· 01 Â· Fri 15:00 Â· 20 k tokens" [ref=e594]
+          - generic "Naomi Â· 01 Â· Fri 16:00 Â· 50 k tokens" [ref=e595]
+          - generic "Naomi Â· 01 Â· Fri 17:00 Â· 0 tokens" [ref=e596]
+          - generic "Naomi Â· 01 Â· Fri 18:00 Â· 0 tokens" [ref=e597]
+          - generic "Naomi Â· 01 Â· Fri 19:00 Â· 13 k tokens" [ref=e598]
+          - generic "Naomi Â· 01 Â· Fri 20:00 Â· 33 k tokens" [ref=e599]
+          - generic "Naomi Â· 01 Â· Fri 21:00 Â· 38 k tokens" [ref=e600]
+          - generic "Naomi Â· 01 Â· Fri 22:00 Â· 0 tokens" [ref=e601]
+          - generic "Naomi Â· 01 Â· Fri 23:00 Â· 0 tokens" [ref=e602]
+          - generic "Naomi Â· 01 Â· Sat 00:00 Â· 0 tokens" [ref=e603]
+          - generic "Naomi Â· 01 Â· Sat 01:00 Â· 0 tokens" [ref=e604]
+          - generic "Naomi Â· 01 Â· Sat 02:00 Â· 0 tokens" [ref=e605]
+          - generic "Naomi Â· 01 Â· Sat 03:00 Â· 0 tokens" [ref=e606]
+          - generic "Naomi Â· 01 Â· Sat 04:00 Â· 52 k tokens" [ref=e607]
+          - generic "Naomi Â· 01 Â· Sat 05:00 Â· 27 k tokens" [ref=e608]
+          - generic "Naomi Â· 01 Â· Sat 06:00 Â· 9 k tokens" [ref=e609]
+          - generic "Naomi Â· 01 Â· Sat 07:00 Â· 36 k tokens" [ref=e610]
+          - generic "Naomi Â· 01 Â· Sat 08:00 Â· 0 tokens" [ref=e611]
+          - generic "Naomi Â· 01 Â· Sat 09:00 Â· 92 k tokens" [ref=e612]
+          - generic "Naomi Â· 01 Â· Sat 10:00 Â· 35 k tokens" [ref=e613]
+          - generic "Naomi Â· 01 Â· Sat 11:00 Â· 59 k tokens" [ref=e614]
+          - generic "Naomi Â· 01 Â· Sat 12:00 Â· 43 k tokens" [ref=e615]
+          - generic "Naomi Â· 01 Â· Sat 13:00 Â· 0 tokens" [ref=e616]
+          - generic "Naomi Â· 01 Â· Sat 14:00 Â· 15 k tokens" [ref=e617]
+          - generic "Naomi Â· 01 Â· Sat 15:00 Â· 5 k tokens" [ref=e618]
+        - generic [ref=e619]: Marcus Â· 02
+        - generic [ref=e620]:
+          - generic "Marcus Â· 02 Â· Fri 09:00 Â· 19 k tokens" [ref=e621]
+          - generic "Marcus Â· 02 Â· Fri 10:00 Â· 32 k tokens" [ref=e622]
+          - generic "Marcus Â· 02 Â· Fri 11:00 Â· 108 k tokens" [ref=e623]
+          - generic "Marcus Â· 02 Â· Fri 12:00 Â· 0 tokens" [ref=e624]
+          - generic "Marcus Â· 02 Â· Fri 13:00 Â· 0 tokens" [ref=e625]
+          - generic "Marcus Â· 02 Â· Fri 14:00 Â· 49 k tokens" [ref=e626]
+          - generic "Marcus Â· 02 Â· Fri 15:00 Â· 60 k tokens" [ref=e627]
+          - generic "Marcus Â· 02 Â· Fri 16:00 Â· 13 k tokens" [ref=e628]
+          - generic "Marcus Â· 02 Â· Fri 17:00 Â· 0 tokens" [ref=e629]
+          - generic "Marcus Â· 02 Â· Fri 18:00 Â· 0 tokens" [ref=e630]
+          - generic "Marcus Â· 02 Â· Fri 19:00 Â· 129 tokens" [ref=e631]
+          - generic "Marcus Â· 02 Â· Fri 20:00 Â· 11 k tokens" [ref=e632]
+          - generic "Marcus Â· 02 Â· Fri 21:00 Â· 27 k tokens" [ref=e633]
+          - generic "Marcus Â· 02 Â· Fri 22:00 Â· 0 tokens" [ref=e634]
+          - generic "Marcus Â· 02 Â· Fri 23:00 Â· 0 tokens" [ref=e635]
+          - generic "Marcus Â· 02 Â· Sat 00:00 Â· 0 tokens" [ref=e636]
+          - generic "Marcus Â· 02 Â· Sat 01:00 Â· 0 tokens" [ref=e637]
+          - generic "Marcus Â· 02 Â· Sat 02:00 Â· 0 tokens" [ref=e638]
+          - generic "Marcus Â· 02 Â· Sat 03:00 Â· 0 tokens" [ref=e639]
+          - generic "Marcus Â· 02 Â· Sat 04:00 Â· 23 k tokens" [ref=e640]
+          - generic "Marcus Â· 02 Â· Sat 05:00 Â· 15 k tokens" [ref=e641]
+          - generic "Marcus Â· 02 Â· Sat 06:00 Â· 12 k tokens" [ref=e642]
+          - generic "Marcus Â· 02 Â· Sat 07:00 Â· 3 k tokens" [ref=e643]
+          - generic "Marcus Â· 02 Â· Sat 08:00 Â· 0 tokens" [ref=e644]
+          - generic "Marcus Â· 02 Â· Sat 09:00 Â· 63 k tokens" [ref=e645]
+          - generic "Marcus Â· 02 Â· Sat 10:00 Â· 29 k tokens" [ref=e646]
+          - generic "Marcus Â· 02 Â· Sat 11:00 Â· 5 k tokens" [ref=e647]
+          - generic "Marcus Â· 02 Â· Sat 12:00 Â· 12 k tokens" [ref=e648]
+          - generic "Marcus Â· 02 Â· Sat 13:00 Â· 0 tokens" [ref=e649]
+          - generic "Marcus Â· 02 Â· Sat 14:00 Â· 6 k tokens" [ref=e650]
+          - generic "Marcus Â· 02 Â· Sat 15:00 Â· 1 k tokens" [ref=e651]
+        - generic [ref=e652]: Renata Â· 03
+        - generic [ref=e653]:
+          - generic "Renata Â· 03 Â· Fri 09:00 Â· 20 k tokens" [ref=e654]
+          - generic "Renata Â· 03 Â· Fri 10:00 Â· 3 k tokens" [ref=e655]
+          - generic "Renata Â· 03 Â· Fri 11:00 Â· 72 k tokens" [ref=e656]
+          - generic "Renata Â· 03 Â· Fri 12:00 Â· 0 tokens" [ref=e657]
+          - generic "Renata Â· 03 Â· Fri 13:00 Â· 0 tokens" [ref=e658]
+          - generic "Renata Â· 03 Â· Fri 14:00 Â· 45 k tokens" [ref=e659]
+          - generic "Renata Â· 03 Â· Fri 15:00 Â· 51 k tokens" [ref=e660]
+          - generic "Renata Â· 03 Â· Fri 16:00 Â· 80 k tokens" [ref=e661]
+          - generic "Renata Â· 03 Â· Fri 17:00 Â· 0 tokens" [ref=e662]
+          - generic "Renata Â· 03 Â· Fri 18:00 Â· 0 tokens" [ref=e663]
+          - generic "Renata Â· 03 Â· Fri 19:00 Â· 153 k tokens" [ref=e664]
+          - generic "Renata Â· 03 Â· Fri 20:00 Â· 153 k tokens" [ref=e665]
+          - generic "Renata Â· 03 Â· Fri 21:00 Â· 172 k tokens" [ref=e666]
+          - generic "Renata Â· 03 Â· Fri 22:00 Â· 0 tokens" [ref=e667]
+          - generic "Renata Â· 03 Â· Fri 23:00 Â· 0 tokens" [ref=e668]
+          - generic "Renata Â· 03 Â· Sat 00:00 Â· 0 tokens" [ref=e669]
+          - generic "Renata Â· 03 Â· Sat 01:00 Â· 0 tokens" [ref=e670]
+          - generic "Renata Â· 03 Â· Sat 02:00 Â· 0 tokens" [ref=e671]
+          - generic "Renata Â· 03 Â· Sat 03:00 Â· 0 tokens" [ref=e672]
+          - generic "Renata Â· 03 Â· Sat 04:00 Â· 192 k tokens" [ref=e673]
+          - generic "Renata Â· 03 Â· Sat 05:00 Â· 193 k tokens" [ref=e674]
+          - generic "Renata Â· 03 Â· Sat 06:00 Â· 203 k tokens" [ref=e675]
+          - generic "Renata Â· 03 Â· Sat 07:00 Â· 67 k tokens" [ref=e676]
+          - generic "Renata Â· 03 Â· Sat 08:00 Â· 0 tokens" [ref=e677]
+          - generic "Renata Â· 03 Â· Sat 09:00 Â· 121 k tokens" [ref=e678]
+          - generic "Renata Â· 03 Â· Sat 10:00 Â· 136 k tokens" [ref=e679]
+          - generic "Renata Â· 03 Â· Sat 11:00 Â· 76 k tokens" [ref=e680]
+          - generic "Renata Â· 03 Â· Sat 12:00 Â· 135 k tokens" [ref=e681]
+          - generic "Renata Â· 03 Â· Sat 13:00 Â· 0 tokens" [ref=e682]
+          - generic "Renata Â· 03 Â· Sat 14:00 Â· 13 k tokens" [ref=e683]
+          - generic "Renata Â· 03 Â· Sat 15:00 Â· 7 k tokens" [ref=e684]
+        - generic [ref=e685]: Theo Â· 04
+        - generic [ref=e686]:
+          - generic "Theo Â· 04 Â· Fri 09:00 Â· 2 k tokens" [ref=e687]
+          - generic "Theo Â· 04 Â· Fri 10:00 Â· 3 k tokens" [ref=e688]
+          - generic "Theo Â· 04 Â· Fri 11:00 Â· 42 k tokens" [ref=e689]
+          - generic "Theo Â· 04 Â· Fri 12:00 Â· 0 tokens" [ref=e690]
+          - generic "Theo Â· 04 Â· Fri 13:00 Â· 0 tokens" [ref=e691]
+          - generic "Theo Â· 04 Â· Fri 14:00 Â· 41 k tokens" [ref=e692]
+          - generic "Theo Â· 04 Â· Fri 15:00 Â· 29 k tokens" [ref=e693]
+          - generic "Theo Â· 04 Â· Fri 16:00 Â· 14 k tokens" [ref=e694]
+          - generic "Theo Â· 04 Â· Fri 17:00 Â· 0 tokens" [ref=e695]
+          - generic "Theo Â· 04 Â· Fri 18:00 Â· 0 tokens" [ref=e696]
+          - generic "Theo Â· 04 Â· Fri 19:00 Â· 48 k tokens" [ref=e697]
+          - generic "Theo Â· 04 Â· Fri 20:00 Â· 48 k tokens" [ref=e698]
+          - generic "Theo Â· 04 Â· Fri 21:00 Â· 37 k tokens" [ref=e699]
+          - generic "Theo Â· 04 Â· Fri 22:00 Â· 0 tokens" [ref=e700]
+          - generic "Theo Â· 04 Â· Fri 23:00 Â· 0 tokens" [ref=e701]
+          - generic "Theo Â· 04 Â· Sat 00:00 Â· 0 tokens" [ref=e702]
+          - generic "Theo Â· 04 Â· Sat 01:00 Â· 0 tokens" [ref=e703]
+          - generic "Theo Â· 04 Â· Sat 02:00 Â· 0 tokens" [ref=e704]
+          - generic "Theo Â· 04 Â· Sat 03:00 Â· 0 tokens" [ref=e705]
+          - generic "Theo Â· 04 Â· Sat 04:00 Â· 93 k tokens" [ref=e706]
+          - generic "Theo Â· 04 Â· Sat 05:00 Â· 74 k tokens" [ref=e707]
+          - generic "Theo Â· 04 Â· Sat 06:00 Â· 34 k tokens" [ref=e708]
+          - generic "Theo Â· 04 Â· Sat 07:00 Â· 34 k tokens" [ref=e709]
+          - generic "Theo Â· 04 Â· Sat 08:00 Â· 0 tokens" [ref=e710]
+          - generic "Theo Â· 04 Â· Sat 09:00 Â· 46 k tokens" [ref=e711]
+          - generic "Theo Â· 04 Â· Sat 10:00 Â· 141 k tokens" [ref=e712]
+          - generic "Theo Â· 04 Â· Sat 11:00 Â· 124 k tokens" [ref=e713]
+          - generic "Theo Â· 04 Â· Sat 12:00 Â· 87 k tokens" [ref=e714]
+          - generic "Theo Â· 04 Â· Sat 13:00 Â· 0 tokens" [ref=e715]
+          - generic "Theo Â· 04 Â· Sat 14:00 Â· 16 k tokens" [ref=e716]
+          - generic "Theo Â· 04 Â· Sat 15:00 Â· 10 k tokens" [ref=e717]
+        - generic [ref=e718]: Priya Â· 05
+        - generic [ref=e719]:
+          - generic "Priya Â· 05 Â· Fri 09:00 Â· 15 k tokens" [ref=e720]
+          - generic "Priya Â· 05 Â· Fri 10:00 Â· 10 k tokens" [ref=e721]
+          - generic "Priya Â· 05 Â· Fri 11:00 Â· 41 k tokens" [ref=e722]
+          - generic "Priya Â· 05 Â· Fri 12:00 Â· 0 tokens" [ref=e723]
+          - generic "Priya Â· 05 Â· Fri 13:00 Â· 0 tokens" [ref=e724]
+          - generic "Priya Â· 05 Â· Fri 14:00 Â· 114 k tokens" [ref=e725]
+          - generic "Priya Â· 05 Â· Fri 15:00 Â· 48 k tokens" [ref=e726]
+          - generic "Priya Â· 05 Â· Fri 16:00 Â· 22 k tokens" [ref=e727]
+          - generic "Priya Â· 05 Â· Fri 17:00 Â· 0 tokens" [ref=e728]
+          - generic "Priya Â· 05 Â· Fri 18:00 Â· 0 tokens" [ref=e729]
+          - generic "Priya Â· 05 Â· Fri 19:00 Â· 44 k tokens" [ref=e730]
+          - generic "Priya Â· 05 Â· Fri 20:00 Â· 25 k tokens" [ref=e731]
+          - generic "Priya Â· 05 Â· Fri 21:00 Â· 26 k tokens" [ref=e732]
+          - generic "Priya Â· 05 Â· Fri 22:00 Â· 0 tokens" [ref=e733]
+          - generic "Priya Â· 05 Â· Fri 23:00 Â· 0 tokens" [ref=e734]
+          - generic "Priya Â· 05 Â· Sat 00:00 Â· 0 tokens" [ref=e735]
+          - generic "Priya Â· 05 Â· Sat 01:00 Â· 0 tokens" [ref=e736]
+          - generic "Priya Â· 05 Â· Sat 02:00 Â· 0 tokens" [ref=e737]
+          - generic "Priya Â· 05 Â· Sat 03:00 Â· 0 tokens" [ref=e738]
+          - generic "Priya Â· 05 Â· Sat 04:00 Â· 22 k tokens" [ref=e739]
+          - generic "Priya Â· 05 Â· Sat 05:00 Â· 50 k tokens" [ref=e740]
+          - generic "Priya Â· 05 Â· Sat 06:00 Â· 5 k tokens" [ref=e741]
+          - generic "Priya Â· 05 Â· Sat 07:00 Â· 0 tokens" [ref=e742]
+          - generic "Priya Â· 05 Â· Sat 08:00 Â· 0 tokens" [ref=e743]
+          - generic "Priya Â· 05 Â· Sat 09:00 Â· 7 k tokens" [ref=e744]
+          - generic "Priya Â· 05 Â· Sat 10:00 Â· 16 k tokens" [ref=e745]
+          - generic "Priya Â· 05 Â· Sat 11:00 Â· 10 k tokens" [ref=e746]
+          - generic "Priya Â· 05 Â· Sat 12:00 Â· 12 k tokens" [ref=e747]
+          - generic "Priya Â· 05 Â· Sat 13:00 Â· 0 tokens" [ref=e748]
+          - generic "Priya Â· 05 Â· Sat 14:00 Â· 20 k tokens" [ref=e749]
+          - generic "Priya Â· 05 Â· Sat 15:00 Â· 945 tokens" [ref=e750]
+        - generic [ref=e751]: 01 hires
+        - generic [ref=e752]:
+          - generic "01 hires Â· Fri 09:00 Â· 0 tokens" [ref=e753]
+          - generic "01 hires Â· Fri 10:00 Â· 0 tokens" [ref=e754]
+          - generic "01 hires Â· Fri 11:00 Â· 19 k tokens" [ref=e755]
+          - generic "01 hires Â· Fri 12:00 Â· 0 tokens" [ref=e756]
+          - generic "01 hires Â· Fri 13:00 Â· 0 tokens" [ref=e757]
+          - generic "01 hires Â· Fri 14:00 Â· 54 tokens" [ref=e758]
+          - generic "01 hires Â· Fri 15:00 Â· 0 tokens" [ref=e759]
+          - generic "01 hires Â· Fri 16:00 Â· 31 k tokens" [ref=e760]
+          - generic "01 hires Â· Fri 17:00 Â· 0 tokens" [ref=e761]
+          - generic "01 hires Â· Fri 18:00 Â· 0 tokens" [ref=e762]
+          - generic "01 hires Â· Fri 19:00 Â· 6 k tokens" [ref=e763]
+          - generic "01 hires Â· Fri 20:00 Â· 12 k tokens" [ref=e764]
+          - generic "01 hires Â· Fri 21:00 Â· 9 k tokens" [ref=e765]
+          - generic "01 hires Â· Fri 22:00 Â· 0 tokens" [ref=e766]
+          - generic "01 hires Â· Fri 23:00 Â· 0 tokens" [ref=e767]
+          - generic "01 hires Â· Sat 00:00 Â· 0 tokens" [ref=e768]
+          - generic "01 hires Â· Sat 01:00 Â· 0 tokens" [ref=e769]
+          - generic "01 hires Â· Sat 02:00 Â· 0 tokens" [ref=e770]
+          - generic "01 hires Â· Sat 03:00 Â· 0 tokens" [ref=e771]
+          - generic "01 hires Â· Sat 04:00 Â· 8 k tokens" [ref=e772]
+          - generic "01 hires Â· Sat 05:00 Â· 13 k tokens" [ref=e773]
+          - generic "01 hires Â· Sat 06:00 Â· 0 tokens" [ref=e774]
+          - generic "01 hires Â· Sat 07:00 Â· 11 k tokens" [ref=e775]
+          - generic "01 hires Â· Sat 08:00 Â· 0 tokens" [ref=e776]
+          - generic "01 hires Â· Sat 09:00 Â· 34 k tokens" [ref=e777]
+          - generic "01 hires Â· Sat 10:00 Â· 11 k tokens" [ref=e778]
+          - generic "01 hires Â· Sat 11:00 Â· 12 k tokens" [ref=e779]
+          - generic "01 hires Â· Sat 12:00 Â· 7 k tokens" [ref=e780]
+          - generic "01 hires Â· Sat 13:00 Â· 0 tokens" [ref=e781]
+          - generic "01 hires Â· Sat 14:00 Â· 0 tokens" [ref=e782]
+          - generic "01 hires Â· Sat 15:00 Â· 0 tokens" [ref=e783]
+        - generic [ref=e784]: 02 hires
+        - generic [ref=e785]:
+          - generic "02 hires Â· Fri 09:00 Â· 0 tokens" [ref=e786]
+          - generic "02 hires Â· Fri 10:00 Â· 0 tokens" [ref=e787]
+          - generic "02 hires Â· Fri 11:00 Â· 27 k tokens" [ref=e788]
+          - generic "02 hires Â· Fri 12:00 Â· 0 tokens" [ref=e789]
+          - generic "02 hires Â· Fri 13:00 Â· 0 tokens" [ref=e790]
+          - generic "02 hires Â· Fri 14:00 Â· 15 k tokens" [ref=e791]
+          - generic "02 hires Â· Fri 15:00 Â· 0 tokens" [ref=e792]
+          - generic "02 hires Â· Fri 16:00 Â· 0 tokens" [ref=e793]
+          - generic "02 hires Â· Fri 17:00 Â· 0 tokens" [ref=e794]
+          - generic "02 hires Â· Fri 18:00 Â· 0 tokens" [ref=e795]
+          - generic "02 hires Â· Fri 19:00 Â· 0 tokens" [ref=e796]
+          - generic "02 hires Â· Fri 20:00 Â· 0 tokens" [ref=e797]
+          - generic "02 hires Â· Fri 21:00 Â· 18 k tokens" [ref=e798]
+          - generic "02 hires Â· Fri 22:00 Â· 0 tokens" [ref=e799]
+          - generic "02 hires Â· Fri 23:00 Â· 0 tokens" [ref=e800]
+          - generic "02 hires Â· Sat 00:00 Â· 0 tokens" [ref=e801]
+          - generic "02 hires Â· Sat 01:00 Â· 0 tokens" [ref=e802]
+          - generic "02 hires Â· Sat 02:00 Â· 0 tokens" [ref=e803]
+          - generic "02 hires Â· Sat 03:00 Â· 0 tokens" [ref=e804]
+          - generic "02 hires Â· Sat 04:00 Â· 18 k tokens" [ref=e805]
+          - generic "02 hires Â· Sat 05:00 Â· 8 k tokens" [ref=e806]
+          - generic "02 hires Â· Sat 06:00 Â· 23 k tokens" [ref=e807]
+          - generic "02 hires Â· Sat 07:00 Â· 7 k tokens" [ref=e808]
+          - generic "02 hires Â· Sat 08:00 Â· 0 tokens" [ref=e809]
+          - generic "02 hires Â· Sat 09:00 Â· 0 tokens" [ref=e810]
+          - generic "02 hires Â· Sat 10:00 Â· 12 k tokens" [ref=e811]
+          - generic "02 hires Â· Sat 11:00 Â· 0 tokens" [ref=e812]
+          - generic "02 hires Â· Sat 12:00 Â· 0 tokens" [ref=e813]
+          - generic "02 hires Â· Sat 13:00 Â· 0 tokens" [ref=e814]
+          - generic "02 hires Â· Sat 14:00 Â· 0 tokens" [ref=e815]
+          - generic "02 hires Â· Sat 15:00 Â· 0 tokens" [ref=e816]
+        - generic [ref=e817]: 03 hires
+        - generic [ref=e818]:
+          - generic "03 hires Â· Fri 09:00 Â· 0 tokens" [ref=e819]
+          - generic "03 hires Â· Fri 10:00 Â· 0 tokens" [ref=e820]
+          - generic "03 hires Â· Fri 11:00 Â· 9 k tokens" [ref=e821]
+          - generic "03 hires Â· Fri 12:00 Â· 0 tokens" [ref=e822]
+          - generic "03 hires Â· Fri 13:00 Â· 0 tokens" [ref=e823]
+          - generic "03 hires Â· Fri 14:00 Â· 14 k tokens" [ref=e824]
+          - generic "03 hires Â· Fri 15:00 Â· 4 k tokens" [ref=e825]
+          - generic "03 hires Â· Fri 16:00 Â· 24 k tokens" [ref=e826]
+          - generic "03 hires Â· Fri 17:00 Â· 0 tokens" [ref=e827]
+          - generic "03 hires Â· Fri 18:00 Â· 0 tokens" [ref=e828]
+          - generic "03 hires Â· Fri 19:00 Â· 26 k tokens" [ref=e829]
+          - generic "03 hires Â· Fri 20:00 Â· 0 tokens" [ref=e830]
+          - generic "03 hires Â· Fri 21:00 Â· 60 k tokens" [ref=e831]
+          - generic "03 hires Â· Fri 22:00 Â· 0 tokens" [ref=e832]
+          - generic "03 hires Â· Fri 23:00 Â· 0 tokens" [ref=e833]
+          - generic "03 hires Â· Sat 00:00 Â· 0 tokens" [ref=e834]
+          - generic "03 hires Â· Sat 01:00 Â· 0 tokens" [ref=e835]
+          - generic "03 hires Â· Sat 02:00 Â· 0 tokens" [ref=e836]
+          - generic "03 hires Â· Sat 03:00 Â· 0 tokens" [ref=e837]
+          - generic "03 hires Â· Sat 04:00 Â· 54 k tokens" [ref=e838]
+          - generic "03 hires Â· Sat 05:00 Â· 22 k tokens" [ref=e839]
+          - generic "03 hires Â· Sat 06:00 Â· 67 k tokens" [ref=e840]
+          - generic "03 hires Â· Sat 07:00 Â· 16 k tokens" [ref=e841]
+          - generic "03 hires Â· Sat 08:00 Â· 0 tokens" [ref=e842]
+          - generic "03 hires Â· Sat 09:00 Â· 5 k tokens" [ref=e843]
+          - generic "03 hires Â· Sat 10:00 Â· 7 k tokens" [ref=e844]
+          - generic "03 hires Â· Sat 11:00 Â· 6 k tokens" [ref=e845]
+          - generic "03 hires Â· Sat 12:00 Â· 11 k tokens" [ref=e846]
+          - generic "03 hires Â· Sat 13:00 Â· 0 tokens" [ref=e847]
+          - generic "03 hires Â· Sat 14:00 Â· 0 tokens" [ref=e848]
+          - generic "03 hires Â· Sat 15:00 Â· 0 tokens" [ref=e849]
+        - generic [ref=e850]: 04 hires
+        - generic [ref=e851]:
+          - generic "04 hires Â· Fri 09:00 Â· 0 tokens" [ref=e852]
+          - generic "04 hires Â· Fri 10:00 Â· 0 tokens" [ref=e853]
+          - generic "04 hires Â· Fri 11:00 Â· 10 k tokens" [ref=e854]
+          - generic "04 hires Â· Fri 12:00 Â· 0 tokens" [ref=e855]
+          - generic "04 hires Â· Fri 13:00 Â· 0 tokens" [ref=e856]
+          - generic "04 hires Â· Fri 14:00 Â· 6 k tokens" [ref=e857]
+          - generic "04 hires Â· Fri 15:00 Â· 0 tokens" [ref=e858]
+          - generic "04 hires Â· Fri 16:00 Â· 0 tokens" [ref=e859]
+          - generic "04 hires Â· Fri 17:00 Â· 0 tokens" [ref=e860]
+          - generic "04 hires Â· Fri 18:00 Â· 0 tokens" [ref=e861]
+          - generic "04 hires Â· Fri 19:00 Â· 0 tokens" [ref=e862]
+          - generic "04 hires Â· Fri 20:00 Â· 0 tokens" [ref=e863]
+          - generic "04 hires Â· Fri 21:00 Â· 712 tokens" [ref=e864]
+          - generic "04 hires Â· Fri 22:00 Â· 0 tokens" [ref=e865]
+          - generic "04 hires Â· Fri 23:00 Â· 0 tokens" [ref=e866]
+          - generic "04 hires Â· Sat 00:00 Â· 0 tokens" [ref=e867]
+          - generic "04 hires Â· Sat 01:00 Â· 0 tokens" [ref=e868]
+          - generic "04 hires Â· Sat 02:00 Â· 0 tokens" [ref=e869]
+          - generic "04 hires Â· Sat 03:00 Â· 0 tokens" [ref=e870]
+          - generic "04 hires Â· Sat 04:00 Â· 0 tokens" [ref=e871]
+          - generic "04 hires Â· Sat 05:00 Â· 0 tokens" [ref=e872]
+          - generic "04 hires Â· Sat 06:00 Â· 0 tokens" [ref=e873]
+          - generic "04 hires Â· Sat 07:00 Â· 0 tokens" [ref=e874]
+          - generic "04 hires Â· Sat 08:00 Â· 0 tokens" [ref=e875]
+          - generic "04 hires Â· Sat 09:00 Â· 0 tokens" [ref=e876]
+          - generic "04 hires Â· Sat 10:00 Â· 2 k tokens" [ref=e877]
+          - generic "04 hires Â· Sat 11:00 Â· 0 tokens" [ref=e878]
+          - generic "04 hires Â· Sat 12:00 Â· 0 tokens" [ref=e879]
+          - generic "04 hires Â· Sat 13:00 Â· 0 tokens" [ref=e880]
+          - generic "04 hires Â· Sat 14:00 Â· 0 tokens" [ref=e881]
+          - generic "04 hires Â· Sat 15:00 Â· 0 tokens" [ref=e882]
+        - generic [ref=e883]: 05 hires
+        - generic [ref=e884]:
+          - generic "05 hires Â· Fri 09:00 Â· 0 tokens" [ref=e885]
+          - generic "05 hires Â· Fri 10:00 Â· 0 tokens" [ref=e886]
+          - generic "05 hires Â· Fri 11:00 Â· 9 k tokens" [ref=e887]
+          - generic "05 hires Â· Fri 12:00 Â· 0 tokens" [ref=e888]
+          - generic "05 hires Â· Fri 13:00 Â· 0 tokens" [ref=e889]
+          - generic "05 hires Â· Fri 14:00 Â· 33 k tokens" [ref=e890]
+          - generic "05 hires Â· Fri 15:00 Â· 0 tokens" [ref=e891]
+          - generic "05 hires Â· Fri 16:00 Â· 2 k tokens" [ref=e892]
+          - generic "05 hires Â· Fri 17:00 Â· 0 tokens" [ref=e893]
+          - generic "05 hires Â· Fri 18:00 Â· 0 tokens" [ref=e894]
+          - generic "05 hires Â· Fri 19:00 Â· 0 tokens" [ref=e895]
+          - generic "05 hires Â· Fri 20:00 Â· 4 k tokens" [ref=e896]
+          - generic "05 hires Â· Fri 21:00 Â· 2 k tokens" [ref=e897]
+          - generic "05 hires Â· Fri 22:00 Â· 0 tokens" [ref=e898]
+          - generic "05 hires Â· Fri 23:00 Â· 0 tokens" [ref=e899]
+          - generic "05 hires Â· Sat 00:00 Â· 0 tokens" [ref=e900]
+          - generic "05 hires Â· Sat 01:00 Â· 0 tokens" [ref=e901]
+          - generic "05 hires Â· Sat 02:00 Â· 0 tokens" [ref=e902]
+          - generic "05 hires Â· Sat 03:00 Â· 0 tokens" [ref=e903]
+          - generic "05 hires Â· Sat 04:00 Â· 0 tokens" [ref=e904]
+          - generic "05 hires Â· Sat 05:00 Â· 0 tokens" [ref=e905]
+          - generic "05 hires Â· Sat 06:00 Â· 0 tokens" [ref=e906]
+          - generic "05 hires Â· Sat 07:00 Â· 0 tokens" [ref=e907]
+          - generic "05 hires Â· Sat 08:00 Â· 0 tokens" [ref=e908]
+          - generic "05 hires Â· Sat 09:00 Â· 0 tokens" [ref=e909]
+          - generic "05 hires Â· Sat 10:00 Â· 0 tokens" [ref=e910]
+          - generic "05 hires Â· Sat 11:00 Â· 0 tokens" [ref=e911]
+          - generic "05 hires Â· Sat 12:00 Â· 0 tokens" [ref=e912]
+          - generic "05 hires Â· Sat 13:00 Â· 0 tokens" [ref=e913]
+          - generic "05 hires Â· Sat 14:00 Â· 0 tokens" [ref=e914]
+          - generic "05 hires Â· Sat 15:00 Â· 0 tokens" [ref=e915]
+        - generic [ref=e916]: research
+        - generic [ref=e917]:
+          - generic "research Â· Fri 09:00 Â· 60 k tokens" [ref=e918]
+          - generic "research Â· Fri 10:00 Â· 22 k tokens" [ref=e919]
+          - generic "research Â· Fri 11:00 Â· 4 k tokens" [ref=e920]
+          - generic "research Â· Fri 12:00 Â· 0 tokens" [ref=e921]
+          - generic "research Â· Fri 13:00 Â· 0 tokens" [ref=e922]
+          - generic "research Â· Fri 14:00 Â· 0 tokens" [ref=e923]
+          - generic "research Â· Fri 15:00 Â· 0 tokens" [ref=e924]
+          - generic "research Â· Fri 16:00 Â· 0 tokens" [ref=e925]
+          - generic "research Â· Fri 17:00 Â· 0 tokens" [ref=e926]
+          - generic "research Â· Fri 18:00 Â· 0 tokens" [ref=e927]
+          - generic "research Â· Fri 19:00 Â· 0 tokens" [ref=e928]
+          - generic "research Â· Fri 20:00 Â· 0 tokens" [ref=e929]
+          - generic "research Â· Fri 21:00 Â· 0 tokens" [ref=e930]
+          - generic "research Â· Fri 22:00 Â· 0 tokens" [ref=e931]
+          - generic "research Â· Fri 23:00 Â· 0 tokens" [ref=e932]
+          - generic "research Â· Sat 00:00 Â· 0 tokens" [ref=e933]
+          - generic "research Â· Sat 01:00 Â· 0 tokens" [ref=e934]
+          - generic "research Â· Sat 02:00 Â· 0 tokens" [ref=e935]
+          - generic "research Â· Sat 03:00 Â· 0 tokens" [ref=e936]
+          - generic "research Â· Sat 04:00 Â· 0 tokens" [ref=e937]
+          - generic "research Â· Sat 05:00 Â· 0 tokens" [ref=e938]
+          - generic "research Â· Sat 06:00 Â· 0 tokens" [ref=e939]
+          - generic "research Â· Sat 07:00 Â· 0 tokens" [ref=e940]
+          - generic "research Â· Sat 08:00 Â· 0 tokens" [ref=e941]
+          - generic "research Â· Sat 09:00 Â· 0 tokens" [ref=e942]
+          - generic "research Â· Sat 10:00 Â· 0 tokens" [ref=e943]
+          - generic "research Â· Sat 11:00 Â· 0 tokens" [ref=e944]
+          - generic "research Â· Sat 12:00 Â· 0 tokens" [ref=e945]
+          - generic "research Â· Sat 13:00 Â· 0 tokens" [ref=e946]
+          - generic "research Â· Sat 14:00 Â· 0 tokens" [ref=e947]
+          - generic "research Â· Sat 15:00 Â· 0 tokens" [ref=e948]
+        - generic [ref=e949]:
+          - generic [ref=e950]: "09"
+          - generic [ref=e953]: "12"
+          - generic [ref=e956]: "15"
+          - generic [ref=e959]: "18"
+          - generic [ref=e962]: "21"
+          - generic [ref=e965]: "00"
+          - generic [ref=e968]: "03"
+          - generic [ref=e971]: "06"
+          - generic [ref=e974]: "09"
+          - generic [ref=e977]: "12"
+          - generic [ref=e980]: "15"
+      - paragraph [ref=e981]: Color scale is per row (each seat relative to its own busiest hour), so a hire's flare and a lead's marathon both read.
+  - generic [ref=e982]:
+    - generic [ref=e983]:
+      - generic [ref=e984]:
+        - text: Where the tokens went
+        - heading "Tokens â†’ models â†’ roles â†’ dollars" [level=2] [ref=e985]
+      - paragraph [ref=e986]: Ribbon width is dollars at the prices set below. Cache reads make up most of the input and most of the cost; the orchestrator's model is the priciest per token but read the least.
+    - img [ref=e989]:
+      - generic [ref=e1018]: Cache reads
+      - generic [ref=e1019]: $1,878
+      - generic [ref=e1021]: Cache writes
+      - generic [ref=e1022]: $252
+      - generic [ref=e1024]: Output
+      - generic [ref=e1025]: $177
+      - generic [ref=e1027]: Fresh input
+      - generic [ref=e1028]: $0.33
+      - generic [ref=e1030]: Sonnet 5
+      - generic [ref=e1031]: $1,210
+      - generic [ref=e1033]: Fable 5.1
+      - generic [ref=e1034]: $961
+      - generic [ref=e1036]: Opus 5
+      - generic [ref=e1037]: $136
+      - generic [ref=e1039]: Haiku 4.5
+      - generic [ref=e1040]: $0.32
+      - generic [ref=e1042]: Leads
+      - generic [ref=e1043]: $1,281
+      - generic [ref=e1045]: PM
+      - generic [ref=e1046]: $953
+      - generic [ref=e1048]: Hires
+      - generic [ref=e1049]: $68.0
+      - generic [ref=e1051]: Research
+      - generic [ref=e1052]: $5.49
+  - generic [ref=e1065]:
+    - generic [ref=e1066]:
+      - generic [ref=e1067]:
+        - text: Tokens â†’ dollars
+        - heading "What thirty hours cost" [level=2] [ref=e1068]
+      - paragraph [ref=e1069]: Every transcript records per-turn usage split into fresh input, cache reads, cache writes, and output. Multiplied by list price per model, that is the bill. Haiku's prices are published; Sonnet 5, Opus 5, and Fable 5.1 are assumptions, marked, and editable.
+    - generic [ref=e1070]:
+      - generic [ref=e1071]:
+        - generic [ref=e1072]: Estimated total
+        - generic [ref=e1073]: $2,307USD
+        - generic [ref=e1074]:
+          - generic [ref=e1075]:
+            - generic [ref=e1076]: $96.1
+            - generic [ref=e1077]: per implementation story (24)
+          - generic [ref=e1078]:
+            - generic [ref=e1079]: $31.6
+            - generic [ref=e1080]: per merged pull request (73)
+          - generic [ref=e1081]:
+            - generic [ref=e1082]: $0.12
+            - generic [ref=e1083]: per line of Go (19,444)
+          - generic [ref=e1084]:
+            - generic [ref=e1085]: $76.9
+            - generic [ref=e1086]: per wall-clock hour (30)
+          - generic [ref=e1087]:
+            - generic [ref=e1088]: $85.5
+            - generic [ref=e1089]: agent spend per human decision (27)
+          - generic [ref=e1090]:
+            - generic [ref=e1091]: $16,855 Â· 88%
+            - generic [ref=e1092]: saved by the prompt cache
+      - generic [ref=e1093]:
+        - heading "Spend by role" [level=3] [ref=e1094]
+        - paragraph [ref=e1095]: Leads carried the context; the PM's model costs the most per token.
+        - generic [ref=e1096]:
+          - img "Spend by role" [ref=e1097]:
+            - generic [ref=e1102]: $2,307
+            - generic [ref=e1103]: at list price
+          - list [ref=e1104]:
+            - listitem [ref=e1105]:
+              - text: Leads
+              - generic [ref=e1107]: $1,281 Â· 56%
+            - listitem [ref=e1108]:
+              - text: PM
+              - generic [ref=e1110]: $953 Â· 41%
+            - listitem [ref=e1111]:
+              - text: Hires
+              - generic [ref=e1113]: $68.0 Â· 3%
+            - listitem [ref=e1114]:
+              - text: Research
+              - generic [ref=e1116]: $5.49 Â· 0%
+      - generic [ref=e1117]:
+        - heading "Spend by model" [level=3] [ref=e1118]
+        - paragraph [ref=e1119]: "Segments: cache read Â· cache write Â· output Â· fresh input."
+        - img [ref=e1121]:
+          - generic [ref=e1126]: Sonnet 5
+          - generic [ref=e1127]: $1,210
+          - generic [ref=e1132]: Fable 5.1
+          - generic [ref=e1133]: $961
+          - generic [ref=e1138]: Opus 5
+          - generic [ref=e1139]: $136
+          - generic [ref=e1144]: Haiku 4.5
+          - generic [ref=e1145]: $0.32
+      - generic [ref=e1146]:
+        - heading "Spend by seat" [level=3] [ref=e1147]
+        - paragraph [ref=e1148]: Leads and PM individually; each track's hires aggregated.
+        - img [ref=e1150]:
+          - generic [ref=e1151]: Dana Â· PM
+          - generic [ref=e1153]: $953
+          - generic [ref=e1154]: Renata Â· 03 lead
+          - generic [ref=e1156]: $519
+          - generic [ref=e1157]: Theo Â· 04 lead
+          - generic [ref=e1159]: $318
+          - generic [ref=e1160]: Naomi Â· 01 lead
+          - generic [ref=e1162]: $195
+          - generic [ref=e1163]: Priya Â· 05 lead
+          - generic [ref=e1165]: $132
+          - generic [ref=e1166]: Marcus Â· 02 lead
+          - generic [ref=e1168]: $118
+          - generic [ref=e1169]: 03 hires
+          - generic [ref=e1171]: $24.3
+          - generic [ref=e1172]: 01 hires
+          - generic [ref=e1174]: $24.0
+          - generic [ref=e1175]: 02 hires
+          - generic [ref=e1177]: $10.6
+          - generic [ref=e1178]: 05 hires
+          - generic [ref=e1180]: $6.15
+          - generic [ref=e1181]: research subagents
+          - generic [ref=e1183]: $5.49
+          - generic [ref=e1184]: 04 hires
+          - generic [ref=e1186]: $2.98
+    - generic [ref=e1187]:
+      - heading "Prices, USD per million tokens" [level=3] [ref=e1188]
+      - paragraph [ref=e1189]: Edit any field; every figure on the page recomputes.
+      - generic [ref=e1190]:
+        - generic [ref=e1191]:
+          - generic [ref=e1192]: Claude Sonnet 5
+          - generic [ref=e1193]:
+            - text: fresh input
+            - spinbutton "fresh input" [ref=e1194]: "3"
+          - generic [ref=e1195]:
+            - text: cache read
+            - spinbutton "cache read" [ref=e1196]: "0.3"
+          - generic [ref=e1197]:
+            - text: cache write
+            - spinbutton "cache write" [ref=e1198]: "3.75"
+          - generic [ref=e1199]:
+            - text: output
+            - spinbutton "output" [ref=e1200]: "15"
+          - generic [ref=e1201]: assumed Â· edit to your rate
+        - generic [ref=e1202]:
+          - generic [ref=e1203]: Claude Opus 5
+          - generic [ref=e1204]:
+            - text: fresh input
+            - spinbutton "fresh input" [ref=e1205]: "5"
+          - generic [ref=e1206]:
+            - text: cache read
+            - spinbutton "cache read" [ref=e1207]: "0.5"
+          - generic [ref=e1208]:
+            - text: cache write
+            - spinbutton "cache write" [ref=e1209]: "6.25"
+          - generic [ref=e1210]:
+            - text: output
+            - spinbutton "output" [ref=e1211]: "25"
+          - generic [ref=e1212]: assumed Â· edit to your rate
+        - generic [ref=e1213]:
+          - generic [ref=e1214]: Claude Fable 5.1
+          - generic [ref=e1215]:
+            - text: fresh input
+            - spinbutton "fresh input" [ref=e1216]: "15"
+          - generic [ref=e1217]:
+            - text: cache read
+            - spinbutton "cache read" [ref=e1218]: "1.5"
+          - generic [ref=e1219]:
+            - text: cache write
+            - spinbutton "cache write" [ref=e1220]: "18.75"
+          - generic [ref=e1221]:
+            - text: output
+            - spinbutton "output" [ref=e1222]: "75"
+          - generic [ref=e1223]: assumed Â· edit to your rate
+        - generic [ref=e1224]:
+          - generic [ref=e1225]: Claude Haiku 4.5
+          - generic [ref=e1226]:
+            - text: fresh input
+            - spinbutton "fresh input" [ref=e1227]: "1"
+          - generic [ref=e1228]:
+            - text: cache read
+            - spinbutton "cache read" [ref=e1229]: "0.1"
+          - generic [ref=e1230]:
+            - text: cache write
+            - spinbutton "cache write" [ref=e1231]: "1.25"
+          - generic [ref=e1232]:
+            - text: output
+            - spinbutton "output" [ref=e1233]: "5"
+          - generic [ref=e1234]: published list price
+  - generic [ref=e1235]:
+    - generic [ref=e1236]:
+      - generic [ref=e1237]:
+        - text: Human in the loop
+        - heading "Where the human actually sat" [level=2] [ref=e1238]
+      - paragraph [ref=e1239]: Twenty-seven recorded decisions and no code. The split below is counted from LOG.md, Jira, and the session record.
+    - generic [ref=e1240]:
+      - generic [ref=e1241]:
+        - heading "Actions by origin" [level=3] [ref=e1242]
+        - paragraph [ref=e1243]: Each row is a kind of action; coral is the human's share.
+        - img [ref=e1245]:
+          - generic [ref=e1246]: Commits
+          - generic [ref=e1248]: "289"
+          - generic [ref=e1249]: PR merges
+          - generic [ref=e1251]: "73"
+          - generic [ref=e1252]: Jira transitions
+          - generic [ref=e1254]: "126"
+          - generic [ref=e1255]: LOG entries
+          - generic [ref=e1257]: "68"
+          - generic [ref=e1258]: Refinement records
+          - generic [ref=e1260]: "19"
+          - generic [ref=e1261]: Decision documents
+          - generic [ref=e1263]: "22"
+          - generic [ref=e1264]: CI runs
+          - generic [ref=e1266]: "186"
+          - generic [ref=e1267]: Human decisions
+          - generic [ref=e1269]: "27"
+        - paragraph [ref=e1270]: Merge commits carry Warren's GitHub identity because the PM merged through his authenticated session; they are agent actions and counted as such.
+      - generic [ref=e1271]:
+        - heading "The twenty-seven decisions" [level=3] [ref=e1272]
+        - paragraph [ref=e1273]: What only the human could decide.
+        - table [ref=e1275]:
+          - rowgroup [ref=e1276]:
+            - row [ref=e1277]:
+              - columnheader "Kind" [ref=e1278]
+              - columnheader "#" [ref=e1279]
+              - columnheader "Examples" [ref=e1280]
+          - rowgroup [ref=e1281]:
+            - row [ref=e1282]:
+              - cell "Direction" [ref=e1283]
+              - cell "6" [ref=e1284]
+              - cell "code go as an agile loop; the real cluster; attribution rule; org topology; teardown timing; \"ask Amber what the cluster already has\"" [ref=e1285]
+            - row [ref=e1286]:
+              - cell "Rulings" [ref=e1287]
+              - cell "4" [ref=e1288]
+              - cell "Vault instead of etcd encryption; audit-log RBAC as accepted residual; Filebeat drop-filter fix; LT-20 disposition (pending)" [ref=e1289]
+            - row [ref=e1290]:
+              - cell "Permission grants" [ref=e1291]
+              - cell "9" [ref=e1292]
+              - cell "Amber into Vault; two deployer Role updates; deleting six Secrets; classifier approvals for cluster mutations" [ref=e1293]
+            - row [ref=e1294]:
+              - cell "Routing" [ref=e1295]
+              - cell "3" [ref=e1296]
+              - cell "DNS and GitHub credentials to Amber; Vault access via Amber; \"she is logged in and can drive\"" [ref=e1297]
+            - row [ref=e1298]:
+              - cell "Cadence" [ref=e1299]
+              - cell "5" [ref=e1300]
+              - cell "\"usage has reset, keep going\" Ã—5" [ref=e1301]
+  - generic [ref=e1302]:
+    - generic [ref=e1303]:
+      - generic [ref=e1304]:
+        - text: Software architecture
+        - heading "What runs in the namespace" [level=2] [ref=e1305]
+      - paragraph [ref=e1306]: "Two Go binaries in three images. Watch the requests: a client mints a token at the issuer, calls the verifier, which checks the JWKS in-cluster and reads Postgres; the verifier alone may reach the connector; Vault feeds every pod its secrets at start. Hover a node for what it does."
+    - generic [ref=e1309]:
+      - generic [ref=e1310]: client request
+      - generic [ref=e1312]: JWKS / Vault
+      - generic [ref=e1314]: database
+      - generic [ref=e1316]: denied by NetworkPolicy
+    - generic [ref=e1318]:
+      - generic [ref=e1319]:
+        - heading "Q1 Â· Data access" [level=3] [ref=e1320]
+        - paragraph [ref=e1321]: DAO for user_profile and user_credential
+        - paragraph [ref=e1322]: One Repository interface, three backends. A conformance suite runs identical assertions against real Postgres, CockroachDB, and SQLite containers in CI, including CockroachDB's serialization retry. Errors by SQLSTATE, never by message text.
+      - generic [ref=e1323]:
+        - heading "Q2 Â· REST + auth" [level=3] [ref=e1324]
+        - paragraph [ref=e1325]: Search and retrieve, secured
+        - paragraph [ref=e1326]: OAuth2 client credentials mint RS256 tokens with per-client audiences; the verifier checks issuer, audience, and JWKS with bounded staleness. Masked search; full reads need read:own or read:any with a closed reason code; scope and policy denials are byte-identical 403s.
+      - generic [ref=e1327]:
+        - heading "Q3 Â· IDP connector" [level=3] [ref=e1328]
+        - paragraph [ref=e1329]: /auth and /identity to a vendor
+        - paragraph [ref=e1330]: Vendor tokens fetched, used once, discarded. Uniform-timing failures, per-identity and overflow backoff; the failure-ratio limiter fired live in review. Reachable only from api-service.
+  - generic [ref=e1331]:
+    - generic [ref=e1332]:
+      - generic [ref=e1333]:
+        - text: AI architecture
+        - heading "How the work was actually organised" [level=2] [ref=e1334]
+      - paragraph [ref=e1335]: "LoginID asked which AI tools were used and how. The honest answer is longer than a tool name, so this section gives the whole design: the layers, the model chosen for each seat and why, the rules that kept the agents from simply agreeing with each other, and a plain statement of which parts are Anthropic's documented patterns and which parts this project invented."
+    - generic [ref=e1336]:
+      - generic [ref=e1337]:
+        - generic [ref=e1338]:
+          - generic [ref=e1339]: The tool
+          - generic [ref=e1340]: Claude Code
+        - paragraph [ref=e1341]: "Anthropic's agentic command-line tool, chosen because the deliverable is itself an argument about AI-architecture judgement. Using the tool that is the subject of the question makes the workflow inspectable: every session was recorded, and those recordings are published further down this page."
+      - generic [ref=e1342]:
+        - generic [ref=e1343]:
+          - generic [ref=e1344]: The briefs
+          - generic [ref=e1345]: one root file, five track files
+        - paragraph [ref=e1346]: "A root brief carries the assignment, the track boundaries and the working rules. Each of the five track directories carries its own brief, written to be self-sufficient: a fresh agent with no history can pick up that track from those two files alone. Context is retrieved when it is needed rather than all loaded at once, which is how a thirty-hour project stays inside a context window."
+      - generic [ref=e1347]:
+        - generic [ref=e1348]:
+          - generic [ref=e1349]: The sessions
+          - generic [ref=e1350]: six top-level processes, not one
+        - paragraph [ref=e1351]: The project manager ran as one process. Each of the five track leads ran as its own separate process in its own terminal window, loading only its own brief and its own persona. They spoke to each other by message, but handed work over as files. A message signals that something is ready; it never carries the content.
+      - generic [ref=e1352]:
+        - generic [ref=e1353]:
+          - generic [ref=e1354]: The hires
+          - generic [ref=e1355]: eighteen specialists, spawned by their lead
+        - paragraph [ref=e1356]: Each lead hired three or four specialists as sub-processes of its own session. Hires returned prose to their lead; leads wrote the files. Hires never spawned further agents, so the tree is exactly three deep and no work was ever orphaned under an agent nobody was watching.
+      - generic [ref=e1357]:
+        - generic [ref=e1358]:
+          - generic [ref=e1359]: The operator
+          - generic [ref=e1360]: an agent on another machine, holding the credentials
+        - paragraph [ref=e1361]: Cluster and DNS credentials were never in this project's reach. A separate long-running agent on a different machine held them, took written requests, verified each one against the live cluster before acting, and refused anything the human had not authorised.
+    - generic [ref=e1362]:
+      - generic [ref=e1363]:
+        - heading "Which model sat in which seat, and why" [level=3] [ref=e1364]
+        - paragraph [ref=e1365]: One expensive seat where a wrong call propagates; capable, cheaper models everywhere the work is bounded.
+        - table [ref=e1367]:
+          - rowgroup [ref=e1368]:
+            - row [ref=e1369]:
+              - columnheader "Seat" [ref=e1370]
+              - columnheader "Model" [ref=e1371]
+              - columnheader "Reasoning" [ref=e1372]
+          - rowgroup [ref=e1373]:
+            - row [ref=e1374]:
+              - cell "Orchestrator (PM)" [ref=e1375]
+              - cell "Fable 5.1" [ref=e1376]
+              - cell "Holds the only cross-track state. A boundary misjudged here costs five agents their day, not one." [ref=e1377]
+            - row [ref=e1378]:
+              - cell "Data-ops lead" [ref=e1379]
+              - cell "Opus 5" [ref=e1380]
+              - cell "Owns the schema and the database interface every other track builds against. The most expensive decision to reverse late." [ref=e1381]
+            - row [ref=e1382]:
+              - cell "Four other leads" [ref=e1383]
+              - cell "Sonnet 5" [ref=e1384]
+              - cell "Design and delivery against a brief that is already concrete. Capable is enough; the ceiling is not the bottleneck." [ref=e1385]
+            - row [ref=e1386]:
+              - cell "Eighteen hires" [ref=e1387]
+              - cell "Sonnet 5" [ref=e1388]
+              - 'cell "Bounded, single-purpose seats: one attack tree, one cold read, one objection." [ref=e1389]'
+            - row [ref=e1390]:
+              - cell "Research fan-out" [ref=e1391]
+              - cell "Haiku 4.5" [ref=e1392]
+              - cell "Narrow, verifiable, throwaway lookups run in parallel. Exploration noise never re-enters the coordinator's context, only the condensed answer does." [ref=e1393]
+        - paragraph [ref=e1394]: "The security lead wrote that reasoning up before any of it ran, then recorded where the harness refused to cooperate: there is no per-agent effort setting, so the planned middle tier collapsed upward. The plan says so rather than pretending the design survived contact intact."
+      - generic [ref=e1395]:
+        - heading "Why the agents were given different personalities" [level=3] [ref=e1396]
+        - paragraph [ref=e1397]: Not decoration. A countermeasure against a specific failure.
+        - paragraph [ref=e1398]: "Five leads and a manager, all started from the same base model, land in the same temperament by default: serious, careful, thorough. Agreement between agents who think alike is not evidence that a decision is good. It is evidence that nobody in the room was built to disagree."
+        - paragraph [ref=e1399]: So variance was engineered. Thirteen archetypes, each with a stated blind spot. No archetype more than twice across the whole organisation and never twice inside one team. Every team had to contain its own lead's temperament opposite. At least three hires had to be playful and bold, because not one lead was. Each hire's brief states plainly what it pushes back on and where its own judgement fails.
+        - paragraph [ref=e1400]: "The effect is visible in the record: the adversary keeps finding attacks, the minimalist keeps deleting scope, and the newcomer keeps asking the question everyone else had stopped asking."
+    - generic [ref=e1401]:
+      - generic [ref=e1402]:
+        - text: Six protocols
+        - heading "The patterns the teams actually ran" [level=3] [ref=e1403]
+      - paragraph [ref=e1404]: Each is a small protocol with named seats and a required artefact. Every run ends in a dated decision file recording the positions, the rebuttals, the ruling, and which model each seat ran on. Chat is never the record.
+    - generic [ref=e1405]:
+      - generic [ref=e1406]:
+        - heading "Adversarial pair" [level=3] [ref=e1407]
+        - paragraph [ref=e1408]: Proposer drafts, skeptic numbers objections, lead rules. Search authorization scoping; the Search() query shape.
+      - generic [ref=e1409]:
+        - heading "Red team / blue team" [level=3] [ref=e1410]
+        - paragraph [ref=e1411]: Adversary writes an attack tree, architect answers each leaf. The connector token lifecycle; three live rounds.
+      - generic [ref=e1412]:
+        - heading "Three hats" [level=3] [ref=e1413]
+        - paragraph [ref=e1414]: Optimist, pessimist, pragmatist write in parallel; lead synthesizes. Multi-database abstraction; Go layout.
+      - generic [ref=e1415]:
+        - heading "Newcomer's question" [level=3] [ref=e1416]
+        - paragraph [ref=e1417]: A hire reads a finished hand-off cold and lists what it cannot act on. Highest return of any pattern; it failed the README once.
+      - generic [ref=e1418]:
+        - heading "Rotating objection seat" [level=3] [ref=e1419]
+        - paragraph [ref=e1420]: Every refinement carried a standing objection. It caught Recreate, Forbid, fail-loud on Vault, and an alert that could never fire.
+      - generic [ref=e1421]:
+        - heading "Live PO review" [level=3] [ref=e1422]
+        - paragraph [ref=e1423]: Nothing was Done until the product owner exercised it at the URL or inside the cluster. Nineteen stories failed first.
+    - generic [ref=e1424]:
+      - generic [ref=e1425]:
+        - text: Honesty about the claim
+        - heading "Did any of this actually help?" [level=3] [ref=e1426]
+      - paragraph [ref=e1427]: The security track put that question to its own debate protocol rather than asserting an answer, and the ruling went against the broad claim. What follows is what the record supports, what it does not, and the failure most worth stealing.
+    - generic [ref=e1428]:
+      - generic [ref=e1429]:
+        - generic [ref=e1430]: What the evidence supports
+        - list [ref=e1431]:
+          - listitem [ref=e1432]: A seat whose brief is structurally different produces findings the previous seat could not. The alternatives seat deleted two attack paths outright by removing a cache, where every prior seat had proposed hardening it.
+          - listitem [ref=e1433]: A reader with no stake in the text catches what its author cannot. Cold reads of finished hand-offs returned real gaps every time they ran.
+          - listitem [ref=e1434]: Independent review caught a rate-limit control that was a silent no-op for the broadest scope. Neither the author of the fix nor the objector it answered had seen it, because both were reasoning inside the question as posed.
+      - generic [ref=e1435]:
+        - generic [ref=e1436]: What it does not support
+        - paragraph [ref=e1437]: "That multi-agent debate beats one strong session in general. Nobody ran that comparison. The defensible claim is a mechanism, not a statistic: self-review interrogates the answer it already committed to, rather than the frame that produced the question. The losing side of that debate is preserved in the repository beside the winning one."
+        - paragraph [ref=e1438]: Null results are counted in the same tallies as the hits, at the skeptic's insistence.
+      - generic [ref=e1439]:
+        - generic [ref=e1440]: The failure worth stealing
+        - paragraph [ref=e1441]: Independence decayed silently. A reviewer assigned at planning time had, by the time the review ran, authored the very content she was set to check, through two intervening debates. Nothing flagged it; the roster still said she was independent.
+        - paragraph [ref=e1442]: "The lesson generalises well past AI: independence is a property to verify at the moment a review runs, not a role assigned once and trusted to hold. It was caught before that review ran, and the reviewers were reassigned."
+    - generic [ref=e1443]:
+      - heading "The three rules that made it auditable" [level=3] [ref=e1444]
+      - generic [ref=e1445]:
+        - generic [ref=e1446]:
+          - text: Everything names its author
+          - paragraph [ref=e1447]: Every commit, pull request and ticket transition names the persona who did the work and the seat they sat in. Not "the team", not "Claude". Any line of code traces to the agent that wrote it and the reviewer that passed it.
+        - generic [ref=e1448]:
+          - text: Hand-offs are files
+          - paragraph [ref=e1449]: A hand-off has to let the receiver act without re-deriving the sender's reasoning. That gets tested by giving it to an agent who was not in the conversation and asking what they cannot do with it.
+        - generic [ref=e1450]:
+          - text: Done means deployed and reviewed
+          - paragraph [ref=e1451]: No story closed on a passing test. It closed when the product owner exercised it at the public URL. Nineteen stories failed that review before they passed it.
+  - generic [ref=e1452]:
+    - generic [ref=e1453]:
+      - generic [ref=e1454]:
+        - text: The receipts
+        - heading "Watch the agents work, then read every word" [level=2] [ref=e1455]
+      - paragraph [ref=e1456]: "Unedited screen recordings of the terminal while the organisation ran, screenshots of the operator agent working on the live cluster, and a complete archive of every session: each message, each tool call, each result, with credentials redacted. None of it is a reconstruction."
+    - generic [ref=e1457]:
+      - generic [ref=e1460]:
+        - generic [ref=e1461]: A security lead briefing four specialists at once
+        - paragraph [ref=e1462]: The adversary, the architect, the tinkerer and the skeptic each report in their own voice, then hold, waiting to be called into a seat. Twenty-two seconds.
+      - generic [ref=e1465]:
+        - generic [ref=e1466]: An infrastructure team arguing about scope
+        - paragraph [ref=e1467]: The scope guard cuts a row from the secrets inventory as two hypotheticals deep for a take-home; the enthusiast makes the opposite case on the developer loop. The lead rules. Thirty-six seconds.
+      - generic [ref=e1470]:
+        - generic [ref=e1471]: The manager running five tracks at once
+        - paragraph [ref=e1472]: Reports arriving from the engineering and infrastructure leads, a consistency pass flagging five stale restatements across tracks, and the operator agent being contacted on another machine. Two minutes.
+      - generic [ref=e1475]:
+        - generic [ref=e1476]: Hitting the usage limit, and what the agents did about it
+        - paragraph [ref=e1477]: The organisation runs out of budget mid-debate. The agents record exactly where they stopped, restate the rule that nobody interrupts the human directly, and hold. One minute.
+    - generic [ref=e1478]:
+      - generic [ref=e1479]:
+        - text: The operator
+        - heading "An agent that would not take the project's word for it" [level=3] [ref=e1480]
+      - paragraph [ref=e1481]: Cluster and DNS credentials sat with a separate agent on a different machine. It is worth reading what that agent did with a request it had no prior record of.
+    - generic [ref=e1482]:
+      - 'figure "Asked for a DNS record, the operator verified the zone, the target and the namespace, then said plainly that the one thing it could not verify was the human authorising it. It proceeded only because the change was reversible and granted nothing, and offered to undo it. The human replied: approved." [ref=e1483]':
+        - 'img "Chat log: the operator agent verifies a DNS request three ways, states that it cannot verify the human authorised it, and proceeds only because the change is reversible"'
+      - 'figure "Provisioning the secret store, it refused the shortcut: binding three roles to one shared identity would have let the connector assume the database role. It created five separate identities instead." [ref=e1485]':
+        - 'img "Operator log: refusing to bind three roles to one shared identity because it would let one workload assume another''s"'
+      - figure "Then it proved the isolation rather than asserting it, authenticating as each identity in turn and testing what must be denied as carefully as what must be allowed." [ref=e1487]:
+        - 'img "Operator log: authenticating as each identity in turn and testing both what is allowed and what must be denied"'
+      - 'figure "The manager''s side of a human decision: what is true today, two options, what each costs, a recommendation, and exactly which parts only the human could authorise." [ref=e1489]':
+        - img "The manager briefing the human with two options, the cost of each, and a recommendation"
+      - figure "The attribution rule in practice. Every ticket names the implementer, the design seats, the objection seat, the reviewers, and who merged." [ref=e1491]:
+        - img "A Jira comment naming every agent that contributed to the story and what each one did"
+      - figure "Before handing back, it ran an end-to-end test through the real injector with a throwaway pod, then deleted it." [ref=e1493]:
+        - img "A throwaway pod applied to the cluster to prove the secret injection path works end to end"
+    - generic [ref=e1495]:
+      - heading "Every session, in full" [level=3] [ref=e1496]
+      - paragraph [ref=e1497]: "Each link opens one agent's own record: what it was asked, what it answered, every command it ran and what came back. Secrets are replaced with visible markers. The models' private reasoning is not retained in these logs, so it is not shown."
+      - paragraph [ref=e1499]:
+        - text: The archive is published at
+        - link "wtvamp.github.io/loginid-takehome/transcripts/" [ref=e1500] [cursor=pointer]:
+          - /url: https://wtvamp.github.io/loginid-takehome/transcripts/index.html
+        - text: . Twenty-five personas, every message and every tool call, with credentials redacted.
+      - paragraph [ref=e1501]: Published from the raw session logs by a redaction pass that strips tokens, password-bearing connection strings, password hashes, private keys and long base64 blobs.
+  - generic [ref=e1502]:
+    - generic [ref=e1503]:
+      - generic [ref=e1504]:
+        - text: Timeline
+        - heading "The full tape" [level=2] [ref=e1505]
+      - paragraph [ref=e1506]: Times are Pacific. Dashed gaps are usage pauses.
+    - generic [ref=e1507]:
+      - generic [ref=e1508]:
+        - heading "Friday 12 September" [level=3] [ref=e1509]
+        - generic [ref=e1510]: PDT
+      - generic [ref=e1511]:
+        - generic [ref=e1512]: 09:17
+        - generic [ref=e1515]:
+          - text: Repository scaffolded; six research subagents fan out
+          - generic [ref=e1516]: agent
+          - paragraph [ref=e1517]: Market framing, IAM and passwordless landscape, IDP aggregation, one topic each.
+      - generic [ref=e1518]:
+        - generic [ref=e1519]: 09:50
+        - generic [ref=e1522]:
+          - text: Code written prematurely is wiped
+          - generic [ref=e1523]: incident
+          - paragraph [ref=e1524]: "A lead started implementing before the design settled. Rule: no code until the go-ahead."
+      - generic [ref=e1525]:
+        - generic [ref=e1526]: 10:45
+        - generic [ref=e1529]:
+          - text: Org plan approved
+          - generic [ref=e1530]: human
+          - paragraph [ref=e1531]: Five leads as top-level sessions, eighteen hires, a casting registry with thirteen archetypes.
+      - generic [ref=e1532]:
+        - generic [ref=e1533]: ~12:30
+        - generic [ref=e1536]:
+          - text: "Deployment target: the real shared cluster"
+          - generic [ref=e1537]: human
+          - paragraph [ref=e1538]: Not a throwaway lab. This decision created most of the security work and all of its real findings.
+      - generic [ref=e1539]:
+        - generic [ref=e1540]: ~13:00
+        - generic [ref=e1543]:
+          - text: Attribution rule
+          - generic [ref=e1544]: human
+          - paragraph [ref=e1545]: Every commit, PR, and Jira transition names the persona who did the work.
+      - generic [ref=e1546]:
+        - generic [ref=e1547]: 14:55
+        - generic [ref=e1550]:
+          - text: "Planning closes: 18 stories Done"
+          - generic [ref=e1551]: Done
+          - paragraph [ref=e1552]: Three cross-track consistency passes, 52 findings, all addressed before code.
+      - generic [ref=e1553]:
+        - generic [ref=e1554]: ~17:30
+        - generic [ref=e1557]:
+          - text: Implementation go, as an agile loop
+          - generic [ref=e1558]: human
+          - paragraph [ref=e1559]: Pull, refine, hand to engineering, QA, deploy, PO review. Show the URL on every deploy.
+      - generic [ref=e1560]:
+        - generic [ref=e1561]: 20:45
+        - generic [ref=e1564]:
+          - text: First deployment to the public URL
+          - generic [ref=e1565]: deploy
+          - paragraph [ref=e1566]: "Walking skeleton: two binaries, health endpoint, ARC runner, TLS Ingress. DNS by Amber."
+      - generic [ref=e1567]:
+        - generic [ref=e1568]: 20:55
+        - generic [ref=e1571]:
+          - text: "LT-34 Done: first story closed end to end"
+          - generic [ref=e1572]: Done
+      - generic [ref=e1573]:
+        - generic [ref=e1574]: 21:30
+        - generic [ref=e1577]:
+          - text: "LT-32 Done: issuer split into its own Deployment"
+          - generic [ref=e1578]: Done
+          - paragraph [ref=e1579]: Only the issuer mounts the signing key.
+      - generic [ref=e1580]:
+        - generic [ref=e1581]: 21:55
+        - generic [ref=e1584]:
+          - text: Teardown on Warren's word, next week, unscheduled
+          - generic [ref=e1585]: human
+      - generic [ref=e1586]: 22:00 â†’ 04:15 Â· Usage pause
+      - generic [ref=e1590]:
+        - heading "Saturday 13 September" [level=3] [ref=e1591]
+        - generic [ref=e1592]: PDT
+      - generic [ref=e1593]:
+        - generic [ref=e1594]: 04:50
+        - generic [ref=e1597]:
+          - text: A database behind the API
+          - generic [ref=e1598]: deploy
+          - paragraph [ref=e1599]: In-namespace Postgres; migration Job gates the api-service apply. A base64 slash broke the DSN; hex fixed it.
+      - generic [ref=e1600]:
+        - generic [ref=e1601]: 05:23
+        - generic [ref=e1604]:
+          - text: LT-52 Done; LT-40 live and failing closed
+          - generic [ref=e1605]: Done
+      - generic [ref=e1606]:
+        - generic [ref=e1607]: 06:30
+        - generic [ref=e1610]:
+          - text: First real token minted at the URL, and what verifying it found
+          - generic [ref=e1611]: security
+          - paragraph [ref=e1612]: Issuer and audience were never set in any manifest. Two more config gaps followed within the hour.
+      - generic [ref=e1613]:
+        - generic [ref=e1614]: 07:06
+        - generic [ref=e1617]:
+          - text: "Joint live review: LT-40 and LT-51 Done"
+          - generic [ref=e1618]: Done
+          - paragraph [ref=e1619]: Masked search, full reads with reason codes, byte-identical 403s, at the URL.
+      - generic [ref=e1620]:
+        - generic [ref=e1621]: 07:10
+        - generic [ref=e1624]:
+          - text: CI had been skipping every Postgres and CockroachDB test
+          - generic [ref=e1625]: incident
+          - paragraph [ref=e1626]: Green meant SQLite only. Fixtures now fail under CI; real containers added.
+      - generic [ref=e1627]:
+        - generic [ref=e1628]: 07:30
+        - generic [ref=e1631]:
+          - text: "LT-39 Done: the rate limit now limits"
+          - generic [ref=e1632]: Done
+          - paragraph [ref=e1633]: Two replicas split a burst across independent counters. Replicas 1 plus Recreate.
+      - generic [ref=e1634]:
+        - generic [ref=e1635]: 07:55
+        - generic [ref=e1638]:
+          - text: Connector's inbound auth was never wired
+          - generic [ref=e1639]: security
+          - paragraph [ref=e1640]: Third enforcement-site gap; startup guards and a manifest-vs-config test.
+      - generic [ref=e1641]:
+        - generic [ref=e1642]: 08:00
+        - generic [ref=e1645]:
+          - text: "LT-41 Done: Q3 delivered"
+          - generic [ref=e1646]: Done
+          - paragraph [ref=e1647]: In-cluster review; the failure-ratio limiter fired live.
+      - generic [ref=e1648]:
+        - generic [ref=e1649]: 09:40
+        - generic [ref=e1652]:
+          - text: "Close-out wave: fourteen Done, two honest reversals"
+          - generic [ref=e1653]: Done
+          - paragraph [ref=e1654]: LT-42 passed then withdrawn in fourteen minutes; LT-46's etcd criterion found unmet.
+      - generic [ref=e1655]:
+        - generic [ref=e1656]: 09:55
+        - generic [ref=e1659]:
+          - text: "Ruling: Vault, not etcd encryption"
+          - generic [ref=e1660]: human
+          - paragraph [ref=e1661]: The cluster already ran HA Vault with the injector.
+      - generic [ref=e1662]:
+        - generic [ref=e1663]: 10:25
+        - generic [ref=e1666]:
+          - text: Amber provisions Vault; three workloads shared the default identity
+          - generic [ref=e1667]: security
+          - paragraph [ref=e1668]: Six roles, dedicated ServiceAccounts, denial matrix proven, a template trap caught.
+      - generic [ref=e1669]:
+        - generic [ref=e1670]: 10:44
+        - generic [ref=e1673]:
+          - text: LT-46 deploy takes the database down for sixteen minutes
+          - generic [ref=e1674]: incident
+          - paragraph [ref=e1675]: Injector CPU requests versus the quota; a wrong CA path. Diagnosed three ways; fixed forward.
+      - generic [ref=e1676]:
+        - generic [ref=e1677]: 11:15
+        - generic [ref=e1680]:
+          - text: "Forced-failure test: a denied pod hung in Init forever"
+          - generic [ref=e1681]: security
+          - paragraph [ref=e1682]: Auth loop retried indefinitely. Exit-on-error plus bounded backoff.
+      - generic [ref=e1683]:
+        - generic [ref=e1684]: 11:42
+        - generic [ref=e1687]:
+          - text: Warren approves deleting the six Kubernetes Secrets
+          - generic [ref=e1688]: human
+      - generic [ref=e1689]:
+        - generic [ref=e1690]: 11:44
+        - generic [ref=e1693]:
+          - text: "LT-46 Done: no application secret in etcd"
+          - generic [ref=e1694]: Done
+      - generic [ref=e1695]:
+        - generic [ref=e1696]: 12:00
+        - generic [ref=e1699]:
+          - text: Amber inventories the observability stack, read-only
+          - generic [ref=e1700]: agent
+          - paragraph [ref=e1701]: kube-prometheus-stack with self-service rules; Filebeat already shipping stdout; a filter dropping any line containing "health".
+      - generic [ref=e1702]:
+        - generic [ref=e1703]: 12:18
+        - generic [ref=e1706]:
+          - text: Warren approves the shared Filebeat fix; Amber applies it
+          - generic [ref=e1707]: human
+      - generic [ref=e1708]:
+        - generic [ref=e1709]: 12:40
+        - generic [ref=e1712]:
+          - text: LT-48 Done on the third live run
+          - generic [ref=e1713]: Done
+          - paragraph [ref=e1714]: No issuer in the dev loop, then a SQLite path under the Postgres profile.
+      - generic [ref=e1715]:
+        - generic [ref=e1716]: 14:28
+        - generic [ref=e1719]:
+          - text: "LT-20 Done: a 90-day floor, not a ceiling"
+          - generic [ref=e1720]: Done
+          - paragraph [ref=e1721]: Audit retention is a minimum driven by incident review.
+      - generic [ref=e1722]:
+        - generic [ref=e1723]: 14:52
+        - generic [ref=e1726]:
+          - text: "Last hotfix: a Service with no labels had no scrape target"
+          - generic [ref=e1727]: deploy
+          - paragraph [ref=e1728]: ServiceMonitors select Services by label.
+      - generic [ref=e1729]:
+        - generic [ref=e1730]: 15:00
+        - generic [ref=e1733]:
+          - text: "Backlog closed: 42 of 42"
+          - generic [ref=e1734]: Done
+          - paragraph [ref=e1735]: "LT-49 passes: scrape target up, four rules loaded, a real alert in Alertmanager."
+  - generic [ref=e1736]:
+    - generic [ref=e1737]:
+      - generic [ref=e1738]:
+        - text: What the record shows
+        - heading "Six patterns the day kept repeating" [level=2] [ref=e1739]
+      - paragraph [ref=e1740]: Each caught by a review step, each closed with a check that fails in CI or at startup instead of in production.
+    - generic [ref=e1741]:
+      - generic [ref=e1742]:
+        - generic [ref=e1743]: Config named, never set
+        - paragraph [ref=e1744]: Three times a binary read an environment variable no manifest set. Now every mode declares its required variables, refuses to start without them, and CI diffs manifests against that list.
+      - generic [ref=e1745]:
+        - generic [ref=e1746]: A pattern not carried forward
+        - paragraph [ref=e1747]: "Five times a control on one component was missing on an identical new one: NetworkPolicy allow-lists, Forbid on a CronJob, a ServiceAccount per workload. Each got a test tying the new component to the rule."
+      - generic [ref=e1748]:
+        - generic [ref=e1749]: Verification that skips
+        - paragraph [ref=e1750]: CI was green for hours while every Postgres and CockroachDB test silently skipped. Fixtures now fail under CI and the containers are always present.
+      - generic [ref=e1751]:
+        - generic [ref=e1752]: The detector can fail too
+        - paragraph [ref=e1753]: "\"Diff against origin before declaring done\" returned a false clean for untracked files. Five artifacts stranded; a ?? line is now unshipped work."
+      - generic [ref=e1754]:
+        - generic [ref=e1755]: Arithmetic outlives its assumption
+        - paragraph [ref=e1756]: An alert at window-plus-one-interval fired on every healthy cycle; a rolling-day skip rate was meaningless at a daily schedule. Both became functions of one interval constant.
+      - generic [ref=e1757]:
+        - generic [ref=e1758]: Fail loud, always
+        - paragraph [ref=e1759]: Vault Agent has two retry loops; one exits, the other retried forever and hung a pod in Init for seven minutes. The forced-failure test found it; the pod now crash-loops in thirty-six seconds.
+  - contentinfo [ref=e1760]:
+    - generic [ref=e1761]: "Built with Claude Code: one Fable 5.1 orchestrator, four Sonnet 5 leads, one Opus 5 lead, eighteen Sonnet specialists, and one operator agent on another machine. Every commit, pull request and ticket names who did the work."
+    - generic [ref=e1762]:
+      - link "live demo" [ref=e1763] [cursor=pointer]:
+        - /url: https://loginid-takehome.uplifttech.org/demo
+      - text: ·
+      - link "source" [ref=e1764] [cursor=pointer]:
+        - /url: https://github.com/wtvamp/loginid-takehome
+      - text: ·
+      - link "jira" [ref=e1765] [cursor=pointer]:
+        - /url: https://uplifttech.atlassian.net/jira/software/projects/LT/boards/1
+      - text: ·
+      - link "transcripts" [ref=e1766] [cursor=pointer]:
+        - /url: https://wtvamp.github.io/loginid-takehome/transcripts/index.html
