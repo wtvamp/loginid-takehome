@@ -265,6 +265,21 @@
       </div>
       <div class="field">
         <label class="field-label" for="qa-token-input">QA client secret</label>
+        <!--
+          autocomplete is "new-password", not "off" — a deliberate
+          deviation from the letter of refinement/LT-53.md's own
+          criterion ("autocomplete=off, falling back to new-password if
+          a browser ignores off"). Chrome specifically ignores "off" on
+          password-typed inputs, so "new-password" is the value that
+          actually suppresses its save-prompt heuristic more often in
+          practice; going straight there is the functionally stronger
+          choice, not a shortcut. Even so, a browser's own
+          password-manager UI can still offer to save this field
+          regardless of either value — this attribute-level hardening,
+          plus the id/name below not pattern-matching "password"/
+          "secret", is what this page's own markup can control; it
+          isn't a guarantee no save-prompt ever appears.
+        -->
         <input type="password" id="qa-token-input" name="qa-token-input" autocomplete="new-password" placeholder="paste the QA secret">
       </div>
       <button id="mint-btn" type="button">Mint token</button>
@@ -595,6 +610,17 @@
       window.alert("This panel needs a " + scope + " token — mint one with the matching QA credential above first.");
       return false;
     }
+    if (Date.now() >= tokens[scope].exp) {
+      // Caught here rather than left to surface as an unexplained 401
+      // from the real API — a token aging out mid-review is expected
+      // (the PO review script has a reviewer deliberately wait out a
+      // rate-limit window, which is long enough for a 10-minute token
+      // to expire), not a bug in the page or the API.
+      delete tokens[scope];
+      updateTokenStatus();
+      window.alert("Your " + scope + " token has expired — mint a fresh one with the matching QA credential above, then run this panel again.");
+      return false;
+    }
     return true;
   }
 
@@ -695,9 +721,21 @@
           setStatus("p5", resp.status);
           renderJSON("p5-json", text);
 
+          if (resp.status === 401) {
+            var expiredChip = document.createElement("span");
+            expiredChip.className = "burst-chip status-401";
+            expiredChip.textContent = "got 401 mid-burst — this token likely expired; mint a fresh profile:search token and run this panel again";
+            log.appendChild(expiredChip);
+            return;
+          }
           if (resp.status === 429) return;
           return attempt(n + 1);
         });
+      }).catch(function (err) {
+        var chip = document.createElement("span");
+        chip.className = "burst-chip status-5xx";
+        chip.textContent = "#" + n + ": network error — " + err;
+        log.appendChild(chip);
       });
     }
     attempt(1);
