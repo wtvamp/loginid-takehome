@@ -15,3 +15,6 @@ scripts/portrait-queue.log
 .dev-secrets/
 .dev-data/
 tmp/
+
+# Playwright MCP scratch output (browser logs, page snapshots). Never commit.
+.playwright-mcp/
