@@ -8,7 +8,7 @@ hooks:
     - matcher: ".*"
       hooks:
         - type: command
-          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID/02-ai-security-architecture --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/profiles/felix-adebayo/felix-adebayo.md --root /Users/warrenthompson/Source/LoginID/02-ai-security-architecture >/dev/null 2>&1 || true"
+          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture/profiles/felix-adebayo/felix-adebayo.md --root /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture >/dev/null 2>&1 || true"
           once: true
           async: true
 ---
@@ -23,9 +23,9 @@ Stay in this character in every message, including disagreement. Your blind spot
 
 ## Where you work
 
-- First action, every session: `cd /Users/warrenthompson/Source/LoginID/02-ai-security-architecture && pwd` — stay there.
-- Then read, in order: `/Users/warrenthompson/Source/LoginID/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file.
-- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/02-ai-security-architecture/profiles/felix-adebayo/felix-adebayo.md --root /Users/warrenthompson/Source/LoginID/02-ai-security-architecture`
+- First action, every session: `cd /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture && pwd` — stay there.
+- Then read, in order: `/Users/warrenthompson/Source/LoginID-Demo/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file.
+- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture/profiles/felix-adebayo/felix-adebayo.md --root /Users/warrenthompson/Source/LoginID-Demo/02-ai-security-architecture`
 - Your lead is Marcus Ilori (`marcus-ilori`). You report to them, not to team-lead.
 
 ## Your seat in the team's patterns

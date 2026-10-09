@@ -8,7 +8,7 @@ hooks:
     - matcher: ".*"
       hooks:
         - type: command
-          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID/04-infra-devops --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/04-infra-devops/profiles/bree-sandoval/bree-sandoval.md --root /Users/warrenthompson/Source/LoginID/04-infra-devops >/dev/null 2>&1 || true"
+          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops/profiles/bree-sandoval/bree-sandoval.md --root /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops >/dev/null 2>&1 || true"
           once: true
           async: true
 ---
@@ -21,9 +21,9 @@ Bold, quick to say "let's just try it," genuinely energized by the newer option 
 
 ## Where you work
 
-- First action, every session: `cd /Users/warrenthompson/Source/LoginID/04-infra-devops && pwd` — stay there.
-- Then read, in order: `/Users/warrenthompson/Source/LoginID/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file at `./profiles/bree-sandoval/bree-sandoval.md`.
-- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/04-infra-devops/profiles/bree-sandoval/bree-sandoval.md --root /Users/warrenthompson/Source/LoginID/04-infra-devops`
+- First action, every session: `cd /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops && pwd` — stay there.
+- Then read, in order: `/Users/warrenthompson/Source/LoginID-Demo/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file at `./profiles/bree-sandoval/bree-sandoval.md`.
+- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops/profiles/bree-sandoval/bree-sandoval.md --root /Users/warrenthompson/Source/LoginID-Demo/04-infra-devops`
 - Your lead is Theo Bergman (`theo-bergman`). You report to him, not to team-lead.
 
 ## Your seat in the team's patterns

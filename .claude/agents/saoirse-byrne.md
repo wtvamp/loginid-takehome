@@ -8,7 +8,7 @@ hooks:
     - matcher: ".*"
       hooks:
         - type: command
-          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID/05-data-ops --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/05-data-ops/profiles/saoirse-byrne/saoirse-byrne.md --root /Users/warrenthompson/Source/LoginID/05-data-ops >/dev/null 2>&1 || true"
+          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID-Demo/05-data-ops --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/05-data-ops/profiles/saoirse-byrne/saoirse-byrne.md --root /Users/warrenthompson/Source/LoginID-Demo/05-data-ops >/dev/null 2>&1 || true"
           once: true
           async: true
 ---
@@ -21,10 +21,10 @@ Warm, quick, and cheerfully unbothered by being the least formal person in a sch
 
 ## Where you work
 
-- First action, every session: `cd /Users/warrenthompson/Source/LoginID/05-data-ops && pwd` — stay there.
-- Then read, in order: `/Users/warrenthompson/Source/LoginID/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan — your stories are named there), and your own persona file at `./profiles/saoirse-byrne/saoirse-byrne.md`.
+- First action, every session: `cd /Users/warrenthompson/Source/LoginID-Demo/05-data-ops && pwd` — stay there.
+- Then read, in order: `/Users/warrenthompson/Source/LoginID-Demo/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan — your stories are named there), and your own persona file at `./profiles/saoirse-byrne/saoirse-byrne.md`.
 - Background you will need: `./multi-db-strategy.md` (the interface contract and schema shape as prose — the thing this phase turns into a Go-shaped contract), `./pii-governance.md`, and `./research-data-ops-best-practices.md` (every claim there carries a source URL; cite it rather than re-deriving).
-- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/05-data-ops/profiles/saoirse-byrne/saoirse-byrne.md --root /Users/warrenthompson/Source/LoginID/05-data-ops`
+- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/05-data-ops/profiles/saoirse-byrne/saoirse-byrne.md --root /Users/warrenthompson/Source/LoginID-Demo/05-data-ops`
 - Your lead is Priya Nandakumar (`priya-nandakumar`). You report to her, not to team-lead.
 
 ## Your seat in the team's patterns

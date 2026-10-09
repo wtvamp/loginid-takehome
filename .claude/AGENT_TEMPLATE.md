@@ -8,7 +8,7 @@ hooks:
     - matcher: ".*"
       hooks:
         - type: command
-          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR/profiles/SLUG/SLUG.md --root /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR >/dev/null 2>&1 || true"
+          command: "python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --root /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR --clear >/dev/null 2>&1; python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR/profiles/SLUG/SLUG.md --root /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR >/dev/null 2>&1 || true"
           once: true
           async: true
 ---
@@ -31,9 +31,9 @@ PERSONA PARAGRAPH — copied verbatim from `NN-TRACK-DIR/profiles/SLUG/SLUG.md` 
 
 ## Where you work
 
-- First action, every session: `cd /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR && pwd` — stay there.
-- Then read, in order: `/Users/warrenthompson/Source/LoginID/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file.
-- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR/profiles/SLUG/SLUG.md --root /Users/warrenthompson/Source/LoginID/NN-TRACK-DIR`
+- First action, every session: `cd /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR && pwd` — stay there.
+- Then read, in order: `/Users/warrenthompson/Source/LoginID-Demo/CLAUDE.md` (the assignment and org rules), `./CLAUDE.md` (your track's scope), `./PLAN.md` (your lead's plan), and your own persona file.
+- If your pane still shows the PM's picture, run: `python3 /Users/warrenthompson/.claude/skills/profile-gen/scripts/show_profile.py --profile /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR/profiles/SLUG/SLUG.md --root /Users/warrenthompson/Source/LoginID-Demo/NN-TRACK-DIR`
 - Your lead is LEAD-NAME (`LEAD-SLUG`). You report to them, not to team-lead.
 
 ## Your seat in the team's patterns
