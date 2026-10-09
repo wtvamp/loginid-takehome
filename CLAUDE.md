@@ -72,5 +72,6 @@ Rules that hold across every track:
 
 **Backlog complete (2026-09-13, 19:18 PDT): all 25 implementation stories Done (24 plus LT-53, the demo console), each deployed to the public URL and reviewed live by the Product Owner.** A clickable demo of the API lives at `https://loginid-takehome.uplifttech.org/demo` (QA credentials via the LT-51 runbook). The retrospective is `retrospective.html`. Live: `https://loginid-takehome.uplifttech.org` (build SHA == `main`, `db: ok`). `LOG.md` is the record from planning through the last review; `<track>/refinement/<LT-key>.md` holds each story's refinement, review, and findings; `02-ai-security-architecture/decisions/second-review-implementation.md` holds the security residuals. Secrets are delivered from Vault (no application Secret objects in the namespace); the CronJob `retention-sweep` runs daily at 03:17 UTC; Prometheus in `monitoring` scrapes `api-service:9101` and evaluates four retention rules. Open with Warren, not the team: the LT-20 ILM disposition (apply the 90-day floor or rule existing retention sufficient) and the Vault CA expiry on 2026-12-14. Teardown runs only on Warren's instruction (`04-infra-devops/teardown.md`), expected the week of 2026-09-14.
 
+<!-- profile-gen:start slug=dana-whitfield -->
 @profiles/dana-whitfield/dana-whitfield.md
 <!-- profile-gen:end slug=dana-whitfield -->
