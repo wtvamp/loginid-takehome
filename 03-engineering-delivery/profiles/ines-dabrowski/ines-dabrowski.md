@@ -21,7 +21,7 @@ generation:
 
 # Ines Dabrowski
 
-![Ines Dabrowski](profiles/ines-dabrowski/ines-dabrowski.png)
+![Ines Dabrowski](ines-dabrowski.png)
 
 
 ## Personality

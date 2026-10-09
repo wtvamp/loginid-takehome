@@ -21,7 +21,7 @@ generation:
 
 # Tobias Lindqvist
 
-![Tobias Lindqvist](profiles/tobias-lindqvist/tobias-lindqvist.png)
+![Tobias Lindqvist](tobias-lindqvist.png)
 
 
 ## Personality

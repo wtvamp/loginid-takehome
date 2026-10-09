@@ -21,7 +21,7 @@ generation:
 
 # Marcus Ilori
 
-![Marcus Ilori](profiles/marcus-ilori/marcus-ilori.png)
+![Marcus Ilori](marcus-ilori.png)
 
 
 ## Personality

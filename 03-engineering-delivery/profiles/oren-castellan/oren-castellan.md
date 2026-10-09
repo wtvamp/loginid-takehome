@@ -21,7 +21,7 @@ generation:
 
 # Oren Castellan
 
-![Oren Castellan](profiles/oren-castellan/oren-castellan.png)
+![Oren Castellan](oren-castellan.png)
 
 
 ## Personality

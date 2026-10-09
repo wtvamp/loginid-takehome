@@ -21,7 +21,7 @@ generation:
 
 # Ingrid Solano
 
-![Ingrid Solano](profiles/ingrid-solano/ingrid-solano.png)
+![Ingrid Solano](ingrid-solano.png)
 
 
 ## Personality

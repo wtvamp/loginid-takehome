@@ -21,7 +21,7 @@ generation:
 
 # Bree Sandoval
 
-![Bree Sandoval](profiles/bree-sandoval/bree-sandoval.png)
+![Bree Sandoval](bree-sandoval.png)
 
 
 ## Personality

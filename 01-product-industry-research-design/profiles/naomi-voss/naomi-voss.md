@@ -21,7 +21,7 @@ generation:
 
 # Naomi Voss
 
-![Naomi Voss](profiles/naomi-voss/naomi-voss.png)
+![Naomi Voss](naomi-voss.png)
 
 
 ## Personality

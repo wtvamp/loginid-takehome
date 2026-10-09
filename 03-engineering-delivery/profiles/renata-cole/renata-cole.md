@@ -21,7 +21,7 @@ generation:
 
 # Renata Cole
 
-![Renata Cole](profiles/renata-cole/renata-cole.png)
+![Renata Cole](renata-cole.png)
 
 
 ## Personality

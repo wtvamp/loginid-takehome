@@ -21,7 +21,7 @@ generation:
 
 # Yusuf Karadag
 
-![Yusuf Karadag](profiles/yusuf-karadag/yusuf-karadag.png)
+![Yusuf Karadag](yusuf-karadag.png)
 
 
 ## Personality

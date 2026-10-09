@@ -21,7 +21,7 @@ generation:
 
 # Theo Bergman
 
-![Theo Bergman](profiles/theo-bergman/theo-bergman.png)
+![Theo Bergman](theo-bergman.png)
 
 
 ## Personality

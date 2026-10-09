@@ -21,7 +21,7 @@ generation:
 
 # Marisol Ferran
 
-![Marisol Ferran](profiles/marisol-ferran/marisol-ferran.png)
+![Marisol Ferran](marisol-ferran.png)
 
 
 ## Personality

@@ -21,7 +21,7 @@ generation:
 
 # Imogen Hale
 
-![Imogen Hale](profiles/imogen-hale/imogen-hale.png)
+![Imogen Hale](imogen-hale.png)
 
 
 ## Personality

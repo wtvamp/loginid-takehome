@@ -21,7 +21,7 @@ generation:
 
 # Callum Ferreira
 
-![Callum Ferreira](profiles/callum-ferreira/callum-ferreira.png)
+![Callum Ferreira](callum-ferreira.png)
 
 
 ## Personality

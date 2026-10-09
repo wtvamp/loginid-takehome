@@ -21,7 +21,7 @@ generation:
 
 # Felix Adebayo
 
-![Felix Adebayo](profiles/felix-adebayo/felix-adebayo.png)
+![Felix Adebayo](felix-adebayo.png)
 
 
 ## Personality

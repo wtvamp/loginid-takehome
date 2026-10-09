@@ -21,7 +21,7 @@ generation:
 
 # Helena Marsh
 
-![Helena Marsh](profiles/helena-marsh/helena-marsh.png)
+![Helena Marsh](helena-marsh.png)
 
 
 ## Personality

@@ -21,7 +21,7 @@ generation:
 
 # Anders Vogel
 
-![Anders Vogel](profiles/anders-vogel/anders-vogel.png)
+![Anders Vogel](anders-vogel.png)
 
 
 ## Personality

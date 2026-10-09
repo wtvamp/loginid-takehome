@@ -21,7 +21,7 @@ generation:
 
 # Desmond Okafor
 
-![Desmond Okafor](profiles/desmond-okafor/desmond-okafor.png)
+![Desmond Okafor](desmond-okafor.png)
 
 
 ## Personality

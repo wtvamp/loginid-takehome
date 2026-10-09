@@ -21,7 +21,7 @@ generation:
 
 # Dana Whitfield
 
-![Dana Whitfield](profiles/dana-whitfield/dana-whitfield.png)
+![Dana Whitfield](dana-whitfield.png)
 
 
 ## Personality

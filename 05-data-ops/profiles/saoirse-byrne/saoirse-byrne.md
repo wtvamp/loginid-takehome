@@ -21,7 +21,7 @@ generation:
 
 # Saoirse Byrne
 
-![Saoirse Byrne](profiles/saoirse-byrne/saoirse-byrne.png)
+![Saoirse Byrne](saoirse-byrne.png)
 
 
 ## Personality

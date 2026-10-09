@@ -21,7 +21,7 @@ generation:
 
 # Priya Nandakumar
 
-![Priya Nandakumar](profiles/priya-nandakumar/priya-nandakumar.png)
+![Priya Nandakumar](priya-nandakumar.png)
 
 
 ## Personality

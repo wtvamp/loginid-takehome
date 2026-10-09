@@ -21,7 +21,7 @@ generation:
 
 # Tomasz Wrede
 
-![Tomasz Wrede](profiles/tomasz-wrede/tomasz-wrede.png)
+![Tomasz Wrede](tomasz-wrede.png)
 
 
 ## Personality

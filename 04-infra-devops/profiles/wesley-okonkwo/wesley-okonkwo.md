@@ -21,7 +21,7 @@ generation:
 
 # Wesley Okonkwo
 
-![Wesley Okonkwo](profiles/wesley-okonkwo/wesley-okonkwo.png)
+![Wesley Okonkwo](wesley-okonkwo.png)
 
 
 ## Personality

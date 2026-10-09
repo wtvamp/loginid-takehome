@@ -21,7 +21,7 @@ generation:
 
 # Beatriz Achterberg
 
-![Beatriz Achterberg](profiles/beatriz-achterberg/beatriz-achterberg.png)
+![Beatriz Achterberg](beatriz-achterberg.png)
 
 
 ## Personality

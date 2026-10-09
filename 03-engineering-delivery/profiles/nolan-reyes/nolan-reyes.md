@@ -21,7 +21,7 @@ generation:
 
 # Nolan Reyes
 
-![Nolan Reyes](profiles/nolan-reyes/nolan-reyes.png)
+![Nolan Reyes](nolan-reyes.png)
 
 
 ## Personality
