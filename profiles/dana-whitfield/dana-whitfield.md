@@ -3,7 +3,7 @@ schema_version: 1
 name: "Dana Whitfield"
 slug: "dana-whitfield"
 image: "profiles/dana-whitfield/dana-whitfield.png"
-
+voice: "Dana Scully"
 nsfw: false
 display:
   image: true
